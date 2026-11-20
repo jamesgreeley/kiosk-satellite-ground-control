@@ -13,6 +13,12 @@ Kiosk Satellite Ground Control currently has two components:
 - **Voice Match:** Recognition, Trimming and Isolation.
 - **Vision Match:** Coming soon.
 
+<p align="center">
+
+  <a href="assets/screenshots/people.png"><img src="assets/screenshots/people.png" alt="Ground Control People" width="650" /></a>
+  
+</p>
+
 ## Voice Match
 
 Voice Match is Ground Control's first set of features: who is speaking, and only their voice in the command.
@@ -22,6 +28,12 @@ Voice Match is Ground Control's first set of features: who is speaking, and only
 Who is speaking, from the voiceprints of the people enrolled. Enroll each person once on every kind of device they talk to, from the People page. Recognition then takes about a second into each command.
 
 Each kiosk gets a Speaker sensor in Home Assistant, and a kiosk can answer only the people you choose. An LLM conversation agent can tell who is speaking too: paste the template from **Settings > General > Conversation agents** into the agent's instructions, and "my calendar" or "my list" means the speaker's.
+
+<p align="center">
+
+  <a href="assets/screenshots/timeline.png"><img src="assets/screenshots/timeline.png" alt="Ground Control Session Timeline" width="650" /></a>
+  
+</p>
 
 ### Trimming
 
