@@ -14,9 +14,7 @@ Kiosk Satellite Ground Control currently has two components:
 - **Vision Match:** Coming soon.
 
 <p align="center">
-
   <a href="assets/screenshots/people.png"><img src="assets/screenshots/people.png" alt="Ground Control People" width="650" /></a>
-  
 </p>
 
 ## Voice Match
@@ -30,9 +28,7 @@ Who is speaking, from the voiceprints of the people enrolled. Enroll each person
 Each kiosk gets a Speaker sensor in Home Assistant, and a kiosk can answer only the people you choose. An LLM conversation agent can tell who is speaking too: paste the template from **Settings > General > Conversation agents** into the agent's instructions, and "my calendar" or "my list" means the speaker's.
 
 <p align="center">
-
-  <a href="assets/screenshots/timeline.png"><img src="assets/screenshots/timeline.png" alt="Ground Control Session Timeline" width="650" /></a>
-  
+  <a href="assets/screenshots/timeline.png"><img src="assets/screenshots/timeline.png" alt="Ground Control Session Timeline" width="650" /></a>  
 </p>
 
 ### Trimming
