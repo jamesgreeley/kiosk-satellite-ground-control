@@ -31,7 +31,7 @@ Trimming doesn't just end the command when someone else starts talking, which wo
 
 <video src="assets/videos/voice-match-trimming.mp4" controls width="100%"></video>
 
-[Microphone input and the trimmed command, side by side](assets/videos/voice-match-trimming.mp4)
+https://github.com/user-attachments/assets/985faf93-9b86-48ce-bbda-41d91d0a1b49
 
 ### Isolation
 
@@ -41,7 +41,7 @@ Isolation works on a whole turn at once, so each command waits for it once the u
 
 <video src="assets/videos/voice-match-isolation.mp4" controls width="100%"></video>
 
-[Microphone input and the isolated command, side by side](assets/videos/voice-match-isolation.mp4)
+https://github.com/user-attachments/assets/4485f1fc-af2a-4d17-a7de-2b0b3ebe7f3f
 
 ## Vision Match
 
