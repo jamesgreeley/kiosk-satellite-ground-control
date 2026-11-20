@@ -19,9 +19,9 @@ With **Isolation** on in the panel, under **Settings > Voice Match**, the comman
 ## Options
 
 - **model:** the speaker model.
-  - `auto` picks Accurate on x86 and Light on ARM.
-  - `accurate` makes the fewest mix-ups between people and with TV voices. Use it on an x86 machine.
-  - `light` uses about a third of the CPU, for a Raspberry Pi or Home Assistant Green. A TV voice cutting in ends the command about a second later.
+  - `auto` picks Accurate on an NVIDIA GPU or an x86 CPU with more than 4 cores, and Light on ARM and smaller x86 CPUs.
+  - `accurate` makes the fewest mix-ups between people and with TV voices. Use it on a desktop-class CPU or a GPU.
+  - `light` uses a fraction of the CPU, for a Raspberry Pi, Home Assistant Green or an Intel N100. A TV voice cutting in ends the command about a second later.
 
   Changing the model rebuilds everyone's voiceprint from the enrollment audio. Nobody has to record again.
 - **threads:** threads per check. `0` uses half the CPUs, up to 4.

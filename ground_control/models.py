@@ -59,9 +59,15 @@ ISOLATOR_MODEL = "accurate"
 """The Voice Isolator is conditioned on this speaker model's voiceprints."""
 
 
-def default_model_key(machine: str) -> str:
-    """Accurate on x86, Light on ARM, where Accurate costs too much per session."""
-    return "light" if machine.lower() in ("aarch64", "arm64", "armv7l", "armv8l") else "accurate"
+def default_model_key(machine: str, cpus: int, cuda: bool = False) -> str:
+    """Accurate on an NVIDIA GPU or an x86 CPU with more than 4 cores. Light on
+    ARM and on a small x86 CPU such as an Intel N100, where Accurate takes 60%
+    of the CPU for one kiosk and runs late with two talking at once."""
+    if cuda:
+        return "accurate"
+    if machine.lower() in ("aarch64", "arm64", "armv7l", "armv8l"):
+        return "light"
+    return "accurate" if cpus > 4 else "light"
 
 
 def verified_path(models_dir: Path, file: str, sha256: str) -> Path:

@@ -64,9 +64,10 @@ def load() -> Config:
         return options.get(key.lower(), os.environ.get(key, default))
 
     cpus = os.cpu_count() or 2
+    cuda = _bool(get("CUDA", "false"))
     model = str(get("MODEL", "auto")).lower()
     if model == "auto":
-        model = default_model_key(platform.machine())
+        model = default_model_key(platform.machine(), cpus, cuda)
     if model not in SPEAKER_MODELS:
         raise ValueError(f"MODEL must be one of {', '.join(SPEAKER_MODELS)} or auto")
     threads = int(get("THREADS", 0) or max(1, min(4, cpus // 2)))
@@ -78,7 +79,7 @@ def load() -> Config:
         models_dir=Path(str(get("MODELS_DIR", "/app/models"))),
         model=model,
         threads=threads,
-        cuda=_bool(get("CUDA", "false")),
+        cuda=cuda,
         ha_url=str(get("HA_URL", "auto" if os.environ.get("SUPERVISOR_TOKEN") else "http://homeassistant:8123")).rstrip("/"),
         port=int(get("PORT", 10900)),
         learn=_bool(get("LEARN", "true")),

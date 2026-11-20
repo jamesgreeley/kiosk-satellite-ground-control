@@ -150,3 +150,13 @@ def test_the_mdns_service_type_is_valid():
     from ground_control.mdns import SERVICE_TYPE
 
     assert service_type_name(SERVICE_TYPE) == SERVICE_TYPE
+
+
+def test_the_default_speaker_model_fits_the_machine():
+    from ground_control.models import default_model_key
+
+    assert default_model_key("x86_64", 20) == "accurate"  # an i9
+    assert default_model_key("x86_64", 4) == "light"  # an Intel N100
+    assert default_model_key("aarch64", 4) == "light"  # a Raspberry Pi
+    assert default_model_key("aarch64", 20, cuda=True) == "accurate"  # an NVIDIA GB10
+    assert default_model_key("x86_64", 4, cuda=True) == "accurate"
