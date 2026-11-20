@@ -1,0 +1,31 @@
+name: Kiosk Satellite Ground Control
+version: "0.1.0"
+slug: kiosk_satellite_ground_control
+description: "The work too heavy for a kiosk, on a capable machine. First, Voice Match: Recognition of who is speaking to a Kiosk Satellite, with Trimming and Isolation to take other voices like a TV out of the command."
+url: https://github.com/jxlarrea/kiosk-satellite-ground-control
+arch:
+  - amd64
+  - aarch64
+image: ghcr.io/jxlarrea/{arch}-kiosk-satellite-ground-control
+init: false
+startup: application
+boot: auto
+host_network: true
+hassio_api: true
+homeassistant_api: true
+ingress: true
+ingress_port: 10900
+panel_icon: mdi:satellite-uplink
+panel_title: Ground Control
+options:
+  model: auto
+  threads: 0
+  learn: true
+  keep_days: 7
+  keep_audio: true
+schema:
+  model: list(auto|accurate|light)
+  threads: int(0,8)
+  learn: bool
+  keep_days: int(1,90)
+  keep_audio: bool

@@ -1,0 +1,12 @@
+.claude/
+.vscode/
+.codex/
+.remember/
+.playwright-mcp/
+.internal/
+benchmarks/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/

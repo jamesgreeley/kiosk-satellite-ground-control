@@ -1,0 +1,32 @@
+[project]
+name = "kiosk-satellite-ground-control"
+version = "0.1.0"
+description = "The work too heavy for a Kiosk Satellite kiosk, on a capable machine: Voice Match first"
+requires-python = ">=3.12"
+license = "LicenseRef-CC-BY-NC-ND-4.0"
+license-files = ["LICENSE"]
+dependencies = [
+    "aiohttp>=3.10",
+    "cryptography>=42",
+    "numpy>=1.26",
+    "onnxruntime>=1.20",
+    "zeroconf>=0.130",
+]
+
+[project.optional-dependencies]
+cuda = ["onnxruntime-gpu>=1.20"]
+dev = ["pytest>=8", "pytest-asyncio>=0.24", "pytest-aiohttp>=1.0"]
+
+[project.scripts]
+ground-control = "ground_control.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["ground_control*"]
+
+[tool.setuptools.package-data]
+ground_control = ["web/*", "web/**/*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]

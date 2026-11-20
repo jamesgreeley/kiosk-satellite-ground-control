@@ -1,0 +1,11 @@
+.git
+.venv
+.internal
+.claude
+.remember
+.playwright-mcp
+benchmarks
+tests
+**/__pycache__
+**/*.pyc
+.pytest_cache

@@ -1,0 +1,90 @@
+"""Settings from the Home Assistant app's options, or from the environment.
+
+As a Home Assistant app the options are in ``/data/options.json``. As a
+standalone container they come from environment variables:
+
+=================  ===========================================  ==================
+Variable           Meaning                                      Default
+=================  ===========================================  ==================
+``DATA_DIR``       people, voices and voiceprints               ``/data``
+``MODELS_DIR``     the ONNX models                              ``/app/models``
+``MODEL``          ``accurate``, ``light`` or ``auto``          ``auto``
+``THREADS``        threads per inference                        half the CPUs, 1 to 4
+``CUDA``           run the speaker model on an NVIDIA GPU       ``false``
+``HA_URL``         Home Assistant: kiosk tokens and the web     ``http://homeassistant:8123``, or
+                   UI's login, so a browser must reach it too   ``auto`` (from the Supervisor) as an app
+``PORT``           the service port                             ``10900``
+``LEARN``          learn from confident commands                ``true``
+``AUTH``           ``homeassistant`` or ``none`` (testing)      ``homeassistant``
+``KEEP_DAYS``      days saved sessions are kept                 ``7``
+``KEEP_AUDIO``     keep each session's audio                    ``true``
+``MDNS``           advertise the service to kiosks              ``true``
+=================  ===========================================  ==================
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import platform
+from dataclasses import dataclass
+from pathlib import Path
+
+from .models import SPEAKER_MODELS, default_model_key
+
+
+@dataclass
+class Config:
+    data_dir: Path
+    models_dir: Path
+    model: str
+    threads: int
+    cuda: bool
+    ha_url: str
+    port: int
+    learn: bool
+    auth: str
+    keep_days: int = 7
+    keep_audio: bool = True
+    mdns: bool = True
+    supervisor_token: str | None = None
+
+
+def _bool(value: object) -> bool:
+    return str(value).strip().lower() in ("1", "true", "yes", "on")
+
+
+def load() -> Config:
+    options: dict[str, object] = {}
+    options_file = Path(os.environ.get("OPTIONS_FILE", "/data/options.json"))
+    if options_file.is_file():
+        options = json.loads(options_file.read_text())
+
+    def get(key: str, default: object) -> object:
+        return options.get(key.lower(), os.environ.get(key, default))
+
+    cpus = os.cpu_count() or 2
+    model = str(get("MODEL", "auto")).lower()
+    if model == "auto":
+        model = default_model_key(platform.machine())
+    if model not in SPEAKER_MODELS:
+        raise ValueError(f"MODEL must be one of {', '.join(SPEAKER_MODELS)} or auto")
+    threads = int(get("THREADS", 0) or max(1, min(4, cpus // 2)))
+    auth = str(get("AUTH", "homeassistant")).lower()
+    if auth not in ("homeassistant", "none"):
+        raise ValueError("AUTH must be homeassistant or none")
+    return Config(
+        data_dir=Path(str(get("DATA_DIR", "/data"))),
+        models_dir=Path(str(get("MODELS_DIR", "/app/models"))),
+        model=model,
+        threads=threads,
+        cuda=_bool(get("CUDA", "false")),
+        ha_url=str(get("HA_URL", "auto" if os.environ.get("SUPERVISOR_TOKEN") else "http://homeassistant:8123")).rstrip("/"),
+        port=int(get("PORT", 10900)),
+        learn=_bool(get("LEARN", "true")),
+        auth=auth,
+        keep_days=int(get("KEEP_DAYS", 7)),
+        keep_audio=_bool(get("KEEP_AUDIO", "true")),
+        mdns=_bool(get("MDNS", "true")),
+        supervisor_token=os.environ.get("SUPERVISOR_TOKEN"),
+    )

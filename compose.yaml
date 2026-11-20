@@ -1,0 +1,32 @@
+# Kiosk Satellite Ground Control on the CPU.
+#
+#   docker compose up -d
+#
+# Then open http://THIS_MACHINE:10900 and select Log in with Home Assistant.
+# Test builds are tagged "edge" instead of "latest".
+
+services:
+  ground-control:
+    image: ghcr.io/jxlarrea/kiosk-satellite-ground-control:latest
+    container_name: ground-control
+    restart: unless-stopped
+    # The host network lets kiosks on the same network find the service on
+    # their own (mDNS). Without it, publish port 10900 and enter this
+    # machine's address in each kiosk.
+    network_mode: host
+    environment:
+      # Your Home Assistant. Kiosk tokens are checked there, and your browser
+      # goes there to log in, so use an address the browser can open too.
+      HA_URL: http://homeassistant.local:8123
+      # Optional, with their defaults:
+      # MODEL: auto          # accurate, light or auto (Accurate on x86, Light on ARM)
+      # THREADS: 0           # threads per check, 0 is half the CPUs up to 4
+      # LEARN: "true"        # fold confident commands into each voiceprint
+      # KEEP_DAYS: 7         # days saved sessions are kept
+      # KEEP_AUDIO: "true"   # keep each session's audio
+      # PORT: 10900
+    volumes:
+      - ground-control:/data
+
+volumes:
+  ground-control:
