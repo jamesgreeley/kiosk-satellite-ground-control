@@ -163,11 +163,12 @@ export async function render({ id }) {
     await api(`api/sessions/${id}`, { method: "DELETE" });
     location.hash = "#/sessions";
   };
+  // Everything about this session in one zip, for an issue report.
   const download = async () => {
     try {
-      const a = h("a", { href: await audioUrl(`api/sessions/${id}/audio/raw`), download: `session-${id}.wav` });
+      const a = h("a", { href: await audioUrl(`api/sessions/${id}/download`), download: `ground-control-session-${id}.zip` });
       a.click();
-    } catch { toast("That audio wasn't kept."); }
+    } catch (err) { toast(`Couldn't download the session: ${err.message}`); }
   };
 
   let audioSection = [h("div", { class: "empty" }, "Audio keeping was off for this session.")];
@@ -196,7 +197,7 @@ export async function render({ id }) {
       shell("sessions", {
         back: "#/sessions", title: `${where}, ${clock(record.started)}`,
         actions: [
-          h("button", { class: "ib", "aria-label": "Download audio", onclick: download, disabled: !record.has_audio }, icon("download")),
+          h("button", { class: "ib", "aria-label": "Download the session", title: "Download the session: its audio, details and log", onclick: download }, icon("download")),
           h("button", { class: "ib", "aria-label": "Delete session", onclick: remove }, icon("trash")),
         ],
       }),

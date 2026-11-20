@@ -97,6 +97,13 @@ class FollowConfig:
     other-voice line toward the recognized one (0.395 with Accurate). The TV
     scoring just over the other-voice line once the user is done must not
     start a turn: in a realtime conversation that stops the answer."""
+    keepalive_every_s: float = 0.5
+    keepalive_s: float = 0.02
+    """While Isolation holds a turn, this much silence goes out every
+    ``keepalive_every_s``. Home Assistant Cloud's speech-to-text gives up on a
+    stream that gets no audio for about 6 s (400 Invalid HTTP request), and a
+    held turn sends nothing until the user stops and the isolator is done.
+    The silence is not part of the saved audio."""
     own_after_s: float = 2.0
     """This much of the user's speech rebuilds the reference of a voice that
     isn't enrolled, from what they actually said."""
@@ -168,6 +175,8 @@ class Follow:
         self.released: list[tuple[int, int]] = []
         """Input sample ranges released, in order."""
         self._held: list[tuple[int, int]] = []
+        self._out_at = 0
+        """Where in the stream audio last went out, for the keepalive."""
         """With Isolation on: this turn's released ranges, sent when it ends."""
         self.isolated_ms = 0
         self.dropped_s = 0.0
@@ -268,9 +277,20 @@ class Follow:
             if self.n - (last + 1) * FRAME >= cfg.eos_silence_s * SR:
                 self._settle_household(self.n, final=True)
         self._decide(events, final=False)
+        self._keep_alive(events)
         self._trim()
         self._cpu += time.process_time() - t0
         return self._merge(events)
+
+    def _keep_alive(self, events: list[dict[str, Any]]) -> None:
+        """A little silence while a held turn sends nothing, so the stream stays open."""
+        if not self._held or self._rejected:
+            return
+        every = int(self.cfg.keepalive_every_s * SR)
+        if self.n - self._out_at >= every:
+            self._out_at = self.n
+            events.append({"type": "audio", "t": round(self.n / SR, 3), "keepalive": True,
+                           "audio": np.zeros(int(self.cfg.keepalive_s * SR), dtype=np.float32)})
 
     def finish(self) -> list[dict[str, Any]]:
         events, self._pending_events = self._pending_events, []
@@ -591,6 +611,7 @@ class Follow:
             self._send(cleaned[i:i + MAX_AUDIO_EVENT], start, events)
 
     def _send(self, chunk: np.ndarray, a: int, events: list[dict[str, Any]]) -> None:
+        self._out_at = self.n
         if self._sent_n < self.cfg.keep_s * SR:
             self._sent.append(chunk)
             self._sent_n += len(chunk)
@@ -762,6 +783,7 @@ class Follow:
         out: list[dict[str, Any]] = []
         for e in events:
             if (e["type"] == "audio" and out and out[-1]["type"] == "audio"
+                    and not e.get("keepalive") and not out[-1].get("keepalive")
                     and len(out[-1]["audio"]) + len(e["audio"]) <= MAX_AUDIO_EVENT):
                 out[-1] = {**out[-1], "audio": np.concatenate([out[-1]["audio"], e["audio"]])}
             else:

@@ -262,3 +262,29 @@ async def test_a_follow_up_is_saved_in_the_same_session(client, speakers, voice)
     # Another kiosk can't join it.
     other = await turn(continues=first, device_id="k2")
     assert other != first
+
+
+async def test_a_session_downloads_as_one_zip(client, speakers, voice):
+    import io
+    import json
+    import zipfile
+
+    ws = await client.ws_connect("/api/session")
+    await ws.send_json({"type": "start", "token": "good", "ticket": approve(client), "device_id": "k1",
+                        "device_name": "Kitchen"})
+    await next_of(ws, "ready")
+    for c in chunks(voice[speakers[0]]["test"][:3 * SR]):
+        await ws.send_bytes(float_to_pcm16(c))
+    await ws.send_json({"type": "end"})
+    await next_of(ws, "stats")
+    await asyncio.sleep(0.3)
+    sid = (await (await client.get("/api/sessions", headers=GOOD)).json())["sessions"][0]["id"]
+    r = await client.get(f"/api/sessions/{sid}/download", headers=GOOD)
+    assert r.status == 200 and r.headers["Content-Type"] == "application/zip"
+    assert r.headers["Content-Disposition"] == f'attachment; filename="ground-control-session-{sid}.zip"'
+    z = zipfile.ZipFile(io.BytesIO(await r.read()))
+    assert "session.json" in z.namelist() and "as-heard.wav" in z.namelist()
+    assert json.loads(z.read("session.json"))["id"] == sid
+    text = z.read("ground-control.txt").decode()
+    assert text.startswith("Kiosk Satellite Ground Control ") and f"Session {sid}" in text and "Kitchen" in text
+    assert (await client.get("/api/sessions/nope/download", headers=GOOD)).status == 404

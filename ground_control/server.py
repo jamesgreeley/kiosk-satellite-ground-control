@@ -412,6 +412,45 @@ async def session_audio(request: web.Request) -> web.StreamResponse:
     return web.FileResponse(path, headers={"Content-Type": "audio/wav"})
 
 
+SESSION_FILES = (("raw", "as-heard.wav"), ("clean", "sent-to-assistant.wav"), ("wake", "wake-word.wav"))
+
+
+def _session_zip(vm: GroundControl, record: dict[str, Any]) -> bytes:
+    """Everything about one session for an issue report: its audio, its record
+    and the service's details with the log lines from while it ran."""
+    import io
+    import zipfile
+
+    sid = record["id"]
+    start = float(record.get("started") or 0.0) - 2.0
+    # The record is written when its last turn ends, follow-ups included.
+    saved = vm.sessions.dir / f"{sid}.json"
+    end = (saved.stat().st_mtime if saved.is_file() else start) + 5.0
+    lines = [log_line(e) for e in LOGS.since(0, "DEBUG") if start <= e["t"] <= end]
+    text = [*_report_header(vm), "", f"Session {sid}, log lines from while it ran:" if lines
+            else f"Session {sid}: the log from while it ran is gone (the service restarted since).", *lines]
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("session.json", json.dumps(record, indent=1))
+        z.writestr("ground-control.txt", "\n".join(text) + "\n")
+        for kind, name in SESSION_FILES:
+            path = vm.sessions.audio_path(sid, kind)
+            if path is not None:
+                z.write(path, name)
+    return buf.getvalue()
+
+
+async def session_download(request: web.Request) -> web.Response:
+    """One zip with the session's audio, its record and the log from while it ran."""
+    vm = request.app[VM]
+    record = vm.sessions.get(request.match_info["sid"])
+    if record is None:
+        raise web.HTTPNotFound(text="no such session")
+    body = await vm.run(_session_zip, vm, record)
+    return web.Response(body=body, content_type="application/zip",
+                        headers={"Content-Disposition": f'attachment; filename="ground-control-session-{record["id"]}.zip"'})
+
+
 async def session_delete(request: web.Request) -> web.Response:
     if not request.app[VM].sessions.delete(request.match_info["sid"]):
         raise web.HTTPNotFound(text="no such session")
@@ -885,6 +924,7 @@ def build_app(vm: GroundControl, token_check: TokenCheck | None = None, mdns: bo
     r.add_get("/api/sessions", sessions_list)
     r.add_get("/api/sessions/{sid}", session_get)
     r.add_get("/api/sessions/{sid}/audio/{kind}", session_audio)
+    r.add_get("/api/sessions/{sid}/download", session_download)
     r.add_post("/api/sessions/{sid}/enroll", session_enroll)
     r.add_delete("/api/sessions/{sid}", session_delete)
     r.add_get("/api/kiosks", kiosks_list)

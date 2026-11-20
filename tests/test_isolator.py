@@ -48,23 +48,49 @@ def test_a_turn_goes_out_cleaned_when_it_ends(household, speakers, voice, vad, e
     for c in chunks(s.audio):
         events += f.feed(c)
     events += f.finish()
-    kinds = [e["type"] for e in events]
-    # Nothing goes out during a turn: each turn's audio comes right before its
-    # end, in pieces of half a second at most.
+    speech = [e for e in events if not e.get("keepalive")]
+    kinds = [e["type"] for e in speech]
+    # Only a little silence goes out during a turn: each turn's audio comes
+    # right before its end, in pieces of half a second at most.
     for i, k in enumerate(kinds):
         if k == "audio":
             assert kinds[i + 1] in ("audio", "turn_end")
-    assert max(len(e["audio"]) for e in of(events, "audio")) <= SR // 2
+    assert max(len(e["audio"]) for e in of(speech, "audio")) <= SR // 2
     assert len(iso.calls) == len(of(events, "turn_end"))
     # The isolator gets the user's own voiceprint, and what goes out is its
     # output cut to what follow mode released.
     assert np.allclose(iso.calls[0][1], f._ref)
-    sent = np.concatenate([e["audio"] for e in of(events, "audio")])
+    sent = np.concatenate([e["audio"] for e in of(speech, "audio")])
     raw = s.audio
     expected = np.concatenate([raw[a:b] for a, b in f.released]) * 0.5
     assert np.allclose(sent, expected)
     assert s.released_from("tv", f.released) <= 0.5
     assert "isolated_ms" in of(events, "stats")[0]
+    # The saved audio is the speech alone, without the silence.
+    assert np.allclose(f.cleaned_audio(), expected)
+
+
+def test_a_held_turn_keeps_the_stream_open(household, speakers, voice, vad, embedder):
+    """Home Assistant Cloud's speech-to-text gives up on a stream that gets
+    nothing for about 6 s, so a held turn sends a little silence as it goes."""
+    people, _, _ = household
+    user = held_out(speakers[0])
+    s = Script().add("quiet", silence(0.3)).add("user", user[2 * SR:8 * SR]).add("quiet", silence(1.5))
+    f = Follow(FollowConfig(), ACCURATE, embedder, vad, people, anchor=user[: int(1.2 * SR)], isolator=Halves())
+    out, end = [], None
+    for i, c in enumerate(chunks(s.audio)):
+        for e in f.feed(c):
+            now = (i + 1) * len(c) / SR
+            if e["type"] == "audio":
+                out.append((now, bool(e.get("keepalive")), e["audio"]))
+            if e["type"] == "turn_end" and end is None:
+                end = now
+    first = next(t for t, keep, _ in out if keep)
+    before_end = [t for t, _, _ in out if t < end]
+    # From the first word, something goes out at least every 0.6 s until the turn is sent.
+    assert first < 1.5
+    assert max(b - a for a, b in zip(before_end, before_end[1:])) <= 0.6
+    assert all(not a.any() and len(a) == int(0.02 * SR) for _, keep, a in out if keep)
 
 
 def test_without_the_isolator_audio_goes_out_as_it_comes(household, speakers, voice, vad, embedder):
@@ -135,8 +161,9 @@ def test_a_short_command_is_isolated_with_the_users_profile(household, speakers,
     assert of(events, "speaker")[-1]["id"] == ana.id
     ids, rows = people.voiceprints("accurate")
     assert len(iso.calls) == 1 and np.allclose(iso.calls[0][1], rows[ids.index(ana.id)])
-    # Who it is comes before the audio, and the audio before the end of the turn.
-    kinds = [e["type"] for e in events]
+    # Who it is comes before the speech, and the speech before the end of the
+    # turn. Only the keepalive silence can go out earlier.
+    kinds = [e["type"] for e in events if not e.get("keepalive")]
     assert kinds.index("speaker") < kinds.index("audio") < kinds.index("turn_end")
 
 
