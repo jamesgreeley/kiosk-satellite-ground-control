@@ -407,3 +407,27 @@ def test_the_end_of_the_last_word_is_kept_when_another_voice_starts_right_after(
     end = max(b for a, b in f.released)
     assert end == pytest.approx(turn + int(keep * SR), abs=FRAME)
     assert of(events, "other_voice")[0]["t"] == pytest.approx(end / SR, abs=0.02)
+
+
+def test_a_later_turn_needs_a_clearer_voice_than_staying_in_one(household, speakers, voice, vad, embedder):
+    """Just over the other-voice line keeps a turn going, but once the user is
+    done it doesn't start another: a TV scoring there would stop a realtime
+    answer. Here the check scores are set by hand."""
+    people, _, _ = household
+    user = held_out(speakers[0])
+    f = Follow(FollowConfig(), ACCURATE, embedder, vad, people, anchor=anchor_of(user))
+    for c in chunks(user[:2 * SR]):
+        f.feed(c)
+    frame = f.n // FRAME - 2
+    center = frame * FRAME + FRAME // 2
+    other, start = ACCURATE.other_threshold, ACCURATE.other_threshold + 0.5 * (ACCURATE.threshold - ACCURATE.other_threshold)
+
+    def label(score, in_turn, turns):
+        f._checks = [(center, score)]
+        f.in_turn, f.turns = in_turn, turns
+        return f._label(frame, final=True)
+
+    assert label(other + 0.01, in_turn=True, turns=1) == "user"  # inside a turn
+    assert label(other + 0.01, in_turn=False, turns=0) == "user"  # the first turn
+    assert label(other + 0.01, in_turn=False, turns=1) == "other"  # a later one
+    assert label(start + 0.01, in_turn=False, turns=1) == "user"

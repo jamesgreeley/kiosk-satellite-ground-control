@@ -92,6 +92,11 @@ class FollowConfig:
     anchor_slack: float = 0.08
     """The wake word alone is a short sample of a voice: below the other-voice
     line by this much still counts as the user, until their own speech is in."""
+    next_turn_share: float = 0.5
+    """A turn after the first starts only on a voice this far from the
+    other-voice line toward the recognized one (0.395 with Accurate). The TV
+    scoring just over the other-voice line once the user is done must not
+    start a turn: in a realtime conversation that stops the answer."""
     own_after_s: float = 2.0
     """This much of the user's speech rebuilds the reference of a voice that
     isn't enrolled, from what they actually said."""
@@ -367,6 +372,13 @@ class Follow:
         return (not final and self._ref_kind == "household" and not self._household_settled
                 and self.cfg.policy == "anyone")
 
+    def _start_line(self) -> float | None:
+        """The score a voice needs to start a turn after the first, or None inside a turn."""
+        if self.in_turn or self.turns == 0:
+            return None
+        m = self.model
+        return m.other_threshold + self.cfg.next_turn_share * (m.threshold - m.other_threshold)
+
     def _label(self, f: int, final: bool) -> str | None:
         """user or other for speech frame ``f``, or None to wait for its check."""
         fs, fe = f * FRAME, (f + 1) * FRAME
@@ -382,7 +394,8 @@ class Follow:
             _, score = min(near, key=lambda c: abs(c[0] - center))
             if score < self.model.other_threshold and self._waiting_for_household(final):
                 return None
-            return "user" if score >= self.model.other_threshold else "other"
+            line = self._start_line() or self.model.other_threshold
+            return "user" if score >= line else "other"
         # Too little speech around it for a check: a word on its own.
         r0, r1 = self._run(f)
         if (r1 - r0) * FRAME < self.cfg.blip_s * SR:
@@ -401,7 +414,8 @@ class Follow:
         # Lean to keeping a short word: a missed "yes" is worse than a TV word.
         if score < self.model.other_threshold - 0.05 and self._waiting_for_household(final):
             return None
-        return "user" if score >= self.model.other_threshold - 0.05 else "other"
+        line = self._start_line() or self.model.other_threshold - 0.05
+        return "user" if score >= line else "other"
 
     def _run(self, f: int) -> tuple[int, int]:
         r0 = f
