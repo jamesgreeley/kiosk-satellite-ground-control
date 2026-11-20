@@ -51,7 +51,7 @@ Coming soon.
 
 How much latency each feature adds to a 5-second command:
 
-| | Raspberry Pi 4, Light | Intel N100, Light | i9-13900H, Accurate | NVIDIA RTX 4000 SFF Ada, Accurate | NVIDIA GB10 GPU, Accurate |
+| | Raspberry Pi 4, Light | Intel N100, Light | i9-13900H, Accurate | NVIDIA RTX 4000 Ada, Accurate | NVIDIA GB10 GPU, Accurate |
 |---|---|---|---|---|---|
 | Recognition | 0.10 s | 0.02 s | 0.04 s | 0.01 s | pending |
 | Trimming | 0.41 s | 0.07 s | 0.11 s | 0.01 s | pending |
