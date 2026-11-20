@@ -8,10 +8,7 @@
 
 Ground Control is a companion service for [Kiosk Satellite](https://github.com/jxlarrea/kiosk-satellite). It runs on a computer or server in your home and handles the voice and vision processing that kiosks don't have the computing power for. Install it as a Home Assistant app, or run it in Docker on a CPU or an NVIDIA GPU.
 
-Kiosk Satellite Ground Control currently has two components:
-
-- **Voice Match:** Recognition, Trimming and Isolation.
-- **Vision Match:** Coming soon.
+Kiosk Satellite Ground Control currently has two components: **Voice Match** which does speaker voice recognition, trimming and isolation. **Vision Match** which does facial recognition (coming soon).
 
 <p align="center">
   <a href="assets/screenshots/people.png"><img src="assets/screenshots/people.png" alt="Ground Control People" width="650" /></a>
