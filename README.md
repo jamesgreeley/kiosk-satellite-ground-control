@@ -51,13 +51,12 @@ Coming soon.
 
 How much latency each feature adds to a 5-second command:
 
-| | Raspberry Pi 4, Light | Intel N100, Light | i9-13900H, Accurate | NVIDIA RTX 4000 Ada, Accurate | NVIDIA GB10 GPU, Accurate |
+| | Raspberry Pi 4, Light | Intel N100, Accurate | i9-13900H, Accurate | NVIDIA RTX 4000 Ada, Accurate | NVIDIA GB10 GPU, Accurate |
 |---|---|---|---|---|---|
-| Recognition | 0.10 s | 0.02 s | 0.04 s | 0.01 s | pending |
-| Trimming | 0.41 s | 0.07 s | 0.11 s | 0.01 s | pending |
-| Isolation | Too slow on a Pi | 6.11 s (needs Accurate) | 1.18 s | 0.09 s | pending |
-| CPU, per second of audio | 27% | 4% | 10% | 2% | pending |
-| **All features** | **0.41 s** (no Isolation) | **0.07 s** (no Isolation) | **1.29 s** | **0.10 s** | pending |
+| Recognition | 0.10 s | 0.29 s | 0.04 s | 0.01 s | pending |
+| Trimming | 0.41 s | 0.70 s | 0.11 s | 0.01 s | pending |
+| Isolation | Too slow on a Pi | 6.11 s | 1.18 s | 0.09 s | pending |
+| **All features** | **0.41 s** (no Isolation) | **6.81 s** | **1.29 s** | **0.10 s** | pending |
 
 A 5 s command between stretches of TV, sent through Ground Control's own code in real time the way a kiosk sends it, with Ground Control's default threads (2 on the Pi and the N100, 4 elsewhere).
 
@@ -65,7 +64,7 @@ A 5 s command between stretches of TV, sent through Ground Control's own code in
 - **Trimming** is the time to decide the command is over once the user stops. Whatever the TV does, the command ends there.
 - **Isolation** runs once the command ends. On a CPU it uses a version of the model made for the CPU (LSTMs in 8 bits), twice as fast and nearly identical.
 - **All features** is what reaches the end of each command: Trimming, then Isolation.
-- On an N100, use the Light model too. Accurate keeps up with one kiosk at a time but takes 60% of the CPU and 0.7 s for Trimming, and Isolation takes about 6 s there.
+- On an N100, Accurate keeps up with one kiosk at a time, but Isolation takes about 6 s. Ground Control starts it on the Light model, where Trimming takes 0.07 s.
 - On a Pi 4, use the Light model. Accurate uses more CPU than a Pi 4 has, so everything runs late, and Isolation (which needs Accurate) takes about 25 s there.
 
 The Accurate model makes the fewest mix-ups between people and with TV voices. The Light model uses about a third of the CPU, and a TV voice cutting in ends the command about a second later. Ground Control picks Accurate on an NVIDIA GPU or an x86 CPU with more than 4 cores, and Light on ARM and smaller x86 CPUs like the N100. **Settings > Voice Match** changes it without needing to re-enroll users.
