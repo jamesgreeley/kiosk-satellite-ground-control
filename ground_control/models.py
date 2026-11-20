@@ -50,9 +50,9 @@ VAD_FILE = "silero_vad.onnx"
 VAD_SHA256 = "2623a2953f6ff3d2c1e61740c6cdb7168133479b267dfef114a4a3cc5bdd788f"
 
 ISOLATOR_FILE = "voice_isolator.onnx"
-ISOLATOR_SHA256 = "06a044fddf048962329c1ac13a625527a7985acfebcfa5ed553dba03c2668cfb"
+ISOLATOR_SHA256 = "9f12c371bf023deb19df255986ee7898352a7f3f46f22315157880c13282dda2"
 ISOLATOR_CPU_FILE = "voice_isolator_cpu.onnx"
-ISOLATOR_CPU_SHA256 = "b23b4d93e05bbca548d830da5890cedeaaa5a184ceaa203e9855dce30863b512"
+ISOLATOR_CPU_SHA256 = "7503523bfdf497dcbf776e06df69b348b403f5aab30fa30fc5ec8e9658dcefa0"
 """The same model with its LSTMs in 8 bits: twice as fast on a CPU, 0.14 dB
 behind. On a GPU the full one runs, its quantized LSTMs wouldn't."""
 ISOLATOR_MODEL = "accurate"
