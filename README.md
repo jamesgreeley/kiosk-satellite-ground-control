@@ -6,6 +6,23 @@
   </picture>
 </h1>
 
+<p align="center">
+<img src="https://img.shields.io/github/stars/jxlarrea/kiosk-satellite-ground-control?style=for-the-badge&label=Stars&color=d6a102" alt="Stars">
+<a href="https://github.com/users/jxlarrea/packages/container/package/kiosk-satellite-ground-control"><img src="https://img.shields.io/badge/dynamic/regex?url=https%3A%2F%2Fgithub.com%2Fusers%2Fjxlarrea%2Fpackages%2Fcontainer%2Fpackage%2Fkiosk-satellite-ground-control&search=Total+downloads%3C%2Fspan%3E%5Cs%2A%3Ch3+title%3D%22%28%5Cd%2B%29%22&replace=%241&label=Downloads&style=for-the-badge&color=e8604c&cacheSeconds=3600" alt="Downloads"></a>
+<a href="CHANGELOG.md"><img src="https://img.shields.io/github/v/tag/jxlarrea/kiosk-satellite-ground-control?style=for-the-badge&label=Version&color=5da3a6" alt="Version"></a>
+<a href="https://github.com/jxlarrea/kiosk-satellite-ground-control/actions/workflows/images.yml"><img src="https://img.shields.io/github/actions/workflow/status/jxlarrea/kiosk-satellite-ground-control/images.yml?style=for-the-badge&label=Build&color=3fbf5f" alt="Build"></a>
+</p>
+
+<p align="center">
+<a href="https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fjxlarrea%2Fkiosk-satellite-ground-control"><img src="https://img.shields.io/badge/Home%20Assistant-App-18bcf2?style=for-the-badge&logo=homeassistant&logoColor=white" alt="Home Assistant app"></a>
+<a href="https://github.com/users/jxlarrea/packages/container/package/kiosk-satellite-ground-control"><img src="https://img.shields.io/badge/Docker-amd64%20%7C%20arm64-2496ed?style=for-the-badge&logo=docker&logoColor=white" alt="Docker amd64 and arm64"></a>
+<a href="docs/installation.md#nvidia-gpu"><img src="https://img.shields.io/badge/NVIDIA-CUDA%2013-76b900?style=for-the-badge&logo=nvidia&logoColor=white" alt="NVIDIA CUDA 13"></a>
+</p>
+
+<p align="center">
+<a href="https://buymeacoffee.com/jxlarrea"><img src="https://img.shields.io/badge/Buy%20Me%20A%20Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black" alt="Buy Me A Coffee"></a>
+</p>
+
 Ground Control is a companion service for [Kiosk Satellite](https://github.com/jxlarrea/kiosk-satellite). It runs on a computer or server in your home and handles the voice and vision processing that kiosks don't have the computing power for. Install it as a Home Assistant app, or run it in Docker on a CPU or an NVIDIA GPU.
 
 Kiosk Satellite Ground Control currently has two components: **Voice Match** which does speaker voice recognition, trimming and isolation. **Vision Match** which does facial recognition (coming soon).
