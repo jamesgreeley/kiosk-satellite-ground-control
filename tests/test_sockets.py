@@ -212,6 +212,8 @@ async def test_follow_sends_only_the_users_speech(client, speakers, voice):
         else:
             raise AssertionError("socket ended before turn_end")
     assert "speaker" in got
+    # The TV before the user sends no audio, but keeps the stream open (#4).
+    assert got.index("keepalive") < got.index("turn_start")
     # The user's 3 s, give or take the edges: not the 4 s of TV around it.
     assert 2.4 * SR <= received <= 3.8 * SR
     await ws.send_json({"type": "end"})

@@ -99,11 +99,18 @@ class FollowConfig:
     start a turn: in a realtime conversation that stops the answer."""
     keepalive_every_s: float = 0.5
     keepalive_s: float = 0.02
-    """While Isolation holds a turn, this much silence goes out every
-    ``keepalive_every_s``. Home Assistant Cloud's speech-to-text gives up on a
-    stream that gets no audio for about 6 s (400 Invalid HTTP request), and a
-    held turn sends nothing until the user stops and the isolator is done.
-    The silence is not part of the saved audio."""
+    """Home Assistant Cloud's speech-to-text gives up on a stream that gets
+    no audio for about 6 s (400 Invalid HTTP request), so it is kept open
+    every ``keepalive_every_s`` while nothing else goes out:
+
+    - Before the user's first speech goes out, such as a pause after the wake
+      word, a ``keepalive`` event asks the kiosk to send a little silence
+      itself (#4). It isn't audio, so the kiosk still knows nobody has talked
+      yet: its own no-speech cancel and its microphone fallback keep working.
+    - While Isolation holds a turn, this much silence goes out as audio,
+      since the turn has started.
+
+    Neither is part of the saved audio."""
     own_after_s: float = 2.0
     """This much of the user's speech rebuilds the reference of a voice that
     isn't enrolled, from what they actually said."""
@@ -283,14 +290,20 @@ class Follow:
         return self._merge(events)
 
     def _keep_alive(self, events: list[dict[str, Any]]) -> None:
-        """A little silence while a held turn sends nothing, so the stream stays open."""
-        if not self._held or self._rejected:
+        """Keeps the stream open while it would get nothing: a keepalive event
+        before the user's first speech, a little silence while a turn is held."""
+        if self._rejected or not (self._held or not self.released):
             return
         every = int(self.cfg.keepalive_every_s * SR)
-        if self.n - self._out_at >= every:
-            self._out_at = self.n
-            events.append({"type": "audio", "t": round(self.n / SR, 3), "keepalive": True,
+        if self.n - self._out_at < every:
+            return
+        self._out_at = self.n
+        t = round(self.n / SR, 3)
+        if self._held:
+            events.append({"type": "audio", "t": t, "keepalive": True,
                            "audio": np.zeros(int(self.cfg.keepalive_s * SR), dtype=np.float32)})
+        else:
+            events.append({"type": "keepalive", "t": t, "ms": round(self.cfg.keepalive_s * 1000)})
 
     def finish(self) -> list[dict[str, Any]]:
         events, self._pending_events = self._pending_events, []

@@ -83,14 +83,18 @@ def test_a_held_turn_keeps_the_stream_open(household, speakers, voice, vad, embe
             now = (i + 1) * len(c) / SR
             if e["type"] == "audio":
                 out.append((now, bool(e.get("keepalive")), e["audio"]))
+            if e["type"] == "keepalive":
+                out.append((now, True, None))
             if e["type"] == "turn_end" and end is None:
                 end = now
     first = next(t for t, keep, _ in out if keep)
     before_end = [t for t, _, _ in out if t < end]
-    # From the first word, something goes out at least every 0.6 s until the turn is sent.
+    # Something goes out at least every 0.6 s until the turn is sent: keepalive
+    # events before the turn starts, silence while it is held.
     assert first < 1.5
     assert max(b - a for a, b in zip(before_end, before_end[1:])) <= 0.6
-    assert all(not a.any() and len(a) == int(0.02 * SR) for _, keep, a in out if keep)
+    held = [a for _, keep, a in out if keep and a is not None]
+    assert held and all(not a.any() and len(a) == int(0.02 * SR) for a in held)
 
 
 def test_without_the_isolator_audio_goes_out_as_it_comes(household, speakers, voice, vad, embedder):
@@ -181,3 +185,29 @@ def test_each_kiosk_chooses_isolation(cfg, isolator):
         assert vm.new_follow(isolation=True).isolator is None
     finally:
         vm.close()
+
+
+def test_the_stream_stays_open_before_the_first_speech(household, speakers, voice, vad, embedder):
+    """A pause after the wake word sends nothing for seconds: Home Assistant
+    Cloud would give up after about 6 s (#4). Until speech goes out, keepalive
+    events ask the kiosk to send silence. They aren't audio, so the kiosk still
+    knows nobody has talked yet."""
+    people, _, _ = household
+    user = held_out(speakers[0])
+    for isolator in (None, Halves()):
+        s = Script().add("quiet", silence(6.0)).add("user", user[2 * SR:5 * SR]).add("quiet", silence(1.5))
+        f = Follow(FollowConfig(), ACCURATE, embedder, vad, people, anchor=user[: int(1.2 * SR)], isolator=isolator)
+        out, turn_at = [], None
+        for i, c in enumerate(chunks(s.audio)):
+            for e in f.feed(c):
+                now = (i + 1) * len(c) / SR
+                if e["type"] in ("audio", "keepalive"):
+                    out.append((now, e))
+                if e["type"] == "turn_start" and turn_at is None:
+                    turn_at = now
+        before = [(t, e) for t, e in out if t < turn_at]
+        waiting = [t for t, e in before if e["type"] == "keepalive"]
+        assert turn_at > 6.0 and waiting and waiting[0] <= 0.6
+        # No audio at all before the turn starts: only keepalive events, every 0.5 s.
+        assert all(e["type"] == "keepalive" and e["ms"] == 20 for _, e in before)
+        assert max(b - a for a, b in zip([0.0] + waiting, waiting)) <= 0.6

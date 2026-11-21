@@ -112,7 +112,7 @@ def test_tv_before_between_and_after_the_user_is_left_out(household, speakers, v
     assert len(of(events, "turn_start")) == 2 and len(of(events, "turn_end")) == 2
     assert s.speech_share("user", f.released, vad) >= 0.8
     assert s.released_from("tv", f.released) <= 0.5
-    released = sum(len(e["audio"]) for e in of(events, "audio")) / SR
+    released = sum(len(e["audio"]) for e in of(events, "audio") if not e.get("keepalive")) / SR
     assert released == pytest.approx(sum(b - a for a, b in f.released) / SR, abs=0.01)
 
 

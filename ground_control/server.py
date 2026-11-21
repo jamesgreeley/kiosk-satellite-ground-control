@@ -355,6 +355,11 @@ async def session_ws(request: web.Request) -> web.WebSocketResponse:
                 if not ws.closed:
                     await ws.send_bytes(float_to_pcm16(e["audio"]))
                 continue
+            if e["type"] == "keepalive":
+                # For the kiosk only: not part of the session's record or the live view.
+                if not ws.closed:
+                    await ws.send_json(e)
+                continue
             kept.append(e)
             if e["type"] != "stats":
                 _LOG.debug("session %s: %s", sid, _event_text(e))

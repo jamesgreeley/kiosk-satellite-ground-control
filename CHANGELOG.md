@@ -2,6 +2,11 @@
 
 All notable changes to Kiosk Satellite Ground Control are documented here.
 
+## v2026.11.3 - 2026-11-21
+
+### Fixed
+- **Home Assistant Cloud speech-to-text failing after a pause (#4).** With Trimming, nothing went to Home Assistant until the user's speech was accepted, so a pause after the wake word, or speech that took a moment to be accepted, ended the command with "400 Invalid HTTP request" after about 6 seconds with Home Assistant Cloud's speech-to-text. Ground Control now sends the kiosk a keepalive every half second until then, and the kiosk sends Home Assistant a little silence for each. It isn't speech, so the kiosk still cancels a command nobody talks in and still falls back to its microphone if Ground Control goes away. This needs the next Kiosk Satellite release. Older versions ignore it.
+
 ## v2026.11.2 - 2026-11-21
 
 ### Added
