@@ -2,6 +2,11 @@
 
 All notable changes to Kiosk Satellite Ground Control are documented here.
 
+## Unreleased
+
+### Fixed
+- **Underscores missing in entity ids on the People page (#10).** With some fonts and zoom levels, Chrome hid the underscores in a person's to-do list, calendar and person fields, so `todo.tristyn_s_shopping_list` looked like `todo.tristyn s shopping list`. The value was always saved with its underscores. Text fields now show them, at the same size as before.
+
 ## v2026.11.4 - 2026-11-21
 
 ### Fixed
