@@ -1,23 +1,35 @@
 # CUDA image: standalone Docker on an NVIDIA GPU (amd64, and arm64 for the GB10).
 #   docker build -f Dockerfile.cuda -t kiosk-satellite-ground-control:cuda .
 #   docker run --gpus all ...
-# onnxruntime-gpu 1.32 is built on CUDA 13 and cuDNN 9. It needs an NVIDIA
-# driver for CUDA 13 (580 or newer) on the host.
+#
+# Each platform runs the CUDA its GPUs need:
+#
+# - amd64: onnxruntime-gpu 1.29 from ONNX Runtime's CUDA 12 feed, on CUDA 12.9
+#   and cuDNN 9. It has kernels for every NVIDIA GPU from Pascal (GTX 10
+#   series) to Blackwell (RTX 50 series). The CUDA 13 builds start at Turing.
+#   It needs an NVIDIA driver from the 570 series or newer.
+# - arm64: onnxruntime-gpu 1.32 from PyPI, on CUDA 13 and cuDNN 9, for the
+#   GB10 and other Blackwell boards. ONNX Runtime has no CUDA 12 build for
+#   arm64. It needs an NVIDIA driver for CUDA 13 (580 or newer).
 #
 # NVIDIA's cudnn-runtime image carries every CUDA library, most of them for
 # work this service never does: image processing, FFTs, sparse and dense
 # solvers, runtime compilation, multi-GPU. Only what ONNX Runtime's CUDA
 # provider links (the CUDA runtime, cuBLAS and cuRAND) and cuDNN are copied
-# out of it. Tested on an RTX 4000 Ada: both speaker models run on the GPU,
-# with the same scores and speed as with every library, in 1.7 GB instead of
-# 3.4 GB. cuDNN's RNN engines (cudnn_adv, about 120 MB) are kept for the
-# Voice Isolator, whose LSTMs run on them.
-FROM nvidia/cuda:13.0.3-cudnn-runtime-ubuntu24.04 AS cuda
+# out of it. cuDNN's RNN engines (cudnn_adv) are kept for the Voice Isolator,
+# whose LSTMs run on them.
+ARG TARGETARCH
+
+FROM nvidia/cuda:12.9.1-cudnn-runtime-ubuntu24.04 AS cuda-amd64
+FROM nvidia/cuda:13.0.3-cudnn-runtime-ubuntu24.04 AS cuda-arm64
+
+FROM cuda-${TARGETARCH} AS cuda
 RUN mkdir /cuda && cd /usr/local/cuda/lib64 \
-    && cp -a libcudart.so.13* libcublas.so.13* libcublasLt.so.13* libcurand.so.10* /cuda/ \
+    && cp -a libcudart.so.1[23]* libcublas.so.1[23]* libcublasLt.so.1[23]* libcurand.so.10* /cuda/ \
     && cp -a /usr/lib/*-linux-gnu/libcudnn*.so.9* /cuda/
 
 FROM ubuntu:24.04
+ARG TARGETARCH
 
 ARG BUILD_VERSION=dev
 ARG BUILD_ARCH=""
@@ -41,9 +53,15 @@ RUN echo /usr/local/lib/cuda > /etc/ld.so.conf.d/cuda.conf && ldconfig
 WORKDIR /app
 COPY pyproject.toml README.md LICENSE ./
 COPY ground_control ./ground_control
-# TensorRT isn't used: its provider goes too.
-RUN pip install --no-cache-dir ".[cuda]" && pip uninstall -y onnxruntime \
-    && pip install --no-cache-dir --force-reinstall --no-deps "onnxruntime-gpu>=1.32" \
+# The CPU onnxruntime that pyproject asks for is swapped for the GPU build of
+# this platform. TensorRT isn't used: its provider goes too.
+RUN pip install --no-cache-dir . && pip uninstall -y onnxruntime \
+    && if [ "$TARGETARCH" = "amd64" ]; then \
+         pip install --no-cache-dir --no-deps "onnxruntime-gpu==1.29.0" \
+           --index-url https://aiinfra.pkgs.visualstudio.com/PublicPackages/_packaging/onnxruntime-cuda-12/pypi/simple/; \
+       else \
+         pip install --no-cache-dir --no-deps "onnxruntime-gpu>=1.32"; \
+       fi \
     && rm -f /usr/local/lib/python3*/dist-packages/onnxruntime/capi/libonnxruntime_providers_tensorrt.so \
     && rm -rf /root/.cache
 COPY models/silero_vad.onnx models/redimnet2_b3_multi.onnx models/redimnet2_b1.onnx models/voice_isolator.onnx models/voice_isolator_cpu.onnx \

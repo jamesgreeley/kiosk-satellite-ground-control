@@ -23,10 +23,9 @@ import threading
 from pathlib import Path
 
 import numpy as np
-import onnxruntime as ort
 
 from . import SAMPLE_RATE
-from .engine import malloc_trim, providers, session_options
+from .engine import malloc_trim, open_session, session_options
 
 _LOG = logging.getLogger(__name__)
 
@@ -42,7 +41,7 @@ class Isolator:
     def __init__(self, path: Path, threads: int = 1, use_cuda: bool = False) -> None:
         so = session_options(threads)
         so.log_severity_level = 3
-        self.session = ort.InferenceSession(str(path), so, providers=providers(use_cuda))
+        self.session = open_session(path, so, use_cuda)
         self.on_gpu = self.session.get_providers()[0] == "CUDAExecutionProvider"
         meta = self.session.get_modelmeta().custom_metadata_map
         self.version = meta.get("version", "unknown")

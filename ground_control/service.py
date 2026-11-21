@@ -177,8 +177,6 @@ class GroundControl:
             self._embedders[key] = Embedder(verified_path(self.cfg.models_dir, m.file, m.sha256),
                                             threads=self.cfg.threads, use_cuda=self.cfg.cuda)
             where = "the GPU" if self._embedders[key].on_gpu else "the CPU"
-            if self.cfg.cuda and not self._embedders[key].on_gpu:
-                _LOG.warning("CUDA is on but no GPU is usable: %s runs on the CPU", m.label)
             _LOG.info("%s model loaded on %s", m.label, where)
         return self._embedders[key]
 

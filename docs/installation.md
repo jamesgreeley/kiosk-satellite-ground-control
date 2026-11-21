@@ -15,7 +15,7 @@ Every Voice Match feature runs on the machine Ground Control is on, not on the k
 
 See [Performance Benchmarks](../README.md#performance-benchmarks) for the measured times. Isolation is optional, so a small machine still runs Recognition and Trimming.
 
-For Isolation on a GPU, any NVIDIA GPU from the Turing generation (GTX 16 series, RTX 20 series) or newer with 4 GB works.
+The CUDA image works with NVIDIA GPUs with 4 GB or more: on amd64 from the GTX 10 series (Pascal) to the RTX 50 series (Blackwell), and on arm64 the GB10 and other Blackwell boards.
 
 ## Home Assistant App
 
@@ -84,10 +84,11 @@ docker run -d --name ground-control --network host --gpus all \
 
 The CUDA image needs:
 
-- An NVIDIA driver for CUDA 13, version 580 or newer.
+- An NVIDIA GPU with 4 GB or more. On amd64, any GPU from the GTX 10 series (Pascal) to the RTX 50 series (Blackwell). On arm64, the GB10 and other Blackwell boards.
+- An NVIDIA driver from the 570 series or newer on amd64, or 580 or newer on arm64.
 - The [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) on the host.
 
-The image is built for amd64 and arm64, so it also runs on an NVIDIA GB10. If CUDA is on but no GPU is usable, Ground Control runs on the CPU and says so on the Overview page and in the log.
+The image is built for amd64 and arm64, so it also runs on an NVIDIA GB10. The CUDA image runs on the GPU or not at all. If it can't use the GPU, it stops with a line in its log that starts with `CUDA can't start` and says why, such as no GPU visible to the container or a driver that is too old. Use the CPU image on a machine without a supported GPU.
 
 > **Info:** If Docker runs inside an LXC container on Proxmox, `nvidia-smi` fails with "Failed to initialize NVML: Unknown Error" until you set `nvidia-ctk config --set nvidia-container-cli.no-cgroups --in-place` and pass the devices to the container: `--device /dev/nvidia0 --device /dev/nvidiactl --device /dev/nvidia-uvm --device /dev/nvidia-uvm-tools`.
 

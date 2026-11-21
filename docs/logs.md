@@ -19,7 +19,7 @@ Useful lines to look for:
 | `rejected …, not one of the people this kiosk answers` | The voice was recognized but the kiosk answers other people. |
 | `answers … Ground Control doesn't have` | The kiosk's chosen people aren't here. See [Chosen People Ground Control Doesn't Have](kiosks.md#chosen-people-ground-control-doesnt-have). |
 | `Isolation runs on the CPU` | Each command waits about a second for Isolation. |
-| `CUDA is on but no GPU is usable` | The GPU image found no GPU it can use, so everything runs on the CPU. See [NVIDIA GPU](installation.md#nvidia-gpu). |
+| `CUDA can't start: …` | The CUDA image can't use the GPU, so it stopped. The line says why and what the image needs. See [NVIDIA GPU](installation.md#nvidia-gpu). |
 
 As a Home Assistant app, the same log is also on the app's **Log** tab. With Docker, it is in `docker logs`.
 

@@ -91,7 +91,7 @@ A 5 s command between stretches of TV, sent through Ground Control's own code in
 
 The Accurate model makes the fewest mix-ups between people and with TV voices. The Light model uses about a third of the CPU, and a TV voice cutting in ends the command about a second later. Ground Control picks Accurate on an NVIDIA GPU or an x86 CPU with more than 4 cores, and Light on ARM and smaller x86 CPUs like the N100. **Settings > Voice Match** changes it without needing to re-enroll users.
 
-For Isolation on a GPU, any NVIDIA GPU from the Turing generation (GTX 16 series, RTX 20 series) or newer with 4 GB works.
+The CUDA image works with NVIDIA GPUs with 4 GB or more: on amd64 from the GTX 10 series (Pascal) to the RTX 50 series (Blackwell), and on arm64 the GB10 and other Blackwell boards.
 
 ## Install
 
@@ -133,7 +133,7 @@ docker run -d --name ground-control --gpus all -p 10900:10900 \
 
 With `-p 10900:10900` instead of the host network, kiosks don't find the service on their own: enter this machine's address in each kiosk.
 
-The GPU needs an NVIDIA driver for CUDA 13 (580 or newer) and the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) on the host. If Docker runs inside an LXC container (Proxmox), set `nvidia-ctk config --set nvidia-container-cli.no-cgroups --in-place` and pass the devices too, or `nvidia-smi` fails with "Failed to initialize NVML: Unknown Error":
+The GPU needs to be from the GTX 10 series or newer, with an NVIDIA driver from the 570 series or newer (580 or newer on arm64) and the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) on the host. If Docker runs inside an LXC container (Proxmox), set `nvidia-ctk config --set nvidia-container-cli.no-cgroups --in-place` and pass the devices too, or `nvidia-smi` fails with "Failed to initialize NVML: Unknown Error":
 
 ```bash
   --device /dev/nvidia0 --device /dev/nvidiactl --device /dev/nvidia-uvm --device /dev/nvidia-uvm-tools

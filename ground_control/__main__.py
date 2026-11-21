@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import logging
+import sys
 
 from aiohttp import web
 
 from . import __version__, config, logs
+from .engine import CudaUnavailable
 from .server import build_app
 from .service import GroundControl
 
@@ -21,7 +23,11 @@ def main() -> None:
              cfg.threads, "on" if cfg.cuda else "off", cfg.model)
     if cfg.auth == "none":
         log.warning("AUTH=none: anyone who can reach port %d can use the service", cfg.port)
-    vm = GroundControl(cfg)
+    try:
+        vm = GroundControl(cfg)
+    except CudaUnavailable as err:
+        log.error("%s", err)
+        sys.exit(1)
     web.run_app(build_app(vm, mdns=cfg.mdns), port=cfg.port, print=None)
 
 

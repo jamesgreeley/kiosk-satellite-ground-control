@@ -7,6 +7,13 @@ All notable changes to Kiosk Satellite Ground Control are documented here.
 ### Added
 - **Documentation.** New pages in `docs/`: getting started, installation, kiosks, people, Voice Match, backup and moving to another machine, sessions, settings, and logs and issues. The README's Install section has its own parts for the Home Assistant app, with a button that adds the repository to Home Assistant, and for a standalone Docker container. The app's Info and Documentation tabs link to the docs. The README has badges for stars, downloads, the version and the build, and for the Home Assistant app, Docker and CUDA.
 
+### Fixed
+- **CUDA image on a GTX 10 series GPU (#3).** On a GTX 1080, the CUDA image stopped at startup with "CUBLAS failure 8: the function requires an architectural feature absent from the device", because CUDA 13 doesn't support GPUs older than Turing. The amd64 CUDA image now runs on CUDA 12, which supports every NVIDIA GPU from the GTX 10 series (Pascal) to the RTX 50 series (Blackwell), and needs an NVIDIA driver from the 570 series or newer instead of 580. The arm64 image stays on CUDA 13 for the GB10.
+
+### Changed
+- **A CUDA image runs on the GPU or not at all.** When the GPU can't be used, the CUDA image stops with one line in the log that says why, such as no GPU visible to the container, a driver that is too old or an unsupported GPU, instead of a stack trace or quietly running on the CPU.
+- **No waits for the GPU between checks.** On a GPU, each speaker model keeps a session for every window length up to 4 s, so a check never waits for the GPU to set up a new length, which took up to 0.2 s with CUDA 12. A speaker model now takes about 1.3 GB of GPU memory.
+
 ## v2026.11.1 - 2026-11-20
 
 The first release of Kiosk Satellite Ground Control, a companion service for Kiosk Satellite that runs the voice and vision work too heavy for a kiosk on a computer or server in your home.

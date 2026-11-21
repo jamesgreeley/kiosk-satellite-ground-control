@@ -2,7 +2,8 @@
 #
 #   docker compose -f compose.cuda.yaml up -d
 #
-# The host needs an NVIDIA driver for CUDA 13 (580 or newer) and the NVIDIA
+# The GPU needs to be from the GTX 10 series (Pascal) or newer. The host needs
+# an NVIDIA driver from the 570 series or newer (580 or newer on arm64) and the NVIDIA
 # Container Toolkit. Then open
 # http://THIS_MACHINE:10900 and select Log in with Home Assistant.
 # Test builds are tagged "edge-cuda" instead of "cuda".
