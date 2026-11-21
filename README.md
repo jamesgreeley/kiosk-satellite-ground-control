@@ -16,7 +16,7 @@
 <p align="center">
 <a href="https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fjxlarrea%2Fkiosk-satellite-ground-control"><img src="https://img.shields.io/badge/Home%20Assistant-App-18bcf2?style=for-the-badge&logo=homeassistant&logoColor=white" alt="Home Assistant app"></a>
 <a href="https://github.com/users/jxlarrea/packages/container/package/kiosk-satellite-ground-control"><img src="https://img.shields.io/badge/Docker-amd64%20%7C%20arm64-2496ed?style=for-the-badge&logo=docker&logoColor=white" alt="Docker amd64 and arm64"></a>
-<a href="docs/installation.md#nvidia-gpu"><img src="https://img.shields.io/badge/NVIDIA-CUDA%2013-76b900?style=for-the-badge&logo=nvidia&logoColor=white" alt="NVIDIA CUDA 13"></a>
+<a href="docs/installation.md#nvidia-gpu"><img src="https://img.shields.io/badge/NVIDIA-CUDA%2012%20%7C%2013-76b900?style=for-the-badge&logo=nvidia&logoColor=white" alt="NVIDIA CUDA 12 and 13"></a>
 </p>
 
 <p align="center">

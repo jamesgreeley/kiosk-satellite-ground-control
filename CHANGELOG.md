@@ -4,6 +4,9 @@ All notable changes to Kiosk Satellite Ground Control are documented here.
 
 ## Unreleased
 
+### Changed
+- **README CUDA badge.** It shows CUDA 12 and 13, since the amd64 CUDA image runs on CUDA 12 and the arm64 one on CUDA 13.
+
 ### Fixed
 - **Underscores missing in entity ids on the People page (#10).** With some fonts and zoom levels, Chrome hid the underscores in a person's to-do list, calendar and person fields, so `todo.tristyn_s_shopping_list` looked like `todo.tristyn s shopping list`. The value was always saved with its underscores. Text fields now show them, at the same size as before.
 
