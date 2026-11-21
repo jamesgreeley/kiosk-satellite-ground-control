@@ -2,7 +2,7 @@
 
 All notable changes to Kiosk Satellite Ground Control are documented here.
 
-## Unreleased
+## v2026.11.1 - 2026-11-20
 
 The first release of Kiosk Satellite Ground Control, a companion service for Kiosk Satellite that runs the voice and vision work too heavy for a kiosk on a computer or server in your home.
 
