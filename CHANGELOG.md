@@ -2,6 +2,11 @@
 
 All notable changes to Kiosk Satellite Ground Control are documented here.
 
+## v2026.11.4 - 2026-11-21
+
+### Fixed
+- **"Failed to load libnvrtc.so.12" in the CUDA image's log (#6).** On amd64, each GPU session printed "Failed to load libnvrtc.so.12", "Failed to load libcufft.so.11" and "Please follow https://onnxruntime.ai/docs/install/#cuda-and-cudnn to install CUDA." at startup. It was harmless: the image gets CUDA from its base image, Ground Control doesn't use those two libraries and the models ran on the GPU anyway. The check that printed it now runs once and only writes to the detailed log.
+
 ## v2026.11.3 - 2026-11-21
 
 ### Fixed

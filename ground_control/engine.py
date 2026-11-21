@@ -7,7 +7,9 @@ system after loading, as Voice Incubator found it keeps speaker ID small.
 
 from __future__ import annotations
 
+import contextlib
 import ctypes
+import io
 import logging
 import platform
 import threading
@@ -42,12 +44,30 @@ def malloc_trim() -> None:
         pass
 
 
+_preloaded = False
+
+
+def _preload_cuda() -> None:
+    """Load CUDA and cuDNN from the nvidia-* wheels when the system has none,
+    once. The CUDA images have them from the base image, and onnxruntime prints
+    a "Failed to load" line for each library it doesn't find, such as NVRTC and
+    cuFFT, which Ground Control doesn't use. That output goes to the debug log."""
+    global _preloaded
+    if _preloaded or not hasattr(ort, "preload_dlls"):
+        return
+    _preloaded = True
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        ort.preload_dlls()
+    for line in out.getvalue().splitlines():
+        if line.strip():
+            _LOG.debug("CUDA preload: %s", line.strip())
+
+
 def providers(use_cuda: bool, cuda_options: dict | None = None) -> list:
     available = ort.get_available_providers()
     if use_cuda and "CUDAExecutionProvider" in available:
-        if hasattr(ort, "preload_dlls"):
-            # CUDA and cuDNN from the nvidia-* wheels, when the system has none.
-            ort.preload_dlls()
+        _preload_cuda()
         # HEURISTIC skips cuDNN's exhaustive search on each new input length.
         options = {"cudnn_conv_algo_search": "HEURISTIC", **(cuda_options or {})}
         return [("CUDAExecutionProvider", options), "CPUExecutionProvider"]
