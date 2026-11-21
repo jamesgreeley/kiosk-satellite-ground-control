@@ -16,8 +16,9 @@ def main() -> None:
     logs.install()
     cfg = config.load()
     log = logging.getLogger("ground_control")
-    log.info("Kiosk Satellite Ground Control %s: model %s, %d threads, CUDA %s", __version__, cfg.model,
-             cfg.threads, "on" if cfg.cuda else "off")
+    # The model chosen on the Settings page, if any, is logged once it loads.
+    log.info("Kiosk Satellite Ground Control %s: %d threads, CUDA %s, default model %s", __version__,
+             cfg.threads, "on" if cfg.cuda else "off", cfg.model)
     if cfg.auth == "none":
         log.warning("AUTH=none: anyone who can reach port %d can use the service", cfg.port)
     vm = GroundControl(cfg)

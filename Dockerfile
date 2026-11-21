@@ -10,7 +10,7 @@ LABEL org.opencontainers.image.title="Kiosk Satellite Ground Control" \
       io.hass.type="addon" io.hass.name="Kiosk Satellite Ground Control" \
       io.hass.version="${BUILD_VERSION}" io.hass.arch="${BUILD_ARCH}"
 
-ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 MODELS_DIR=/app/models DATA_DIR=/data
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 MODELS_DIR=/app/models
 
 WORKDIR /app
 COPY pyproject.toml README.md LICENSE ./

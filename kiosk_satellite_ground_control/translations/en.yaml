@@ -1,0 +1,23 @@
+configuration:
+  model:
+    name: Speaker model
+    description: >-
+      auto picks Accurate on an x86 CPU with more than 4 cores and Light on ARM and smaller CPUs.
+      Changing it rebuilds every voiceprint from the enrollment audio, so nobody records again.
+  threads:
+    name: Threads
+    description: Threads per check. 0 uses half the CPUs, up to 4.
+  learn:
+    name: Learn from commands
+    description: Fold confident commands into each person's voiceprint, so it follows colds and room changes.
+  keep_days:
+    name: Days to keep sessions
+    description: How many days saved sessions stay on the Sessions page.
+  keep_audio:
+    name: Keep session audio
+    description: Keep each session's audio, so it can be played back or added to a person.
+  mdns_address:
+    name: mDNS address
+    description: >-
+      Leave empty and kiosks find Ground Control at this machine's address on its main network.
+      Set an address only when kiosks can't reach that one, like kiosks on another VLAN.

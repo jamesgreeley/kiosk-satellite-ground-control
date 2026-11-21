@@ -277,6 +277,30 @@ async def status(request: web.Request) -> web.Response:
                               "isolation": vm.isolator() is not None,
                               "isolation_on_gpu": bool(vm.isolator() and vm.isolator().on_gpu)})
 
+MISSING_PEOPLE_FIX = "choose them again in Kiosk Satellite, under Voice Satellite > Ground Control Voice Match > People"
+
+
+def _check_people(vm: GroundControl, device_id: str | None, people: Any) -> list[str]:
+    """The people a kiosk answers that Ground Control doesn't have, as after
+    moving to another Ground Control. Logged once for each set, since
+    otherwise every command is rejected without a word why."""
+    ids = [p for p in people if isinstance(p, str)] if isinstance(people, (list, tuple)) else []
+    missing = [p for p in ids if vm.people.get(p) is None]
+    k = vm.hub.kiosks.get(device_id or "")
+    if k is not None and tuple(missing) != k._missing_warned:
+        k._missing_warned = tuple(missing)
+        if missing:
+            n = f"{len(missing)} {'person' if len(missing) == 1 else 'people'}"
+            known = len(ids) - len(missing)
+            _LOG.warning("kiosk %s answers %s Ground Control doesn't have%s: %s", k.name, n,
+                         "" if known else ", so it answers nobody", MISSING_PEOPLE_FIX)
+    return missing
+
+
+def _check_features(vm: GroundControl, device_id: str | None, features: dict[str, Any] | None) -> None:
+    if features and features.get("policy") == "people":
+        _check_people(vm, device_id, features.get("people"))
+
 
 # ── sessions ──────────────────────────────────────────────────────────────
 
@@ -321,6 +345,8 @@ async def session_ws(request: web.Request) -> web.WebSocketResponse:
     who = kiosk.name if kiosk else device_id or "an unknown kiosk"
     _LOG.info("session %s from %s: %s mode, answers %s%s%s", sid, who, mode, policy,
               f" ({len(people)} chosen)" if policy == "people" else "", ", a follow-up" if joins else "")
+    if policy == "people":
+        _check_people(vm, device_id, people)
     vm.hub.publish({"type": "session_start", "session": sid, "device_id": device_id, "mode": mode})
 
     async def send(events: list[dict[str, Any]]) -> None:
@@ -578,6 +604,7 @@ async def kiosk_ws(request: web.Request) -> web.WebSocketResponse:
     _LOG.info("kiosk %s connected from %s: %s, Kiosk Satellite %s, enrollment %s%s", k.name, request.remote,
               k.model or "unknown model", k.version or "unknown version", "allowed" if k.enroll else "off",
               "" if k.access == "approved" else f", {'waiting for approval' if k.access == 'pending' else 'declined'}")
+    _check_features(vm, device_id, k.features)
     try:
         await _send_access(request, k.device_id)
         async for msg in ws:
@@ -622,7 +649,9 @@ def _from_kiosk(vm: GroundControl, device_id: str, data: str) -> None:
     if msg.get("type") == "settings":
         before = vm.hub.kiosks.get(device_id)
         was = before.enroll if before else None
-        vm.hub.update(device_id, msg.get("enroll") is True, _features(msg.get("features")))
+        features = _features(msg.get("features"))
+        vm.hub.update(device_id, msg.get("enroll") is True, features)
+        _check_features(vm, device_id, features)
         if was != (msg.get("enroll") is True):
             _LOG.info("kiosk %s: enrollment %s", _kiosk_name(vm, device_id), "allowed" if msg.get("enroll") is True else "off")
     elif msg.get("type") == "enroll_error":
@@ -798,7 +827,8 @@ def _session_text(stats: dict[str, Any], events: list[dict[str, Any]]) -> str:
     """How a session went, in one line: who, why it ended and how much audio."""
     speaker = stats.get("speaker") or {}
     if stats.get("rejected"):
-        who = f"rejected {speaker.get('name') or 'an unknown voice'}"
+        who = (f"rejected {speaker['name']}, not one of the people this kiosk answers" if speaker.get("name")
+               else "rejected an unknown voice")
     elif speaker.get("name"):
         score = f" {speaker['score']}" if speaker.get("score") is not None else ""
         who = f"{speaker['name']} ({speaker.get('by') or 'voice'}{score})"
@@ -951,7 +981,7 @@ def build_app(vm: GroundControl, token_check: TokenCheck | None = None, mdns: bo
         if mdns:
             from .mdns import Advertiser
 
-            advertiser = Advertiser(vm.cfg.port, vm.model.key)
+            advertiser = Advertiser(vm.cfg.port, vm.model.key, vm.cfg.mdns_address)
             try:
                 await advertiser.start()
                 app[ADVERTISER] = advertiser

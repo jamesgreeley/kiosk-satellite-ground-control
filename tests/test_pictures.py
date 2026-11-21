@@ -98,6 +98,38 @@ async def test_a_large_picture_arrives_whole(aiohttp_server):
         await pictures.close()
 
 
+async def test_an_app_gets_a_picture_in_the_www_folder_straight_from_core(aiohttp_server):
+    """The Supervisor's proxy only passes /api, and Core serves /local without a login."""
+    async def avatar(request):
+        assert "Authorization" not in request.headers
+        return web.Response(body=PNG, content_type="image/png")
+
+    core = web.Application()
+    core.router.add_get("/local/avatar.png", avatar)
+    core_server = await aiohttp_server(core)
+
+    async def state(request):
+        assert request.headers.get("Authorization") == "Bearer supervisor"
+        return web.json_response({"attributes": {"entity_picture": "/local/avatar.png"}})
+
+    async def info(request):
+        return web.json_response({"data": {"port": core_server.port, "ssl": False}})
+
+    async def refused(request):
+        raise web.HTTPForbidden()
+
+    supervisor = web.Application()
+    supervisor.router.add_get("/core/api/states/{entity}", state)
+    supervisor.router.add_get("/core/info", info)
+    supervisor.router.add_get("/core/local/{name}", refused)
+    sup_server = await aiohttp_server(supervisor)
+    pictures = Pictures("auto", "supervisor", supervisor=str(sup_server.make_url("")).rstrip("/"))
+    try:
+        assert await pictures.get("person.ana", None) == (PNG, "image/png")
+    finally:
+        await pictures.close()
+
+
 # ── suggestions for a person's things ────────────────────────────────────
 
 from ground_control.suggestions import Suggestions  # noqa: E402

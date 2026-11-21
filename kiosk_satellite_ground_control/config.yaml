@@ -1,7 +1,7 @@
 name: Kiosk Satellite Ground Control
-version: "0.1.0"
+version: "2026.11.1"
 slug: kiosk_satellite_ground_control
-description: "The work too heavy for a kiosk, on a capable machine. First, Voice Match: Recognition of who is speaking to a Kiosk Satellite, with Trimming and Isolation to take other voices like a TV out of the command."
+description: "Ground Control is a companion service for Kiosk Satellite. It runs on a computer or server in your home and handles the voice and vision processing that kiosks don't have the computing power for."
 url: https://github.com/jxlarrea/kiosk-satellite-ground-control
 arch:
   - amd64
@@ -17,6 +17,10 @@ ingress: true
 ingress_port: 10900
 panel_icon: mdi:satellite-uplink
 panel_title: Ground Control
+watchdog: http://[HOST]:[PORT:10900]/health
+map:
+  - type: app_config
+    read_only: false
 options:
   model: auto
   threads: 0
@@ -29,3 +33,4 @@ schema:
   learn: bool
   keep_days: int(1,90)
   keep_audio: bool
+  mdns_address: match(^(\d{1,3}\.){3}\d{1,3}$)?

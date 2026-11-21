@@ -26,6 +26,7 @@ services:
       # KEEP_DAYS: 7         # days saved sessions are kept
       # KEEP_AUDIO: "true"   # keep each session's audio
       # PORT: 10900
+      # MDNS_ADDRESS: 192.168.1.20  # advertise this address instead of the main network's
     volumes:
       - ground-control:/data
     deploy:

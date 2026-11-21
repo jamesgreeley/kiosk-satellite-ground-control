@@ -216,9 +216,19 @@ export function answersLabel(record, people = []) {
   if (record?.policy === "people") {
     const byId = Object.fromEntries(people.map((p) => [p.id, p.name]));
     const names = (record.people || []).map((id) => byId[id]).filter(Boolean);
-    return names.length ? `Only ${listOf(names)}` : "Chosen people only";
+    const missing = missingPeople(record, people);
+    const gone = missing ? `${missing === 1 ? "1 person" : `${missing} people`} not on this Ground Control` : "";
+    if (names.length) return `Only ${listOf(names)}${gone ? `, and ${gone}` : ""}`;
+    return gone || "Chosen people only";
   }
   return "Anyone";
+}
+
+/** How many of the people a kiosk answers aren't here, as after moving to another Ground Control. */
+export function missingPeople(record, people = []) {
+  if (record?.policy !== "people") return 0;
+  const ids = new Set(people.map((p) => p.id));
+  return (record.people || []).filter((id) => !ids.has(id)).length;
 }
 
 /** A kiosk's state: waiting for approval and declined come before being connected. */

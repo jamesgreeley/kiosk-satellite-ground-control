@@ -2,7 +2,7 @@
 // details, its Voice Match features and what it hears right now (the live view).
 import { api, socket } from "../api.js";
 import { shell } from "../app.js";
-import { ago, ask, chip, disc, h, icon, kioskAnswers, kioskChip, modeLabel, pageHead, section, toast } from "../ui.js";
+import { ago, ask, chip, disc, h, icon, kioskAnswers, kioskChip, missingPeople, modeLabel, pageHead, section, toast } from "../ui.js";
 
 const WINDOW_S = 10;
 
@@ -62,7 +62,10 @@ function featureRows(kiosk, lastSession, people, status) {
     : f.isolation === false ? onOff(false)
     : status.isolation ? chip("On", "c-ok") : chip("Off in Ground Control", "c-off");
   return [
-    row("Recognition", `Answers: ${kioskAnswers(kiosk, lastSession, people) || "Anyone"}.`, onOff(true)),
+    missingPeople(f, people)
+      ? row("Recognition", `Answers: ${kioskAnswers(kiosk, lastSession, people)}. Choose them again in Kiosk Satellite, under Voice Satellite > Ground Control Voice Match > People.`,
+            chip("Choose again", "c-warn"))
+      : row("Recognition", `Answers: ${kioskAnswers(kiosk, lastSession, people) || "Anyone"}.`, onOff(true)),
     row("Trimming", "Other voices cut out between the user's words.", onOff(f.trimming)),
     row("Isolation", "Other voices removed under the user's words.", isolation),
     row("Speaker sensor", "Who is talking, in Home Assistant.", onOff(f.speaker_sensor)),

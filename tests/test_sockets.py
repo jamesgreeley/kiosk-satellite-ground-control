@@ -288,3 +288,29 @@ async def test_a_session_downloads_as_one_zip(client, speakers, voice):
     text = z.read("ground-control.txt").decode()
     assert text.startswith("Kiosk Satellite Ground Control ") and f"Session {sid}" in text and "Kitchen" in text
     assert (await client.get("/api/sessions/nope/download", headers=GOOD)).status == 404
+
+
+async def test_a_kiosk_answering_people_ground_control_doesnt_have_is_logged_once(client, caplog):
+    """As after moving to another Ground Control: every command would be rejected without a word why."""
+    from ground_control.server import _session_text
+
+    approve(client)
+    ana = client.app[VM].people.add("Ana")
+    kiosk = await client.ws_connect("/api/kiosk")
+    with caplog.at_level("WARNING", logger="ground_control.server"):
+        await hello(kiosk, name="Kitchen", features={"policy": "people", "people": ["gone"]})
+        await next_of(kiosk, "people")
+        await kiosk.send_json({"type": "settings", "features": {"policy": "people", "people": ["gone"]}})
+        await kiosk.send_json({"type": "settings", "features": {"policy": "people", "people": [ana.id]}})
+        await kiosk.send_json({"type": "settings", "features": {"policy": "people", "people": [ana.id, "gone"]}})
+        await asyncio.sleep(0.3)
+    warned = [r.getMessage() for r in caplog.records if "doesn't have" in r.getMessage()]
+    assert warned == [
+        "kiosk Kitchen answers 1 person Ground Control doesn't have, so it answers nobody: choose them again in "
+        "Kiosk Satellite, under Voice Satellite > Ground Control Voice Match > People",
+        "kiosk Kitchen answers 1 person Ground Control doesn't have: choose them again in "
+        "Kiosk Satellite, under Voice Satellite > Ground Control Voice Match > People",
+    ]
+    await kiosk.close()
+    assert _session_text({"rejected": True, "speaker": {"name": "Ana"}}, []).startswith(
+        "rejected Ana, not one of the people this kiosk answers")

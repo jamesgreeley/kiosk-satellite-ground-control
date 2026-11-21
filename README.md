@@ -58,10 +58,10 @@ How much latency each feature adds to a 5-second command:
 
 | | Raspberry Pi 4, Light | Intel N100, Accurate | i9-13900H, Accurate | NVIDIA RTX 4000 Ada, Accurate | NVIDIA GB10 GPU, Accurate |
 |---|---|---|---|---|---|
-| Recognition | 0.10 s | 0.29 s | 0.04 s | 0.01 s | pending |
-| Trimming | 0.41 s | 0.70 s | 0.11 s | 0.01 s | pending |
-| Isolation | Too slow on a Pi | 6.11 s | 1.18 s | 0.09 s | pending |
-| **All features** | **0.41 s** (no Isolation) | **6.81 s** | **1.29 s** | **0.10 s** | pending |
+| Recognition | 0.10 s | 0.29 s | 0.04 s | 0.01 s | 0.01 s |
+| Trimming | 0.41 s | 0.70 s | 0.11 s | 0.01 s | 0.01 s |
+| Isolation | Too slow on a Pi | 6.11 s | 1.18 s | 0.09 s | 0.11 s |
+| **All features** | **0.41 s** (no Isolation) | **6.81 s** | **1.29 s** | **0.10 s** | **0.12 s** |
 
 A 5 s command between stretches of TV, sent through Ground Control's own code in real time the way a kiosk sends it, with Ground Control's default threads (2 on the Pi and the N100, 4 elsewhere).
 
@@ -105,8 +105,6 @@ The GPU needs an NVIDIA driver for CUDA 13 (580 or newer) and the [NVIDIA Contai
 ```
 
 `HA_URL` is your Home Assistant. Kiosks sign in with the Home Assistant token they already have, and the service checks it there. Your browser goes to `HA_URL` to log in, so use an address your browser can open too, not one that only works inside Docker. See `ground_control/config.py` for every setting.
-
-To try a build before it's released, see [TESTING.md](TESTING.md).
 
 ## Getting started
 

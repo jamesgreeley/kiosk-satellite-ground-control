@@ -1,6 +1,10 @@
 # Kiosk Satellite Ground Control
 
-Runs the work that is too heavy for a kiosk on a capable machine. Its first feature set is **Voice Match**, for Home Assistant's Assist and the realtime assistants in Kiosk Satellite:
+Ground Control is a companion service for [Kiosk Satellite](https://github.com/jxlarrea/kiosk-satellite). It runs on a computer or server in your home and handles the voice and vision processing that kiosks don't have the computing power for.
+
+Kiosk Satellite Ground Control currently has two components: **Voice Match** which does speaker voice recognition, trimming and isolation. **Vision Match** which does facial recognition (coming soon).
+
+**Voice Match** works with Home Assistant's Assist and the realtime assistants in Kiosk Satellite:
 
 - **Recognition:** who is speaking to a Kiosk Satellite, from the voiceprints of the people enrolled.
 - **Trimming:** other voices, like a TV, are cut out between the user's words, so a TV in the background doesn't keep the assistant listening.
@@ -28,6 +32,11 @@ With **Isolation** on in the panel, under **Settings > Voice Match**, the comman
 - **learn:** fold confident commands into each person's voiceprint, so it follows colds and room changes.
 - **keep_days:** how many days saved sessions are kept, for the Sessions page.
 - **keep_audio:** keep each session's audio, so it can be played back or added to a person.
+- **mdns_address:** optional. Kiosks find Ground Control at this machine's address on its main network, the one with the default route. Set an address only when kiosks can't reach that one, like kiosks on another VLAN this machine also has an address on. Every kiosk then gets that address instead.
+
+## Files and backups
+
+People, voiceprints, kiosks and saved sessions are in the app's folder, `addon_configs/…_kiosk_satellite_ground_control`, which the Samba share and File editor apps show. A Home Assistant backup that includes this app keeps all of it, so a restore brings back everyone's voiceprint.
 
 ## Reporting an issue
 

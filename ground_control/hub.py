@@ -54,6 +54,7 @@ class Kiosk:
     in_session: bool = False
     _ws: web.WebSocketResponse | None = field(default=None, repr=False)
     _ticket: str | None = field(default=None, repr=False)
+    _missing_warned: tuple[str, ...] = field(default=(), repr=False)
 
     def public(self) -> dict[str, Any]:
         return {k: v for k, v in self.__dict__.items() if not k.startswith("_")}
