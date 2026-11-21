@@ -78,7 +78,23 @@ For Isolation on a GPU, any NVIDIA GPU from the Turing generation (GTX 16 series
 
 ## Install
 
-**Home Assistant app:** add this repository under **Settings > Apps > App store > Repositories**, then install **Kiosk Satellite Ground Control**.
+Ground Control runs as a Home Assistant app or as a standalone Docker container. See [Installation](docs/installation.md) for the details and every option.
+
+### Home Assistant App
+
+The simplest way to run Ground Control is as a Home Assistant app, on the CPU of the machine running Home Assistant:
+
+[![Open your Home Assistant instance and show the add app repository dialog with a specific repository URL pre-filled.](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fjxlarrea%2Fkiosk-satellite-ground-control)
+
+1. Select the button above, or add `https://github.com/jxlarrea/kiosk-satellite-ground-control` under **Settings > Apps > App store > Repositories**.
+2. Install **Kiosk Satellite Ground Control** and start it.
+3. Open **Ground Control** in the sidebar.
+
+The app needs Home Assistant OS or a Supervised install. For Isolation on an NVIDIA GPU, run the Docker container on a machine with the GPU instead.
+
+### Standalone Docker Container
+
+For a machine other than Home Assistant's, or an NVIDIA GPU.
 
 **Docker Compose:** [compose.yaml](compose.yaml) for the CPU and [compose.cuda.yaml](compose.cuda.yaml) for an NVIDIA GPU. Set `HA_URL` in the file, then `docker compose up -d` (or `docker compose -f compose.cuda.yaml up -d`). Both use the host network, so kiosks on the same network find the service on their own.
 
@@ -98,13 +114,15 @@ docker run -d --name ground-control --gpus all -p 10900:10900 \
   -v ground-control:/data ghcr.io/jxlarrea/kiosk-satellite-ground-control:cuda
 ```
 
+With `-p 10900:10900` instead of the host network, kiosks don't find the service on their own: enter this machine's address in each kiosk.
+
 The GPU needs an NVIDIA driver for CUDA 13 (580 or newer) and the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) on the host. If Docker runs inside an LXC container (Proxmox), set `nvidia-ctk config --set nvidia-container-cli.no-cgroups --in-place` and pass the devices too, or `nvidia-smi` fails with "Failed to initialize NVML: Unknown Error":
 
 ```bash
   --device /dev/nvidia0 --device /dev/nvidiactl --device /dev/nvidia-uvm --device /dev/nvidia-uvm-tools
 ```
 
-`HA_URL` is your Home Assistant. Kiosks sign in with the Home Assistant token they already have, and the service checks it there. Your browser goes to `HA_URL` to log in, so use an address your browser can open too, not one that only works inside Docker. See `ground_control/config.py` for every setting.
+`HA_URL` is your Home Assistant. Kiosks sign in with the Home Assistant token they already have, and the service checks it there. Your browser goes to `HA_URL` to log in, so use an address your browser can open too, not one that only works inside Docker. See [Installation](docs/installation.md#environment-variables) for every setting.
 
 ## Getting started
 
@@ -112,6 +130,18 @@ The GPU needs an NVIDIA driver for CUDA 13 (580 or newer) and the [NVIDIA Contai
 2. **Connect your kiosks.** Kiosks on the same network find Ground Control on their own. For a kiosk on another network, enter the address from **Settings > General > Kiosks** in Kiosk Satellite. Approve each new kiosk on the Kiosks page. Ground Control only accepts kiosks running Kiosk Satellite.
 3. **Enroll people.** Add each person on the People page, then enroll their voice on a kiosk of every kind they talk to.
 4. **Turn on what you want.** In Kiosk Satellite, under **Voice Satellite > Ground Control Voice Match**, choose who each kiosk answers and turn on **Enable Trimming** and **Enable Isolation**. Turn on Isolation in Ground Control's settings too.
+
+## Documentation
+
+- [Getting started](docs/getting-started.md): from installing Ground Control to a kiosk that knows who is talking.
+- [Installation](docs/installation.md): the Home Assistant app, Docker on a CPU or an NVIDIA GPU, options and updating.
+- [Kiosks](docs/kiosks.md): connecting and approving kiosks, kiosks on another network and each kiosk's page.
+- [People](docs/people.md): adding people, enrollment and personal commands.
+- [Voice Match](docs/voice-match.md): Recognition, Trimming, Isolation and the speaker models.
+- [Backup and moving](docs/backup.md): backing up the data and moving it to another machine, as an app or with Docker.
+- [Sessions](docs/sessions.md): what each voice command did, its audio and downloading it for an issue.
+- [Settings](docs/settings.md): every setting and the template for LLM conversation agents.
+- [Logs and issues](docs/logs.md): reading the log and reporting an issue.
 
 ## License and credits
 

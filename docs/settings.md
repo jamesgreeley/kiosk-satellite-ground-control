@@ -1,0 +1,38 @@
+# Settings
+
+Navigate to **Settings** in the Ground Control app.
+
+Settings has three areas, picked from the list on the left:
+
+- **Voice Match:** Recognition, Trimming and Isolation. See [Voice Match](voice-match.md#settings).
+- **Vision Match:** coming soon.
+- **General:** the engine, sessions, conversation agents and kiosks.
+
+Changes are saved right away and take precedence over the app's options or the container's environment variables.
+
+## General
+
+| Setting | Default | What it does |
+| --- | --- | --- |
+| **Engine** | | |
+| Runs on | | NVIDIA GPU (CUDA) or CPU. CUDA is available in the Docker image on a machine with an NVIDIA GPU. |
+| Threads | half the CPUs, up to 4 | Threads per check. Set in the app's options or with `THREADS`. |
+| **Sessions** | | |
+| Keep sessions for | 7 days | Older sessions and their audio are deleted. See [Sessions](sessions.md#keeping-sessions). |
+| Keep audio | on | Needed to replay a session or add it to a person. |
+| **Conversation agents** | | |
+| Speaker in the agent's instructions | | A template to paste into an LLM agent's instructions. See [Conversation Agents](#conversation-agents). |
+| **Kiosks** | | |
+| Address | | The address to enter in Kiosk Satellite for a kiosk on another network. See [Kiosks on Another Network](kiosks.md#kiosks-on-another-network). |
+| **This browser** | | |
+| Signed in with Home Assistant | | **Sign out** asks Home Assistant to end this browser's sign-in. Shown when the web app runs on its own, not as a Home Assistant app. |
+
+## Conversation Agents
+
+An LLM conversation agent in Home Assistant can tell who is speaking, so "my calendar" or "remind me" means the person talking. One template works for every kiosk:
+
+1. In Kiosk Satellite, keep **Speaker sensor** on under **Settings > Voice Satellite > Ground Control Voice Match**.
+2. In Home Assistant, expose each kiosk's Speaker sensor to Assist under **Settings > Voice assistants > Expose**.
+3. In Ground Control, open **Settings > General**, choose **Copy the template** under **Conversation agents** and paste it at the end of the agent's instructions.
+
+The agent needs the Assist API. It reads the kiosk's Speaker sensor with GetLiveContext on each request, so it knows who is talking even when the conversation continues from an earlier command, and never reuses a name from earlier in it. An empty sensor means nobody was identified.

@@ -2,6 +2,11 @@
 
 All notable changes to Kiosk Satellite Ground Control are documented here.
 
+## Unreleased
+
+### Added
+- **Documentation.** New pages in `docs/`: getting started, installation, kiosks, people, Voice Match, backup and moving to another machine, sessions, settings, and logs and issues. The README's Install section has its own parts for the Home Assistant app, with a button that adds the repository to Home Assistant, and for a standalone Docker container. The app's Info and Documentation tabs link to the docs.
+
 ## v2026.11.1 - 2026-11-20
 
 The first release of Kiosk Satellite Ground Control, a companion service for Kiosk Satellite that runs the voice and vision work too heavy for a kiosk on a computer or server in your home.

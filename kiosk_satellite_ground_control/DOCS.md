@@ -47,3 +47,7 @@ Open **Logs** in the panel and select **Download**. The file holds what Ground C
 Kiosks sign in with the Home Assistant token they already have. Kiosks on the same network find the service on their own. For a kiosk on another network, enter this machine's address and port 10900 under **Settings > Ground Control** in Kiosk Satellite.
 
 Ground Control only accepts kiosks running Kiosk Satellite. A kiosk that connects for the first time waits until you approve it on the panel's Kiosks page. Its page there also shows which Voice Match features it has on.
+
+## More
+
+The [documentation](https://github.com/jxlarrea/kiosk-satellite-ground-control/blob/main/docs/getting-started.md) covers kiosks, people, Voice Match, sessions and every setting.
