@@ -160,6 +160,10 @@ The GPU needs an NVIDIA driver for CUDA 13 (580 or newer) and the [NVIDIA Contai
 - [Settings](docs/settings.md): every setting and the template for LLM conversation agents.
 - [Logs and issues](docs/logs.md): reading the log and reporting an issue.
 
+## Thank you for your support
+
+Thank you to everyone who supports my work through [Buy Me a Coffee](https://buymeacoffee.com/jxlarrea). I test everything on real hardware, which means buying devices to reproduce issues and check changes across different manufacturers and Android flavors. Your contributions help cover those purchases and make that testing possible.
+
 ## License and credits
 
 Free for personal, non-commercial use under [CC BY-NC-ND 4.0](LICENSE). Commercial use and redistribution of modified builds are not permitted.
