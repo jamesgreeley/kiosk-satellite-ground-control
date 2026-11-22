@@ -15,6 +15,9 @@ All notable changes to Kiosk Satellite Ground Control are documented here.
 - **README benchmarks measured again.** On the Raspberry Pi 4, Intel N100, i9-13900H, MacBook Pro M5, RTX 4000 and GB10, the same way as before. Trimming now takes 0.02 s or less everywhere but on an Intel N100 with Accurate, where it went from 0.70 s to 0.14 s. The GB10 is measured with `KEEP_GPU_MEMORY` on, where Isolation takes 0.11 s. Without it Isolation takes 0.16 s there since 2026.11.5, when it started handing its GPU memory back after each command.
 - **README Downloads badge counts every image.** It showed only the Docker image's downloads and left out the Home Assistant app images for amd64 and aarch64, more than half of the total. A workflow now adds up all three every 6 hours and the badge shows the sum. The badge links to the repository's list of packages.
 
+### Fixed
+- **Short messages showing as plain text under the footer (#14).** Messages such as "Saved", "Copied" or "not enough speech in the recording" after adding a session's voice to a person appeared as small plain text at the bottom left of the page, under the footer, where they were easy to miss. A stray character in the stylesheet made browsers drop their style. They float over the bottom of the window again and go away after a few seconds.
+
 ## v2026.11.7 - 2026-11-21
 
 ### Added
