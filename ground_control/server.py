@@ -25,6 +25,7 @@ from .audio import float_to_pcm16, pcm16_to_float, read_wav
 from .auth import TokenCheck, bearer
 from .clients import ClientCheck, challenge
 from .enroll import GuidedEnrollment
+from .install import describe as describe_install
 from .models import SPEAKER_MODELS
 from .login import HomeAssistantLogin, LoginError
 from .pictures import Pictures
@@ -653,9 +654,14 @@ async def _send_access(request: web.Request, device_id: str) -> None:
 
 
 async def _people_message(request: web.Request) -> dict[str, Any]:
-    vm = request.app[VM]
+    return await _people(request.app[VM])
+
+
+async def _people(vm: GroundControl) -> dict[str, Any]:
+    """Who the kiosks can answer and what Ground Control runs, for their analytics."""
     return {"type": "people", "people": await vm.run(vm.people.summary), "model": vm.model.key,
-            "version": __version__, "app_path": vm.app_path}
+            "version": __version__, "app_path": vm.app_path,
+            **describe_install(bool(vm.cfg.supervisor_token), vm.active.on_gpu)}
 
 
 def _from_kiosk(vm: GroundControl, device_id: str, data: str) -> None:
@@ -992,8 +998,7 @@ def build_app(vm: GroundControl, token_check: TokenCheck | None = None, mdns: bo
 
         def people_changed() -> None:
             async def push() -> None:
-                await vm.hub.broadcast({"type": "people", "people": await vm.run(vm.people.summary),
-                                        "app_path": vm.app_path})
+                await vm.hub.broadcast(await _people(vm))
             loop.call_soon_threadsafe(lambda: loop.create_task(push()))
 
         vm.people.on_change.append(people_changed)
