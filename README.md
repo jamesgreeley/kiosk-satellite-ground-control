@@ -92,10 +92,10 @@ The CPU image with Ground Control's default threads: 2 on the Pi and the N100, 4
 | Speaker model | Accurate | Accurate | Accurate |
 | Recognition | 0.02 s | 0.01 s | 0.01 s |
 | Trimming | 0.01 s | <0.01 s | <0.01 s |
-| Isolation | 0.23 s | 0.11 s | 0.16 s |
-| **All features** | **0.24 s** | **0.12 s** | **0.17 s** |
+| Isolation | 0.23 s | 0.11 s | 0.11 s |
+| **All features** | **0.24 s** | **0.12 s** | **0.12 s** |
 
-The CUDA image: CUDA 12 on the RTX 3050 and the RTX 4000, CUDA 13 on the GB10. The RTX 3050 wasn't measured: its times are the RTX 4000's scaled by their compute speed, for the desktop RTX 3050 with 8 GB. Isolation's time grows with the work it does, so a GPU with about half the compute takes about twice as long.
+The CUDA image: CUDA 12 on the RTX 3050 and the RTX 4000, CUDA 13 on the GB10. Isolation's time grows with the work it does, so a GPU with about half the compute takes about twice as long. The GB10 runs with `KEEP_GPU_MEMORY` on, which keeps Isolation's GPU memory between commands (see [NVIDIA GPU](docs/installation.md#nvidia-gpu)). Without it, Isolation takes 0.16 s there.
 
 ### How It Is Measured
 

@@ -38,7 +38,11 @@ MIN_SAMPLES = SR // 10
 
 
 class Isolator:
-    def __init__(self, path: Path, threads: int = 1, use_cuda: bool = False) -> None:
+    def __init__(self, path: Path, threads: int = 1, use_cuda: bool = False, keep_memory: bool = False) -> None:
+        """``keep_memory``: on a GPU, keep the memory a command used for the
+        next one (the ``KEEP_GPU_MEMORY`` setting). Taking it again for every
+        command costs about 50 ms on a GB10 and 10 ms on an RTX 4000. It holds
+        about 2 GB more."""
         so = session_options(threads)
         so.log_severity_level = 3
         # A thread of its own, not the speaker model's: voice checks go on
@@ -51,13 +55,21 @@ class Isolator:
             self._gpu.close()
             raise
         self.on_gpu = self.session.get_providers()[0] == "CUDAExecutionProvider"
-        # Each command's GPU memory goes back after it, for about 10 to 35 ms more.
-        self._run_options = run_options(self.on_gpu)
+        self.keeps_memory = self.on_gpu and keep_memory
+        # Without keep_memory, each command's GPU memory goes back after it.
+        self._run_options = run_options(self.on_gpu and not self.keeps_memory)
         meta = self.session.get_modelmeta().custom_metadata_map
         self.version = meta.get("version", "unknown")
         """From the model's metadata, with its copyright and license."""
         self._lock = threading.Lock()
         self.calls = 0
+        if self.keeps_memory:
+            # The longest input first. A command longer than any before it
+            # can't use the memory kept from the shorter ones, so without this
+            # the memory kept grows with every new longest command, to twice
+            # as much. After it, every command fits in what is already there.
+            dim = self.session.get_inputs()[1].shape[-1]
+            self._run(np.zeros(WINDOW, dtype=np.float32), np.zeros(dim, dtype=np.float32))
         malloc_trim()
 
     def _run(self, audio: np.ndarray, voiceprint: np.ndarray) -> np.ndarray:

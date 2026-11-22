@@ -211,3 +211,15 @@ def test_the_stream_stays_open_before_the_first_speech(household, speakers, voic
         # No audio at all before the turn starts: only keepalive events, every 0.5 s.
         assert all(e["type"] == "keepalive" and e["ms"] == 20 for _, e in before)
         assert max(b - a for a, b in zip([0.0] + waiting, waiting)) <= 0.6
+
+
+def test_keeping_gpu_memory_is_a_setting_and_does_nothing_on_a_cpu(monkeypatch, tmp_path, isolator):
+    from ground_control import config
+
+    monkeypatch.setenv("OPTIONS_FILE", str(tmp_path / "none.json"))
+    monkeypatch.delenv("KEEP_GPU_MEMORY", raising=False)
+    assert not config.load().keep_gpu_memory
+    monkeypatch.setenv("KEEP_GPU_MEMORY", "true")
+    assert config.load().keep_gpu_memory
+    on_cpu = Isolator(MODELS / ISOLATOR_FILE, threads=2, keep_memory=True)
+    assert not on_cpu.keeps_memory and not isolator.keeps_memory

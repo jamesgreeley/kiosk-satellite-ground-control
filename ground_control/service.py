@@ -154,7 +154,8 @@ class GroundControl:
                 try:
                     for file, sha, gpu in self._isolator_files():
                         candidate = Isolator(verified_path(self.cfg.models_dir, file, sha),
-                                             threads=self.cfg.threads, use_cuda=gpu)
+                                             threads=self.cfg.threads, use_cuda=gpu,
+                                             keep_memory=self.cfg.keep_gpu_memory)
                         if candidate.on_gpu or not gpu:
                             self._isolator = candidate
                             break
@@ -168,7 +169,8 @@ class GroundControl:
                 where = "the GPU" if self._isolator.on_gpu else "the CPU"
                 if not self._isolator.on_gpu:
                     _LOG.warning("Isolation runs on the CPU: each command waits about a second for it")
-                _LOG.info("Isolation model %s loaded on %s", self._isolator.version, where)
+                _LOG.info("Isolation model %s loaded on %s%s", self._isolator.version, where,
+                          ", keeping its GPU memory between commands" if self._isolator.keeps_memory else "")
             return self._isolator
 
     def _load(self, key: str) -> Embedder:

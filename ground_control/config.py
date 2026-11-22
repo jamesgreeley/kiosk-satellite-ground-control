@@ -5,27 +5,29 @@ the data is in the app's own folder, ``/config``, which Samba and the File
 editor show under ``addon_configs``. As a standalone container they come
 from environment variables:
 
-=================  ===========================================  ==================
-Variable           Meaning                                      Default
-=================  ===========================================  ==================
-``DATA_DIR``       people, voices and voiceprints               ``/data``, or ``/config`` as an app
-``MODELS_DIR``     the ONNX models                              ``/app/models``
-``MODEL``          ``accurate``, ``light`` or ``auto``          ``auto``
-``THREADS``        threads per inference                        half the CPUs, 1 to 4
-``CUDA``           run the speaker model on an NVIDIA GPU       ``false``
-``HA_URL``         Home Assistant: kiosk tokens and the web     ``http://homeassistant:8123``, or
-                   UI's login, so a browser must reach it too   ``auto`` (from the Supervisor) as an app
-``PORT``           the service port                             ``10900``
-``LEARN``          learn from confident commands                ``true``
-``AUTH``           ``homeassistant`` or ``none`` (testing)      ``homeassistant``
-``KEEP_DAYS``      days saved sessions are kept                 ``7``
-``KEEP_AUDIO``     keep each session's audio                    ``true``
-``MDNS``           advertise the service to kiosks              ``true``
-``MDNS_ADDRESS``   the address to advertise, for kiosks that    the main network's
-                   can't reach the main network's address
-``UPDATE_CHECK``   look for a new version on GitHub every 12 h  ``true``, off as an app, where
-                                                                Home Assistant offers updates
-=================  ===========================================  ==================
+===================  ===========================================  ==================
+Variable             Meaning                                      Default
+===================  ===========================================  ==================
+``DATA_DIR``         people, voices and voiceprints               ``/data``, or ``/config`` as an app
+``MODELS_DIR``       the ONNX models                              ``/app/models``
+``MODEL``            ``accurate``, ``light`` or ``auto``          ``auto``
+``THREADS``          threads per inference                        half the CPUs, 1 to 4
+``CUDA``             run the speaker model on an NVIDIA GPU       ``false``
+``KEEP_GPU_MEMORY``  Isolation keeps its GPU memory between       ``false``
+                     commands: faster, about 2 GB more held
+``HA_URL``           Home Assistant: kiosk tokens and the web     ``http://homeassistant:8123``, or
+                     UI's login, so a browser must reach it too   ``auto`` (from the Supervisor) as an app
+``PORT``             the service port                             ``10900``
+``LEARN``            learn from confident commands                ``true``
+``AUTH``             ``homeassistant`` or ``none`` (testing)      ``homeassistant``
+``KEEP_DAYS``        days saved sessions are kept                 ``7``
+``KEEP_AUDIO``       keep each session's audio                    ``true``
+``MDNS``             advertise the service to kiosks              ``true``
+``MDNS_ADDRESS``     the address to advertise, for kiosks that    the main network's
+                     can't reach the main network's address
+``UPDATE_CHECK``     look for a new version on GitHub every 12 h  ``true``, off as an app, where
+                                                                  Home Assistant offers updates
+===================  ===========================================  ==================
 """
 
 from __future__ import annotations
@@ -57,6 +59,7 @@ class Config:
     mdns_address: str | None = None
     supervisor_token: str | None = None
     update_check: bool = False
+    keep_gpu_memory: bool = False
 
 
 def _bool(value: object) -> bool:
@@ -106,4 +109,5 @@ def load() -> Config:
         supervisor_token=os.environ.get("SUPERVISOR_TOKEN"),
         # As an app, Home Assistant offers the updates itself.
         update_check=_bool(get("UPDATE_CHECK", "true")) and not os.environ.get("SUPERVISOR_TOKEN"),
+        keep_gpu_memory=_bool(get("KEEP_GPU_MEMORY", "false")),
     )

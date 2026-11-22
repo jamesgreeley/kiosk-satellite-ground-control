@@ -111,6 +111,8 @@ The CUDA image needs:
 
 Ground Control keeps about 0.7 GB on the GPU, or 0.9 GB with Isolation. A command needs up to 0.3 GB more while it runs, or 1.5 GB more with Isolation, and that memory is free again once it is done. Commands that end at the same moment are cleaned one after the other, so it is never more than that. On a GPU shared with an LLM or speech-to-text, leave that much free for Ground Control.
 
+If the GPU has memory to spare, set `KEEP_GPU_MEMORY` to `true`. Isolation then keeps its memory between commands, about 2 GB more, and each command is done sooner: about 0.05 s on a GB10 and 0.01 s on an RTX 4000.
+
 The image is built for amd64 and arm64, so it also runs on an NVIDIA GB10. The CUDA image runs on the GPU or not at all. If it can't use the GPU, it stops with a line in its log that starts with `CUDA can't start` and says why, such as no GPU visible to the container or a driver that is too old. Use the CPU image on a machine without a supported GPU.
 
 > **Info:** If Docker runs inside an LXC container on Proxmox, `nvidia-smi` fails with "Failed to initialize NVML: Unknown Error" until you set `nvidia-ctk config --set nvidia-container-cli.no-cgroups --in-place` and pass the devices to the container: `--device /dev/nvidia0 --device /dev/nvidiactl --device /dev/nvidia-uvm --device /dev/nvidia-uvm-tools`.
@@ -130,6 +132,7 @@ The image is built for amd64 and arm64, so it also runs on an NVIDIA GB10. The C
 | `MDNS_ADDRESS` | the main network's | The address kiosks get. See [Kiosks on Another Network](kiosks.md#kiosks-on-another-network). |
 | `DATA_DIR` | `/data` | People, voiceprints, kiosks and sessions. |
 | `UPDATE_CHECK` | `true` | Look for a new Ground Control version on GitHub every 12 hours and show it on Overview. |
+| `KEEP_GPU_MEMORY` | `false` | CUDA image only. Isolation keeps its GPU memory between commands instead of handing it back. See [NVIDIA GPU](#nvidia-gpu). |
 
 ## Updating
 

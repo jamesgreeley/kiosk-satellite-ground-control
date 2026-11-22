@@ -50,7 +50,7 @@ VAD_FILE = "silero_vad.onnx"
 VAD_SHA256 = "2623a2953f6ff3d2c1e61740c6cdb7168133479b267dfef114a4a3cc5bdd788f"
 
 ISOLATOR_FILE = "voice_isolator.onnx"
-ISOLATOR_SHA256 = "9f12c371bf023deb19df255986ee7898352a7f3f46f22315157880c13282dda2"
+ISOLATOR_SHA256 = "a3eac436f9bfebea4cc7538d504a9f941c6972420ea8d142ab0c3561eec6c077"
 ISOLATOR_CPU_FILE = "voice_isolator_cpu.onnx"
 ISOLATOR_CPU_SHA256 = "7503523bfdf497dcbf776e06df69b348b403f5aab30fa30fc5ec8e9658dcefa0"
 """The same model with its LSTMs in 8 bits: twice as fast on a CPU, 0.14 dB
