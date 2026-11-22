@@ -2,7 +2,7 @@
 
 All notable changes to Kiosk Satellite Ground Control are documented here.
 
-## Unreleased
+## v2026.11.10 - 2026-11-22
 
 ### Changed
 - **How Ground Control is installed, for Kiosk Satellite Analytics.** Ground Control tells each kiosk how it is installed: as the Home Assistant app, in standalone Docker or with Python from the source, on amd64 or aarch64, the CUDA version of the CUDA image and whether the speaker model runs on the GPU. Kiosk Satellite 2026.11.26 adds it to its daily report when **Usage** is on. The kiosks also hear the version and the speaker model again when the people change, not only when they connect.
