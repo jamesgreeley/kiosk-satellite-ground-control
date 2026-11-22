@@ -2,7 +2,7 @@
 
 All notable changes to Kiosk Satellite Ground Control are documented here.
 
-## Unreleased
+## v2026.11.9 - 2026-11-22
 
 ### Changed
 - **GPU memory table in the docs.** The README and the installation page have a GPU Memory section with how much GPU memory the CUDA image keeps and the most it uses during a command, with and without Isolation, measured on an RTX 4000 SFF Ada (CUDA 12) and a GB10 (CUDA 13).
