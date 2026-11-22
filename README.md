@@ -71,22 +71,41 @@ Coming soon.
 
 ## Performance Benchmarks
 
-How much latency each feature adds to a 5-second command:
+How much latency each feature adds to a 5-second command.
 
-| | Raspberry Pi 4, Light | Intel N100, Accurate | i9-13900H, Accurate | MacBook Pro M5, Accurate | NVIDIA RTX 4000 Ada, Accurate | NVIDIA GB10 GPU, Accurate |
-|---|---|---|---|---|---|---|
-| Recognition | 0.10 s | 0.29 s | 0.04 s | 0.02 s | 0.01 s | 0.01 s |
-| Trimming | 0.41 s | 0.70 s | 0.11 s | 0.05 s | 0.01 s | 0.01 s |
-| Isolation | Too slow on a Pi | 6.11 s | 1.18 s | 0.77 s | 0.09 s | 0.11 s |
-| **All features** | **0.41 s** (no Isolation) | **6.81 s** | **1.29 s** | **0.82 s** | **0.10 s** | **0.12 s** |
+### CPU
 
-A 5 s command between stretches of TV, sent through Ground Control's own code in real time the way a kiosk sends it, with Ground Control's default threads (2 on the Pi and the N100, 4 elsewhere). The MacBook Pro runs the CPU image in Docker Desktop.
+| | Raspberry Pi 4 | Intel N100 | Intel N100 | i9-13900H | MacBook Pro M5 |
+|---|---|---|---|---|---|
+| Speaker model | Light | Light | Accurate | Accurate | Accurate |
+| Recognition | 0.10 s | 0.02 s | 0.29 s | 0.04 s | 0.02 s |
+| Trimming | 0.41 s | 0.07 s | 0.70 s | 0.11 s | 0.05 s |
+| Isolation | Too slow | Needs Accurate | 6.11 s | 1.18 s | 0.77 s |
+| **All features** | **0.41 s** (no Isolation) | **0.07 s** (no Isolation) | **6.81 s** | **1.29 s** | **0.82 s** |
+
+The CPU image with Ground Control's default threads: 2 on the Pi and the N100, 4 on the others. The MacBook Pro runs it in Docker Desktop.
+
+### NVIDIA GPU (CUDA)
+
+| | RTX 3050 | RTX 4000 SFF Ada | GB10 |
+|---|---|---|---|
+| Speaker model | Accurate | Accurate | Accurate |
+| Recognition |  0.02 s | 0.01 s | 0.01 s |
+| Trimming |  0.03 s | 0.01 s | 0.01 s |
+| Isolation |  0.23 s | 0.11 s | 0.11 s |
+| **All features** | **0.26 s** | **0.12 s** | **0.12 s** |
+
+The CUDA image: CUDA 12 on the RTX 3050 and the RTX 4000, CUDA 13 on the GB10. The RTX 3050 wasn't measured: its times are the RTX 4000's scaled by their compute speed, for the desktop RTX 3050 with 8 GB. Isolation's time grows with the work it does, so a GPU with about half the compute takes about twice as long.
+
+### How It Is Measured
+
+A 5 s command between stretches of TV, sent through Ground Control's own code in real time the way a kiosk sends it.
 
 - **Recognition** is the time to check a voice. It runs while the user talks and holds nothing up. With a clear wake word, the speaker is known before the user says anything.
 - **Trimming** is the time to decide the command is over once the user stops. Whatever the TV does, the command ends there.
 - **Isolation** runs once the command ends. On a CPU it uses a version of the model made for the CPU (LSTMs in 8 bits), twice as fast and nearly identical.
 - **All features** is what reaches the end of each command: Trimming, then Isolation.
-- On an N100, Accurate keeps up with one kiosk at a time, but Isolation takes about 6 s. Ground Control starts it on the Light model, where Trimming takes 0.07 s.
+- On an N100, Ground Control starts on the Light model. Accurate keeps up with one kiosk at a time, but Isolation takes about 6 s with it.
 - On a Pi 4, use the Light model. Accurate uses more CPU than a Pi 4 has, so everything runs late, and Isolation (which needs Accurate) takes about 25 s there.
 
 The Accurate model makes the fewest mix-ups between people and with TV voices. The Light model uses about a third of the CPU, and a TV voice cutting in ends the command about a second later. Ground Control picks Accurate on an NVIDIA GPU, an Apple M-series chip or an x86 CPU with more than 4 cores, and Light on other ARM CPUs and smaller x86 CPUs like the N100. **Settings > Voice Match** changes it without needing to re-enroll users.

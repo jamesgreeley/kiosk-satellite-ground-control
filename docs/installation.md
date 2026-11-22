@@ -11,7 +11,7 @@ Every Voice Match feature runs on the machine Ground Control is on, not on the k
 | NVIDIA GPU | Accurate | About a tenth of a second per command |
 | x86 CPU with more than 4 cores | Accurate | About a second per command |
 | Mac with an Apple M-series chip | Accurate | Under a second per command on an M5 |
-| Intel N100 and other small x86 CPUs | Light | About 3 seconds per command with Accurate |
+| Intel N100 and other small x86 CPUs | Light | About 6 seconds per command with Accurate |
 | Raspberry Pi 4, Home Assistant Green and other ARM boards | Light | Too slow |
 
 See [Performance Benchmarks](../README.md#performance-benchmarks) for the measured times. Isolation is optional, so a small machine still runs Recognition and Trimming.

@@ -2,6 +2,11 @@
 
 All notable changes to Kiosk Satellite Ground Control are documented here.
 
+## Unreleased
+
+### Changed
+- **README benchmarks in two tables.** One for the CPU and one for NVIDIA GPUs, with the speaker model as a row. The CPU table has the Intel N100 with the Light model too, its default. The GPU table has an estimate for the RTX 3050, and the RTX 4000's times are measured again on the CUDA 12 image: 0.11 s for Isolation and 0.12 s for every feature together. The installation docs had Isolation on an N100 at about 3 seconds instead of the measured 6.
+
 ## v2026.11.6 - 2026-11-21
 
 ### Added
