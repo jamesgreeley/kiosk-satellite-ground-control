@@ -23,6 +23,8 @@ Variable           Meaning                                      Default
 ``MDNS``           advertise the service to kiosks              ``true``
 ``MDNS_ADDRESS``   the address to advertise, for kiosks that    the main network's
                    can't reach the main network's address
+``UPDATE_CHECK``   look for a new version on GitHub every 12 h  ``true``, off as an app, where
+                                                                Home Assistant offers updates
 =================  ===========================================  ==================
 """
 
@@ -54,6 +56,7 @@ class Config:
     mdns: bool = True
     mdns_address: str | None = None
     supervisor_token: str | None = None
+    update_check: bool = False
 
 
 def _bool(value: object) -> bool:
@@ -101,4 +104,6 @@ def load() -> Config:
         mdns=_bool(get("MDNS", "true")),
         mdns_address=mdns_address,
         supervisor_token=os.environ.get("SUPERVISOR_TOKEN"),
+        # As an app, Home Assistant offers the updates itself.
+        update_check=_bool(get("UPDATE_CHECK", "true")) and not os.environ.get("SUPERVISOR_TOKEN"),
     )

@@ -4,6 +4,10 @@ All notable changes to Kiosk Satellite Ground Control are documented here.
 
 ## Unreleased
 
+### Added
+- **Spectrograms of a session's audio.** On a session's page, each audio row has a spectrogram under it: the wake word, what the kiosk heard and what went to the assistant. They share one brightness scale, so the voices left out or removed show up dark, and in follow mode what went to the assistant lines up under what was heard. A line follows playback. The browser draws them from the session's audio, so nothing more is kept on the server.
+- **Update notice for Docker installs.** A standalone container checks GitHub for a new Ground Control version a minute after it starts and every 12 hours after that. When there is one, a card at the top of Overview shows it, with links to the changelog and the repository, and the log says so too. Set `UPDATE_CHECK=false` to turn it off. The Home Assistant app doesn't check, since Home Assistant offers its updates.
+
 ### Changed
 - **README benchmarks in two tables.** One for the CPU and one for NVIDIA GPUs, with the speaker model as a row. The CPU table has the Intel N100 with the Light model too, its default. The GPU table has an estimate for the RTX 3050, and the RTX 4000's times are measured again on the CUDA 12 image: 0.11 s for Isolation and 0.12 s for every feature together. The installation docs had Isolation on an N100 at about 3 seconds instead of the measured 6.
 

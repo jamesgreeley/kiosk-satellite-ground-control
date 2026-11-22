@@ -129,12 +129,15 @@ The image is built for amd64 and arm64, so it also runs on an NVIDIA GB10. The C
 | `MDNS` | `true` | Advertise the service so kiosks find it on their own. |
 | `MDNS_ADDRESS` | the main network's | The address kiosks get. See [Kiosks on Another Network](kiosks.md#kiosks-on-another-network). |
 | `DATA_DIR` | `/data` | People, voiceprints, kiosks and sessions. |
+| `UPDATE_CHECK` | `true` | Look for a new Ground Control version on GitHub every 12 hours and show it on Overview. |
 
 ## Updating
 
 **Home Assistant app:** update it from the app's page when Home Assistant offers a new version.
 
 **Docker:** run `docker compose pull && docker compose up -d`, or pull the image again and recreate the container. The data volume is kept.
+
+Ground Control checks GitHub for a new version a minute after it starts and every 12 hours after that. When there is one, a card at the top of **Overview** shows the version, with links to what's new and to the repository. The check only asks GitHub for the list of versions. Set `UPDATE_CHECK=false` to turn it off. The Home Assistant app doesn't check, since Home Assistant offers its updates.
 
 To move Ground Control to another machine, or between the app and Docker, see [Backup and Moving](backup.md).
 

@@ -1,5 +1,6 @@
 import { api, audioBytes, audioUrl } from "../api.js";
 import { shell } from "../app.js";
+import { analyze, draw } from "../spectrogram.js";
 import { answersLabel, ask, chip, clock, h, icon, modeLabel, outcome, outcomeChip, secs, section, toast } from "../ui.js";
 
 const BARS = 104;
@@ -117,17 +118,68 @@ function steps(record) {
 function player(path, title, desc, length) {
   const audio = new Audio();
   const btn = h("button", { class: "play", "aria-label": `Play ${title.toLowerCase()}` }, icon("play", 20));
+  // The spectrogram under the row, filled in once the audio is here, with
+  // a line that follows playback.
+  const canvas = h("canvas", { role: "img", "aria-label": `Spectrogram of ${title.toLowerCase()}` });
+  const head = h("div", { class: "ph" });
+  const spec = h("div", { class: "spec", hidden: true }, canvas, head);
+  const info = { path, canvas, spec, at: null };
+  const follow = () => {
+    if (audio.duration) head.style.left = `${(info.at ? info.at(audio.currentTime) : audio.currentTime / audio.duration) * 100}%`;
+    if (!audio.paused) requestAnimationFrame(follow);
+  };
   btn.addEventListener("click", async () => {
     if (!audio.src) {
-      try { audio.src = await audioUrl(path); } catch { toast("That audio wasn't kept."); return; }
+      try {
+        // The spectrogram's copy when it is here, else a download.
+        audio.src = info.buf ? URL.createObjectURL(new Blob([info.buf], { type: "audio/wav" })) : await audioUrl(path);
+      } catch { toast("That audio wasn't kept."); return; }
     }
-    if (audio.paused) { audio.play(); btn.replaceChildren(icon("pause", 20)); }
+    if (audio.paused) { audio.play(); btn.replaceChildren(icon("pause", 20)); spec.classList.add("on"); requestAnimationFrame(follow); }
     else { audio.pause(); btn.replaceChildren(icon("play", 20)); }
   });
-  audio.addEventListener("ended", () => btn.replaceChildren(icon("play", 20)));
+  audio.addEventListener("ended", () => { btn.replaceChildren(icon("play", 20)); spec.classList.remove("on"); });
   return [h("div", { class: "row" }, btn,
     h("div", { class: "grow" }, h("div", { class: "rt" }, title), h("div", { class: "rd" }, desc)),
-    h("span", { class: "t" }, length)), audio];
+    h("span", { class: "t" }, length), spec), audio, info];
+}
+
+/** What went to the assistant, put back where it was in what the kiosk heard,
+ * with silence for what was left out, when the pieces add up to it. */
+function placed(samples, released, total) {
+  const sum = released.reduce((n, [a, b]) => n + (b - a), 0);
+  if (!released.length || Math.abs(sum * 16000 - samples.length) > 800) return samples;
+  const out = new Int16Array(Math.round(total * 16000));
+  let from = 0;
+  for (const [a, b] of released) {
+    const n = Math.round((b - a) * 16000);
+    out.set(samples.subarray(from, from + n).subarray(0, Math.max(0, out.length - Math.round(a * 16000))), Math.round(a * 16000));
+    from += n;
+  }
+  return out;
+}
+
+/** Where ``t`` seconds into the sent audio was in what the kiosk heard. */
+function heardAt(t, released) {
+  for (const [a, b] of released) {
+    if (t <= b - a) return a + t;
+    t -= b - a;
+  }
+  return released.length ? released[released.length - 1][1] : 0;
+}
+
+/** Each row's spectrogram, all against the loudest sound the kiosk heard, so
+ * what was left out or removed shows up dark. */
+async function spectrograms(rows, raw) {
+  const levels = await Promise.all(rows.map((r) => (r.path.endsWith("/audio/raw") && raw ? raw : audioBytes(r.path))
+    .then((buf) => { r.buf = buf; return analyze(r.place ? r.place(pcm(buf)) : pcm(buf)); }).catch(() => null)));
+  const heard = levels[rows.findIndex((r) => r.path.endsWith("/audio/raw"))];
+  const top = heard ? heard.max : Math.max(...levels.filter(Boolean).map((l) => l.max));
+  rows.forEach((r, i) => {
+    if (!levels[i] || !Number.isFinite(top)) return;
+    draw(r.canvas, levels[i], top);
+    r.spec.hidden = false;
+  });
 }
 
 export async function render({ id }) {
@@ -144,8 +196,9 @@ export async function render({ id }) {
   const wave = h("div", { class: "wave", role: "img", "aria-label": "Waveform of the session" });
   let audios = [];
   const follow = record.mode === "follow";
-  if (record.has_audio) {
-    audioBytes(`api/sessions/${id}/audio/raw`).then((buf) => wave.replaceChildren(...(follow
+  const raw = record.has_audio ? audioBytes(`api/sessions/${id}/audio/raw`) : null;
+  if (raw) {
+    raw.then((buf) => wave.replaceChildren(...(follow
       ? followWave(pcm(buf), total, record.released || [], color)
       : waveform(pcm(buf), total, record.events || [], color)))).catch(() => {});
   }
@@ -172,9 +225,10 @@ export async function render({ id }) {
   };
 
   let audioSection = [h("div", { class: "empty" }, "Audio keeping was off for this session.")];
+  let specs = [];
   if (record.has_audio) {
-    const [rawRow, rawAudio] = player(`api/sessions/${id}/audio/raw`, "As heard", "As heard by the kiosk's microphone.", secs(total));
-    const [cleanRow, cleanAudio] = follow
+    const [rawRow, rawAudio, rawSpec] = player(`api/sessions/${id}/audio/raw`, "As heard", "As heard by the kiosk's microphone.", secs(total));
+    const [cleanRow, cleanAudio, cleanSpec] = follow
       ? player(`api/sessions/${id}/audio/clean`, "Sent to the assistant",
         stats.isolated_ms !== undefined ? "Only the user's speech: other voices left out between their words and removed under them."
           : "Only the user's speech, other voices left out.",
@@ -183,14 +237,26 @@ export async function render({ id }) {
         "Other voices replaced with silence.", secs(sent));
     audioSection = [rawRow, cleanRow];
     audios = [rawAudio, cleanAudio];
+    // In follow mode, the sent audio lines up with what was heard.
+    if (follow) {
+      cleanSpec.place = (samples) => {
+        const out = placed(samples, record.released || [], total);
+        // The line follows the sent audio on the same timeline.
+        if (out !== samples) cleanSpec.at = (t) => heardAt(t, record.released) / total;
+        return out;
+      };
+    }
+    specs = [rawSpec, cleanSpec];
   }
   if (record.wake_s) {
     // Kept apart from the rest: the kiosk heard it before the session began.
-    const [wakeRow, wakeAudio] = player(`api/sessions/${id}/audio/wake`, "Wake word",
+    const [wakeRow, wakeAudio, wakeSpec] = player(`api/sessions/${id}/audio/wake`, "Wake word",
       "The wake word as the kiosk heard it. Whoever says it is the user for this command, and it's the first sample of their voice.", secs(record.wake_s));
     audioSection = [wakeRow, ...(record.has_audio ? audioSection : [])];
     audios = [wakeAudio, ...audios];
+    specs = [wakeSpec, ...specs];
   }
+  spectrograms(specs, raw?.catch(() => null));
 
   return {
     nodes: [

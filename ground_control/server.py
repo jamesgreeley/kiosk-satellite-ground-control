@@ -31,6 +31,7 @@ from .pictures import Pictures
 from .suggestions import Suggestions
 from .service import GroundControl
 from .sessions import new_id
+from .updates import UpdateCheck
 
 _LOG = logging.getLogger(__name__)
 
@@ -40,6 +41,7 @@ OPEN = web.AppKey("open", bool)
 PICTURES = web.AppKey("pictures", Pictures)
 SUGGESTIONS = web.AppKey("suggestions", Suggestions)
 LOGIN = web.AppKey("login", HomeAssistantLogin)
+UPDATES = web.AppKey("updates", UpdateCheck)
 CLIENTS = web.AppKey("clients", ClientCheck)
 SOCKETS = ("/api/session", "/api/enroll", "/api/kiosk", "/api/events")
 MIN_PARTIAL_ENROLL_S = 10.0
@@ -275,7 +277,8 @@ async def status(request: web.Request) -> web.Response:
                               "on_gpu": vm.active.on_gpu, "threads": vm.cfg.threads,
                               "kiosks": sum(k.connected for k in vm.hub.kiosks.values()),
                               "isolation": vm.isolator() is not None,
-                              "isolation_on_gpu": bool(vm.isolator() and vm.isolator().on_gpu)})
+                              "isolation_on_gpu": bool(vm.isolator() and vm.isolator().on_gpu),
+                              "update": request.app[UPDATES].available() if UPDATES in request.app else None})
 
 MISSING_PEOPLE_FIX = "choose them again in Kiosk Satellite, under Voice Satellite > Ground Control Voice Match > People"
 
@@ -930,6 +933,8 @@ def build_app(vm: GroundControl, token_check: TokenCheck | None = None, mdns: bo
     app[PICTURES] = Pictures(vm.cfg.ha_url, vm.cfg.supervisor_token)
     app[SUGGESTIONS] = Suggestions(vm.cfg.ha_url, vm.cfg.supervisor_token)
     app[LOGIN] = HomeAssistantLogin(vm.cfg.ha_url)
+    if vm.cfg.update_check:
+        app[UPDATES] = UpdateCheck(__version__)
     r = app.router
 
     async def index(request: web.Request) -> web.FileResponse:
@@ -981,6 +986,8 @@ def build_app(vm: GroundControl, token_check: TokenCheck | None = None, mdns: bo
             loop.call_soon_threadsafe(lambda: loop.create_task(push()))
 
         vm.people.on_change.append(people_changed)
+        if UPDATES in app:
+            app[UPDATES].start()
         if vm.cfg.supervisor_token:
             await _find_app_path(vm, vm.cfg.supervisor_token)
         if mdns:
@@ -1001,6 +1008,8 @@ def build_app(vm: GroundControl, token_check: TokenCheck | None = None, mdns: bo
         await app[PICTURES].close()
         await app[SUGGESTIONS].close()
         await app[LOGIN].close()
+        if UPDATES in app:
+            await app[UPDATES].close()
         vm.close()
 
     async def revalidate(request: web.Request, response: web.StreamResponse) -> None:
