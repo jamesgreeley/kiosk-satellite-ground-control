@@ -2,7 +2,7 @@
 
 All notable changes to Kiosk Satellite Ground Control are documented here.
 
-## Unreleased
+## v2026.11.7 - 2026-11-21
 
 ### Added
 - **Spectrograms of a session's audio.** On a session's page, each audio row has a spectrogram under it: the wake word, what the kiosk heard and what went to the assistant. They share one brightness scale, so the voices left out or removed show up dark, and in follow mode what went to the assistant lines up under what was heard. A line follows playback. The browser draws them from the session's audio, so nothing more is kept on the server.
