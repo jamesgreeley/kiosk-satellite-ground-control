@@ -2,12 +2,14 @@
 
 All notable changes to Kiosk Satellite Ground Control are documented here.
 
-## Unreleased
+## v2026.11.5 - 2026-11-21
 
 ### Changed
+- **GPU memory in the docs.** The CUDA image needs 3 GB of free GPU memory, or 4 GB with Isolation, instead of a 4 GB GPU for everything. The installation page says how much Ground Control keeps on the GPU and how much more a command needs, for a GPU shared with other apps.
 - **README CUDA badge.** It shows CUDA 12 and 13, since the amd64 CUDA image runs on CUDA 12 and the arm64 one on CUDA 13.
 
 ### Fixed
+- **Isolation and the speaker model holding on to GPU memory (#11).** On a GPU, Isolation kept the memory its longest command needed, about 1 GB after a 3 s command and 3 GB after a 10 s one. The speaker model did the same for audio longer than 4 s, up to 1.6 GB more. A GPU shared with an LLM or speech-to-text had less room for them. Both now hand that memory back after each run. Ground Control keeps about 1.3 GB on the GPU, or 1.5 GB with Isolation, and a command takes 2 to 35 ms more.
 - **Underscores missing in entity ids on the People page (#10).** With some fonts and zoom levels, Chrome hid the underscores in a person's to-do list, calendar and person fields, so `todo.tristyn_s_shopping_list` looked like `todo.tristyn s shopping list`. The value was always saved with its underscores. Text fields now show them, at the same size as before.
 
 ## v2026.11.4 - 2026-11-21

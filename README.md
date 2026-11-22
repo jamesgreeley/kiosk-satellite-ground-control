@@ -91,7 +91,7 @@ A 5 s command between stretches of TV, sent through Ground Control's own code in
 
 The Accurate model makes the fewest mix-ups between people and with TV voices. The Light model uses about a third of the CPU, and a TV voice cutting in ends the command about a second later. Ground Control picks Accurate on an NVIDIA GPU or an x86 CPU with more than 4 cores, and Light on ARM and smaller x86 CPUs like the N100. **Settings > Voice Match** changes it without needing to re-enroll users.
 
-The CUDA image works with NVIDIA GPUs with 4 GB or more: on amd64 from the GTX 10 series (Pascal) to the RTX 50 series (Blackwell), and on arm64 the GB10 and other Blackwell boards.
+The CUDA image works with NVIDIA GPUs on amd64 from the GTX 10 series (Pascal) to the RTX 50 series (Blackwell), and on arm64 with the GB10 and other Blackwell boards. It needs 3 GB of free GPU memory, or 4 GB with Isolation.
 
 ## Install
 

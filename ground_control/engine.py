@@ -123,6 +123,17 @@ def open_session(path: Path, so: ort.SessionOptions, use_cuda: bool,
                           "use the CPU image (ghcr.io/jxlarrea/kiosk-satellite-ground-control:latest).")
 
 
+def run_options(on_gpu: bool) -> ort.RunOptions:
+    """Run options that hand a run's GPU memory back once it is done, for a
+    session whose input length varies. Without them the session keeps what its
+    longest input needed, up to gigabytes, for the rest of its life. It costs a
+    few milliseconds a run."""
+    options = ort.RunOptions()
+    if on_gpu:
+        options.add_run_config_entry("memory.enable_memory_arena_shrinkage", "gpu:0")
+    return options
+
+
 def session_options(threads: int) -> ort.SessionOptions:
     so = ort.SessionOptions()
     so.intra_op_num_threads = max(1, threads)
@@ -140,6 +151,8 @@ class Embedder:
         so.log_severity_level = 3  # the frontend's CPU fallback nodes are expected
         self.session = open_session(path, so, use_cuda, LEAN_CUDA)
         self.on_gpu = self.session.get_providers()[0] == "CUDAExecutionProvider"
+        # Longer audio, such as a whole turn, goes through the shared session.
+        self._shared_options = run_options(self.on_gpu)
         # On a GPU the most used lengths get sessions of their own, so none of
         # them ever changes length. The CPU has no such cost.
         self._own = {int(sec * 16000): open_session(path, so, True, LEAN_CUDA) for sec in OWN_SESSION_S} \
@@ -168,8 +181,12 @@ class Embedder:
             audio = audio[len(audio) - (len(audio) // step) * step:]
         x = np.ascontiguousarray(audio, dtype=np.float32)
         x = x[None, None, :] if self._rank == 3 else x[None, :]
-        session = self._own.get(x.shape[-1], self.session)
-        e = session.run(None, {self._input: x})[0][0].astype(np.float32)
+        own = self._own.get(x.shape[-1])
+        if own is not None:
+            e = own.run(None, {self._input: x})[0][0]
+        else:
+            e = self.session.run(None, {self._input: x}, self._shared_options)[0][0]
+        e = e.astype(np.float32)
         with self._lock:
             self.calls += 1
         n = float(np.linalg.norm(e))

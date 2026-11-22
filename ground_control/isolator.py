@@ -25,7 +25,7 @@ from pathlib import Path
 import numpy as np
 
 from . import SAMPLE_RATE
-from .engine import malloc_trim, open_session, session_options
+from .engine import LEAN_CUDA, malloc_trim, open_session, run_options, session_options
 
 _LOG = logging.getLogger(__name__)
 
@@ -41,8 +41,10 @@ class Isolator:
     def __init__(self, path: Path, threads: int = 1, use_cuda: bool = False) -> None:
         so = session_options(threads)
         so.log_severity_level = 3
-        self.session = open_session(path, so, use_cuda)
+        self.session = open_session(path, so, use_cuda, LEAN_CUDA)
         self.on_gpu = self.session.get_providers()[0] == "CUDAExecutionProvider"
+        # Each command's GPU memory goes back after it, for about 10 to 35 ms more.
+        self._run_options = run_options(self.on_gpu)
         meta = self.session.get_modelmeta().custom_metadata_map
         self.version = meta.get("version", "unknown")
         """From the model's metadata, with its copyright and license."""
@@ -55,7 +57,8 @@ class Isolator:
         padded = -(-n // QUANTUM) * QUANTUM
         x = np.zeros((1, padded), dtype=np.float32)
         x[0, :n] = audio
-        y = self.session.run(None, {"audio": x, "voiceprint": voiceprint[None].astype(np.float32)})[0][0]
+        y = self.session.run(None, {"audio": x, "voiceprint": voiceprint[None].astype(np.float32)},
+                             self._run_options)[0][0]
         return y[:n]
 
     def clean(self, audio: np.ndarray, voiceprint: np.ndarray) -> np.ndarray:
