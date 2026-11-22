@@ -7,6 +7,9 @@ All notable changes to Kiosk Satellite Ground Control are documented here.
 ### Changed
 - **GPU memory table in the docs.** The README and the installation page have a GPU Memory section with how much GPU memory the CUDA image keeps and the most it uses during a command, with and without Isolation, measured on an RTX 4000 SFF Ada (CUDA 12) and a GB10 (CUDA 13).
 
+### Fixed
+- **A kiosk turned away with nothing in the log (#15).** A kiosk with no Device name and no mDNS name in Kiosk Satellite sent no name to go by, and Ground Control closed its connection without a word in the log. In Kiosk Satellite it showed as Not reachable, over and over. Ground Control now logs why it turned the kiosk away, at most once a minute, and tells the kiosk. The same goes for a connection whose first message is missing or isn't what Ground Control expects. Kiosk Satellite 2026.11.26 goes by a name made from the device's ID when it has no name.
+
 ## v2026.11.8 - 2026-11-22
 
 ### Added

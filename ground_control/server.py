@@ -54,7 +54,15 @@ def _from_ingress(request: web.Request) -> bool:
     return request.remote == INGRESS_PROXY and "X-Ingress-Path" in request.headers
 
 
-_REFUSED: dict[tuple[str, str], float] = {}
+_REFUSED: dict[tuple[str, ...], float] = {}
+
+
+def _once_a_minute(*key: str) -> bool:
+    """Whether to log a refusal again, so a kiosk retrying doesn't flood the log."""
+    if time.monotonic() - _REFUSED.get(key, -60.0) < 60.0:
+        return False
+    _REFUSED[key] = time.monotonic()
+    return True
 
 
 async def _signed_in(request: web.Request, token: str | None = None) -> bool:
@@ -62,13 +70,9 @@ async def _signed_in(request: web.Request, token: str | None = None) -> bool:
         return True
     token = token or bearer(request.headers.get("Authorization"))
     ok = await request.app[AUTH].valid(token)
-    if not ok:
-        # Once a minute per address and path, so a kiosk retrying doesn't flood the log.
-        key = (request.remote or "?", request.path)
-        if time.monotonic() - _REFUSED.get(key, -60.0) >= 60.0:
-            _REFUSED[key] = time.monotonic()
-            _LOG.warning("sign-in refused for %s from %s: %s", request.path, key[0],
-                         "no token" if not token else "Home Assistant did not accept the token")
+    if not ok and _once_a_minute(request.remote or "?", request.path):
+        _LOG.warning("sign-in refused for %s from %s: %s", request.path, request.remote or "?",
+                     "no token" if not token else "Home Assistant did not accept the token")
     return ok
 
 
@@ -89,11 +93,18 @@ async def _open_socket(request: web.Request, first_type: str,
         await ws.send_json({"type": "challenge", "nonce": nonce})
     try:
         first = await ws.receive(timeout=5)
-        start = json.loads(first.data) if first.type == WSMsgType.TEXT else {}
-    except (asyncio.TimeoutError, ValueError):
+    except asyncio.TimeoutError:
+        first = None
+    if first is not None and first.type in (WSMsgType.CLOSE, WSMsgType.CLOSING, WSMsgType.CLOSED):
+        return ws, None  # the other side left before saying anything
+    try:
+        start = json.loads(first.data) if first is not None and first.type == WSMsgType.TEXT else {}
+    except ValueError:
         start = {}
     if not isinstance(start, dict) or start.get("type") != first_type:
-        await ws.close(code=4400, message=f"send {first_type} first".encode())
+        why = (f"no {first_type} within 5 seconds" if first is None
+               else f"the first message was not a {first_type}")
+        await _refuse(request, ws, f"no_{first_type}", why, close_code=4400)
         return ws, None
     if not await _signed_in(request, start.get("token")):
         await ws.send_json({"type": "error", "code": "unauthorized"})
@@ -102,14 +113,13 @@ async def _open_socket(request: web.Request, first_type: str,
     return ws, start
 
 
-async def _refuse(request: web.Request, ws: web.WebSocketResponse, code: str, why: str) -> None:
-    """Close a kiosk socket that isn't Kiosk Satellite, or a kiosk that isn't approved."""
-    key = (request.remote or "?", request.path, code)
-    if time.monotonic() - _REFUSED.get(key, -60.0) >= 60.0:
-        _REFUSED[key] = time.monotonic()
-        _LOG.warning("%s refused from %s: %s", request.path, key[0], why)
+async def _refuse(request: web.Request, ws: web.WebSocketResponse, code: str, why: str,
+                  close_code: int = 4403) -> None:
+    """Close a socket with ``code`` for the kiosk and ``why`` in the log, at most once a minute."""
+    if _once_a_minute(request.remote or "?", request.path, code):
+        _LOG.warning("%s refused from %s: %s", request.path, request.remote or "?", why)
     await ws.send_json({"type": "error", "code": code})
-    await ws.close(code=4403, message=code.encode())
+    await ws.close(code=close_code, message=code.encode())
 
 
 async def _kiosk_start(request: web.Request) -> tuple[web.WebSocketResponse, dict[str, Any] | None]:
@@ -601,7 +611,8 @@ async def kiosk_ws(request: web.Request) -> web.WebSocketResponse:
         return ws
     device_id = str(hello.get("device_id") or "")
     if not device_id:
-        await ws.close(code=4400, message=b"device_id required")
+        await _refuse(request, ws, "no_device_id", "the kiosk sent no name to go by. Give it a Device name "
+                      "or an mDNS name in Kiosk Satellite, under Device", close_code=4400)
         return ws
     if not request.app[CLIENTS].verify(nonce, device_id, hello.get("proof")):
         await _refuse(request, ws, "not_kiosk_satellite", f"{device_id} did not prove it is Kiosk Satellite")

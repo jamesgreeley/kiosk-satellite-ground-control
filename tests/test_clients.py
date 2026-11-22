@@ -27,10 +27,10 @@ async def client(aiohttp_client, cfg):
     return await aiohttp_client(build_app(GroundControl(cfg), TokenCheck(cfg.ha_url, ask=ask), clients=CLIENTS))
 
 
-async def closed_with(ws, code: str) -> None:
+async def closed_with(ws, code: str, close_code: int = 4403) -> None:
     assert (await receive(ws, "error"))["code"] == code
     msg = await ws.receive()
-    assert msg.type == WSMsgType.CLOSE and ws.close_code == 4403
+    assert msg.type == WSMsgType.CLOSE and ws.close_code == close_code
 
 
 async def test_a_client_without_kiosk_satellites_key_is_refused(client):
@@ -47,6 +47,23 @@ async def test_a_client_without_kiosk_satellites_key_is_refused(client):
         nonce = (await receive(ws, "challenge"))["nonce"]
         await ws.send_json({"type": "hello", "token": "good", "device_id": "k1", "proof": make(nonce)})
         await closed_with(ws, "not_kiosk_satellite")
+    assert client.app[VM].hub.kiosks == {}
+
+
+async def test_a_kiosk_hears_why_its_hello_was_turned_away(client, caplog):
+    # A kiosk with no Device name and no mDNS name has nothing to go by (#15).
+    ws = await client.ws_connect("/api/kiosk")
+    nonce = (await receive(ws, "challenge"))["nonce"]
+    await ws.send_json({"type": "hello", "token": "good", "device_id": "", "proof": proof(nonce, "")})
+    await closed_with(ws, "no_device_id", 4400)
+    # Something other than a hello first.
+    ws = await client.ws_connect("/api/kiosk")
+    await receive(ws, "challenge")
+    await ws.send_json({"type": "start", "token": "good", "device_id": "k1"})
+    await closed_with(ws, "no_hello", 4400)
+    logged = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
+    assert any("sent no name to go by" in m for m in logged)
+    assert any("the first message was not a hello" in m for m in logged)
     assert client.app[VM].hub.kiosks == {}
 
 
