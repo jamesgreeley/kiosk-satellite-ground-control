@@ -10,6 +10,7 @@ Every Voice Match feature runs on the machine Ground Control is on, not on the k
 | --- | --- | --- |
 | NVIDIA GPU | Accurate | About a tenth of a second per command |
 | x86 CPU with more than 4 cores | Accurate | About a second per command |
+| Mac with an Apple M-series chip | Accurate | Under a second per command on an M5 |
 | Intel N100 and other small x86 CPUs | Light | About 3 seconds per command with Accurate |
 | Raspberry Pi 4, Home Assistant Green and other ARM boards | Light | Too slow |
 
@@ -38,7 +39,7 @@ The app's **Configuration** tab:
 
 | Option | Default | What it does |
 | --- | --- | --- |
-| Speaker model | auto | `auto` picks Accurate on an x86 CPU with more than 4 cores and Light on ARM and smaller CPUs. `accurate` or `light` sets it. See [Speaker Models](voice-match.md#speaker-models). |
+| Speaker model | auto | `auto` picks Accurate on an x86 CPU with more than 4 cores or an Apple M-series chip, and Light on other ARM CPUs and smaller CPUs. `accurate` or `light` sets it. See [Speaker Models](voice-match.md#speaker-models). |
 | Threads | 0 | Threads per check. `0` uses half the CPUs, up to 4. |
 | Learn from commands | on | Confident commands fold into each person's voiceprint, so it follows colds and room changes. |
 | Days to keep sessions | 7 | How long saved sessions stay on the Sessions page, 1 to 90 days. |
@@ -80,6 +81,26 @@ docker run -d --name ground-control --network host --gpus all \
 
 `HA_URL` is used two ways: kiosk tokens are checked there, and your browser goes there to log in to the web app. Use an address your browser can open too, not one that only works inside Docker.
 
+### Mac with Apple Silicon
+
+Ground Control runs on a Mac with an Apple M-series chip in [Docker Desktop](https://www.docker.com/products/docker-desktop/) or [OrbStack](https://orbstack.dev), with the CPU image. Docker on a Mac can't use the Mac's GPU, so everything runs on the CPU, and an M-series chip is fast enough for every feature. On a MacBook Pro M5, all features together add about 0.8 s to a 5 s command.
+
+1. Install Docker Desktop or OrbStack.
+2. Start Ground Control with its port published:
+
+    ```bash
+    docker run -d --name ground-control --restart unless-stopped -p 10900:10900 \
+      -e HA_URL=http://homeassistant.local:8123 \
+      -v ground-control:/data ghcr.io/jxlarrea/kiosk-satellite-ground-control
+    ```
+
+3. Open `http://localhost:10900` and choose **Log in with Home Assistant**.
+4. In each kiosk, enter the Mac's address, such as `192.168.1.20:10900`, under **Address** in Kiosk Satellite's Ground Control settings.
+
+Kiosks can't find Ground Control on a Mac on their own. Docker runs it in a small Linux VM, so its mDNS announcement doesn't reach your network, and Docker Desktop's host network option doesn't change that. Give the Mac a fixed address in your router so the kiosks keep finding it.
+
+Ground Control picks the Accurate speaker model on an Apple chip by itself. Keep the Mac from sleeping, under **System Settings > Energy** on a Mac mini or **Battery > Options** on a MacBook. While the Mac sleeps, kiosks go on with their own microphone and without Voice Match.
+
 ### NVIDIA GPU
 
 The CUDA image needs:
@@ -99,7 +120,7 @@ The image is built for amd64 and arm64, so it also runs on an NVIDIA GB10. The C
 | Variable | Default | What it does |
 | --- | --- | --- |
 | `HA_URL` | `http://homeassistant:8123` | Your Home Assistant. Kiosk tokens are checked there and the web app logs in there. |
-| `MODEL` | `auto` | `accurate`, `light` or `auto`. `auto` picks Accurate on an NVIDIA GPU or an x86 CPU with more than 4 cores, and Light otherwise. |
+| `MODEL` | `auto` | `accurate`, `light` or `auto`. `auto` picks Accurate on an NVIDIA GPU, an Apple M-series chip or an x86 CPU with more than 4 cores, and Light otherwise. |
 | `THREADS` | half the CPUs, 1 to 4 | Threads per check. |
 | `LEARN` | `true` | Fold confident commands into each person's voiceprint. |
 | `KEEP_DAYS` | `7` | Days saved sessions are kept. |

@@ -59,11 +59,23 @@ ISOLATOR_MODEL = "accurate"
 """The Voice Isolator is conditioned on this speaker model's voiceprints."""
 
 
-def default_model_key(machine: str, cpus: int, cuda: bool = False) -> str:
-    """Accurate on an NVIDIA GPU or an x86 CPU with more than 4 cores. Light on
-    ARM and on a small x86 CPU such as an Intel N100, where Accurate takes 60%
-    of the CPU for one kiosk and runs late with two talking at once."""
-    if cuda:
+def apple_silicon(cpuinfo: Path = Path("/proc/cpuinfo")) -> bool:
+    """An Apple M-series chip, also from inside Docker's VM on a Mac: Linux
+    shows Apple's CPU implementer code, 0x61."""
+    try:
+        text = cpuinfo.read_text(errors="replace")
+    except OSError:
+        return False
+    return any(line.split(":", 1)[0].strip() == "CPU implementer" and line.split(":", 1)[1].strip() == "0x61"
+               for line in text.splitlines() if ":" in line)
+
+
+def default_model_key(machine: str, cpus: int, cuda: bool = False, apple: bool = False) -> str:
+    """Accurate on an NVIDIA GPU, an Apple M-series chip or an x86 CPU with
+    more than 4 cores. Light on other ARM CPUs and on a small x86 CPU such as
+    an Intel N100, where Accurate takes 60% of the CPU for one kiosk and runs
+    late with two talking at once. An M5 runs Accurate faster than an i9-13900H."""
+    if cuda or apple:
         return "accurate"
     if machine.lower() in ("aarch64", "arm64", "armv7l", "armv8l"):
         return "light"

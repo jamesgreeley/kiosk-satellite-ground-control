@@ -35,7 +35,7 @@ import platform
 from dataclasses import dataclass
 from pathlib import Path
 
-from .models import SPEAKER_MODELS, default_model_key
+from .models import SPEAKER_MODELS, apple_silicon, default_model_key
 
 
 @dataclass
@@ -73,7 +73,7 @@ def load() -> Config:
     cuda = _bool(get("CUDA", "false"))
     model = str(get("MODEL", "auto")).lower()
     if model == "auto":
-        model = default_model_key(platform.machine(), cpus, cuda)
+        model = default_model_key(platform.machine(), cpus, cuda, apple_silicon())
     if model not in SPEAKER_MODELS:
         raise ValueError(f"MODEL must be one of {', '.join(SPEAKER_MODELS)} or auto")
     threads = int(get("THREADS", 0) or max(1, min(4, cpus // 2)))

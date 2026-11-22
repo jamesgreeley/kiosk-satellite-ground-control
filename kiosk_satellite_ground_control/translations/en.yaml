@@ -2,7 +2,7 @@ configuration:
   model:
     name: Speaker model
     description: >-
-      auto picks Accurate on an x86 CPU with more than 4 cores and Light on ARM and smaller CPUs.
+      auto picks Accurate on an x86 CPU with more than 4 cores or an Apple M-series chip, and Light on other ARM CPUs and smaller CPUs.
       Changing it rebuilds every voiceprint from the enrollment audio, so nobody records again.
   threads:
     name: Threads

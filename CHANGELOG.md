@@ -2,6 +2,11 @@
 
 All notable changes to Kiosk Satellite Ground Control are documented here.
 
+## v2026.11.6 - 2026-11-21
+
+### Added
+- **Macs with Apple silicon.** Ground Control runs on a Mac with an M-series chip in Docker Desktop or OrbStack, with the CPU image. On a MacBook Pro M5, every feature together adds about 0.8 s to a 5 s command, faster than an i9-13900H. Ground Control picks the Accurate speaker model on an Apple chip by itself, and Light stays the default on other ARM CPUs. The installation docs have a Mac section and the README's benchmarks have an M5 column. Docker on a Mac can't use the GPU and its mDNS doesn't reach the network, so kiosks need the Mac's address entered.
+
 ## v2026.11.5 - 2026-11-21
 
 ### Changed

@@ -19,7 +19,7 @@ services:
       # goes there to log in, so use an address the browser can open too.
       HA_URL: http://homeassistant.local:8123
       # Optional, with their defaults:
-      # MODEL: auto          # accurate, light or auto (Accurate on x86, Light on ARM)
+      # MODEL: auto          # accurate, light or auto (Accurate on x86 and Apple chips, Light on other ARM)
       # THREADS: 0           # threads per check, 0 is half the CPUs up to 4
       # LEARN: "true"        # fold confident commands into each voiceprint
       # KEEP_DAYS: 7         # days saved sessions are kept

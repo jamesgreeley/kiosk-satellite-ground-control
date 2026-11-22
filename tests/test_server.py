@@ -160,3 +160,17 @@ def test_the_default_speaker_model_fits_the_machine():
     assert default_model_key("aarch64", 4) == "light"  # a Raspberry Pi
     assert default_model_key("aarch64", 20, cuda=True) == "accurate"  # an NVIDIA GB10
     assert default_model_key("x86_64", 4, cuda=True) == "accurate"
+    assert default_model_key("aarch64", 8, apple=True) == "accurate"  # a Mac, in Docker's VM
+
+
+def test_apple_silicon_is_found_from_the_cpu_implementer(tmp_path):
+    from ground_control.models import apple_silicon
+
+    cpu = tmp_path / "cpuinfo"
+    cpu.write_text("processor\t: 0\nBogoMIPS\t: 48.00\nCPU implementer\t: 0x61\nCPU architecture: 8\n")
+    assert apple_silicon(cpu)
+    cpu.write_text("processor\t: 0\nCPU implementer\t: 0x41\nCPU part\t: 0xd08\n")  # a Raspberry Pi 4
+    assert not apple_silicon(cpu)
+    cpu.write_text("processor\t: 0\nvendor_id\t: GenuineIntel\n")
+    assert not apple_silicon(cpu)
+    assert not apple_silicon(tmp_path / "missing")

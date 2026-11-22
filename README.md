@@ -73,14 +73,14 @@ Coming soon.
 
 How much latency each feature adds to a 5-second command:
 
-| | Raspberry Pi 4, Light | Intel N100, Accurate | i9-13900H, Accurate | NVIDIA RTX 4000 Ada, Accurate | NVIDIA GB10 GPU, Accurate |
-|---|---|---|---|---|---|
-| Recognition | 0.10 s | 0.29 s | 0.04 s | 0.01 s | 0.01 s |
-| Trimming | 0.41 s | 0.70 s | 0.11 s | 0.01 s | 0.01 s |
-| Isolation | Too slow on a Pi | 6.11 s | 1.18 s | 0.09 s | 0.11 s |
-| **All features** | **0.41 s** (no Isolation) | **6.81 s** | **1.29 s** | **0.10 s** | **0.12 s** |
+| | Raspberry Pi 4, Light | Intel N100, Accurate | i9-13900H, Accurate | MacBook Pro M5, Accurate | NVIDIA RTX 4000 Ada, Accurate | NVIDIA GB10 GPU, Accurate |
+|---|---|---|---|---|---|---|
+| Recognition | 0.10 s | 0.29 s | 0.04 s | 0.02 s | 0.01 s | 0.01 s |
+| Trimming | 0.41 s | 0.70 s | 0.11 s | 0.05 s | 0.01 s | 0.01 s |
+| Isolation | Too slow on a Pi | 6.11 s | 1.18 s | 0.77 s | 0.09 s | 0.11 s |
+| **All features** | **0.41 s** (no Isolation) | **6.81 s** | **1.29 s** | **0.82 s** | **0.10 s** | **0.12 s** |
 
-A 5 s command between stretches of TV, sent through Ground Control's own code in real time the way a kiosk sends it, with Ground Control's default threads (2 on the Pi and the N100, 4 elsewhere).
+A 5 s command between stretches of TV, sent through Ground Control's own code in real time the way a kiosk sends it, with Ground Control's default threads (2 on the Pi and the N100, 4 elsewhere). The MacBook Pro runs the CPU image in Docker Desktop.
 
 - **Recognition** is the time to check a voice. It runs while the user talks and holds nothing up. With a clear wake word, the speaker is known before the user says anything.
 - **Trimming** is the time to decide the command is over once the user stops. Whatever the TV does, the command ends there.
@@ -89,7 +89,7 @@ A 5 s command between stretches of TV, sent through Ground Control's own code in
 - On an N100, Accurate keeps up with one kiosk at a time, but Isolation takes about 6 s. Ground Control starts it on the Light model, where Trimming takes 0.07 s.
 - On a Pi 4, use the Light model. Accurate uses more CPU than a Pi 4 has, so everything runs late, and Isolation (which needs Accurate) takes about 25 s there.
 
-The Accurate model makes the fewest mix-ups between people and with TV voices. The Light model uses about a third of the CPU, and a TV voice cutting in ends the command about a second later. Ground Control picks Accurate on an NVIDIA GPU or an x86 CPU with more than 4 cores, and Light on ARM and smaller x86 CPUs like the N100. **Settings > Voice Match** changes it without needing to re-enroll users.
+The Accurate model makes the fewest mix-ups between people and with TV voices. The Light model uses about a third of the CPU, and a TV voice cutting in ends the command about a second later. Ground Control picks Accurate on an NVIDIA GPU, an Apple M-series chip or an x86 CPU with more than 4 cores, and Light on other ARM CPUs and smaller x86 CPUs like the N100. **Settings > Voice Match** changes it without needing to re-enroll users.
 
 The CUDA image works with NVIDIA GPUs on amd64 from the GTX 10 series (Pascal) to the RTX 50 series (Blackwell), and on arm64 with the GB10 and other Blackwell boards. It needs 3 GB of free GPU memory, or 4 GB with Isolation.
 
@@ -132,6 +132,8 @@ docker run -d --name ground-control --gpus all -p 10900:10900 \
 ```
 
 With `-p 10900:10900` instead of the host network, kiosks don't find the service on their own: enter this machine's address in each kiosk.
+
+**Mac with Apple silicon:** run the CPU command above in Docker Desktop or OrbStack. Docker on a Mac can't use the Mac's GPU, but an M-series chip runs every feature on its CPU, Isolation included. Kiosks can't find Ground Control on a Mac on their own, so enter the Mac's address in each kiosk. See [Mac with Apple Silicon](docs/installation.md#mac-with-apple-silicon).
 
 The GPU needs to be from the GTX 10 series or newer, with an NVIDIA driver from the 570 series or newer (580 or newer on arm64) and the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) on the host. If Docker runs inside an LXC container (Proxmox), set `nvidia-ctk config --set nvidia-container-cli.no-cgroups --in-place` and pass the devices too, or `nvidia-smi` fails with "Failed to initialize NVML: Unknown Error":
 

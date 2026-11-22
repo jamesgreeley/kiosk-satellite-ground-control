@@ -23,7 +23,7 @@ With **Isolation** on in the panel, under **Settings > Voice Match**, the comman
 ## Options
 
 - **model:** the speaker model.
-  - `auto` picks Accurate on an NVIDIA GPU or an x86 CPU with more than 4 cores, and Light on ARM and smaller x86 CPUs.
+  - `auto` picks Accurate on an NVIDIA GPU, an Apple M-series chip or an x86 CPU with more than 4 cores, and Light on other ARM CPUs and smaller x86 CPUs.
   - `accurate` makes the fewest mix-ups between people and with TV voices. Use it on a desktop-class CPU or a GPU.
   - `light` uses a fraction of the CPU, for a Raspberry Pi, Home Assistant Green or an Intel N100. A TV voice cutting in ends the command about a second later.
 

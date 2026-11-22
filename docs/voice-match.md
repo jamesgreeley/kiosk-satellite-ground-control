@@ -74,7 +74,7 @@ While a turn is held for Isolation, a little silence keeps the audio stream to H
 | Accurate (ReDimNet2 B3, multilingual) | An NVIDIA GPU or an x86 CPU with more than 4 cores | The fewest mix-ups between people and with TV voices. Needed for Isolation. |
 | Light (ReDimNet2 B1) | A Raspberry Pi, Home Assistant Green, an Intel N100 or other small machines | About a third of the CPU. A TV voice cutting in ends the command about a second later. |
 
-Ground Control picks Accurate on an NVIDIA GPU or an x86 CPU with more than 4 cores, and Light on ARM and smaller x86 CPUs. Changing the model rebuilds everyone's voiceprint from the kept enrollment audio in the background, so nobody records again. Kiosks keep using the current model until the rebuild is done.
+Ground Control picks Accurate on an NVIDIA GPU, an Apple M-series chip or an x86 CPU with more than 4 cores, and Light on other ARM CPUs and smaller x86 CPUs. Changing the model rebuilds everyone's voiceprint from the kept enrollment audio in the background, so nobody records again. Kiosks keep using the current model until the rebuild is done.
 
 ## Settings
 
