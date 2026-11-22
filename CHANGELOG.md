@@ -2,7 +2,7 @@
 
 All notable changes to Kiosk Satellite Ground Control are documented here.
 
-## v2026.11.8 - 2026-11-22
+## Unreleased
 
 ### Added
 - **`KEEP_GPU_MEMORY` setting for the CUDA image.** With it on, Isolation keeps its GPU memory between commands instead of handing it back after each one, about 2 GB more. Taking that memory again for every command costs about 0.05 s on a GB10 and 0.01 s on an RTX 4000. On a GB10 the benchmark's Isolation time goes from 0.16 s to 0.11 s. It is off by default, for GPUs shared with an LLM or speech-to-text.
