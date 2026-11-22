@@ -431,3 +431,43 @@ def test_a_later_turn_needs_a_clearer_voice_than_staying_in_one(household, speak
     assert label(other + 0.01, in_turn=False, turns=0) == "user"  # the first turn
     assert label(other + 0.01, in_turn=False, turns=1) == "other"  # a later one
     assert label(start + 0.01, in_turn=False, turns=1) == "user"
+
+
+class Counted:
+    """The speaker model, with the length of everything it was asked to embed."""
+
+    def __init__(self, embedder) -> None:
+        self._embedder = embedder
+        self.lengths: list[int] = []
+
+    def embed(self, audio: np.ndarray) -> np.ndarray:
+        self.lengths.append(len(audio))
+        return self._embedder.embed(audio)
+
+
+def test_a_user_known_from_the_wake_word_is_not_embedded_again_when_the_turn_ends(
+        household, speakers, voice, vad, embedder):
+    """The whole command was embedded at the end of the first turn and the
+    result thrown away, which held the end of the turn back."""
+    people, ana, _ = household
+    user = held_out(speakers[0])
+    s = Script().add("user", user[2 * SR:7 * SR]).add("quiet", silence(1.5))
+    counted = Counted(embedder)
+    events, f = run(people, counted, vad, s, anchor=anchor_of(user))
+    assert of(events, "speaker")[0]["id"] == ana.id and of(events, "speaker")[0]["by"] == "wake_word"
+    assert len(of(events, "turn_end")) == 1
+    # The wake word, then only the 1 s voice checks.
+    assert all(n == SR for n in counted.lengths[1:])
+
+
+def test_a_guest_is_still_told_apart_from_the_whole_command(household, speakers, voice, vad, embedder):
+    """Someone the wake word didn't recognize is still compared with everyone
+    enrolled once their first command is in."""
+    people, _, _ = household
+    guest = voice[speakers[2]]["test"]
+    s = Script().add("user", guest[SR:int(2.6 * SR)]).add("quiet", silence(1.5))
+    counted = Counted(embedder)
+    events, f = run(people, counted, vad, s, anchor=anchor_of(guest[5 * SR:]))
+    assert of(events, "speaker")[-1]["id"] is None
+    assert any(t["kind"] == "identify" for t in f.timeline)
+    assert any(n > SR for n in counted.lengths[1:])

@@ -13,6 +13,7 @@ import io
 import logging
 import platform
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import numpy as np
@@ -31,9 +32,15 @@ and 180 ms with CUDA 12, so one shared session switching between lengths
 would add that to the checks and to the end of each command. Longer windows,
 such as enrollment audio, share one session."""
 
+KEEPS_MEMORY_S = 1.0
+"""The one window length whose session keeps its GPU memory between runs: the
+voice checks, which run up to five times a second while someone talks. Every
+other length hands its memory back after each run, for about 1 ms more. With
+that, a speaker model takes about 0.6 GB of GPU memory, a quarter of what its
+sessions grow to when each keeps the memory of its busiest moment."""
+
 LEAN_CUDA = {"arena_extend_strategy": "kSameAsRequested", "cudnn_conv_use_max_workspace": "0"}
-"""Keeps each speaker model session near 100 MB of GPU memory, at the same speed.
-With its own sessions, a speaker model takes about 1.3 GB of GPU memory."""
+"""Keeps a GPU session from taking more memory than its runs ask for, at the same speed."""
 
 
 def malloc_trim() -> None:
@@ -134,11 +141,42 @@ def run_options(on_gpu: bool) -> ort.RunOptions:
     return options
 
 
+class GpuThread:
+    """The one thread every run of a GPU model goes through, sessions being
+    opened included.
+
+    ONNX Runtime keeps cuDNN and cuBLAS handles on the GPU for each thread
+    that uses a session, and a session run by two threads at once takes the
+    memory of both runs and keeps it. With the service's worker threads all
+    using the speaker model's sessions, that grew to twice the memory or more.
+    One run at a time costs nothing: the GPU does them one after the other
+    anyway.
+
+    Without a GPU (``on`` False) calls run on the caller's thread.
+    """
+
+    def __init__(self, on: bool, name: str) -> None:
+        self._pool = ThreadPoolExecutor(1, thread_name_prefix=name) if on else None
+
+    def __call__(self, fn, *args):
+        return self._pool.submit(fn, *args).result() if self._pool is not None else fn(*args)
+
+    def close(self) -> None:
+        if self._pool is not None:
+            self._pool.shutdown(wait=False)
+
+
 def session_options(threads: int) -> ort.SessionOptions:
     so = ort.SessionOptions()
     so.intra_op_num_threads = max(1, threads)
     so.inter_op_num_threads = 1
     so.enable_cpu_mem_arena = False
+    # ONNX Runtime's worker threads spin for work after a run, for longer
+    # than the 0.2 s between two voice checks. While someone talked, that
+    # took about three cores with four threads, ten times what the checks
+    # themselves take. With this they stop when a run ends and spin again
+    # during the next one, so a run is as fast as before.
+    so.add_session_config_entry("session.force_spinning_stop", "1")
     so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
     return so
 
@@ -149,14 +187,20 @@ class Embedder:
     def __init__(self, path: Path, threads: int = 1, use_cuda: bool = False) -> None:
         so = session_options(threads)
         so.log_severity_level = 3  # the frontend's CPU fallback nodes are expected
-        self.session = open_session(path, so, use_cuda, LEAN_CUDA)
-        self.on_gpu = self.session.get_providers()[0] == "CUDAExecutionProvider"
-        # Longer audio, such as a whole turn, goes through the shared session.
-        self._shared_options = run_options(self.on_gpu)
-        # On a GPU the most used lengths get sessions of their own, so none of
-        # them ever changes length. The CPU has no such cost.
-        self._own = {int(sec * 16000): open_session(path, so, True, LEAN_CUDA) for sec in OWN_SESSION_S} \
-            if self.on_gpu else {}
+        self._gpu = GpuThread(use_cuda, "gpu-speaker")
+        try:
+            self.session = self._gpu(open_session, path, so, use_cuda, LEAN_CUDA)
+            self.on_gpu = self.session.get_providers()[0] == "CUDAExecutionProvider"
+            # On a GPU the most used lengths get sessions of their own, so none
+            # of them ever changes length. The CPU has no such cost. Longer
+            # audio, such as a whole turn, goes through the shared session.
+            self._own = {int(sec * 16000): self._gpu(open_session, path, so, True, LEAN_CUDA)
+                         for sec in OWN_SESSION_S} if self.on_gpu else {}
+        except BaseException:
+            self._gpu.close()
+            raise
+        self._keeps_memory = int(KEEPS_MEMORY_S * 16000)
+        self._hand_back = run_options(self.on_gpu)
         inp = self.session.get_inputs()[0]
         self._input = inp.name
         self._rank = len(inp.shape)
@@ -181,11 +225,12 @@ class Embedder:
             audio = audio[len(audio) - (len(audio) // step) * step:]
         x = np.ascontiguousarray(audio, dtype=np.float32)
         x = x[None, None, :] if self._rank == 3 else x[None, :]
-        own = self._own.get(x.shape[-1])
-        if own is not None:
-            e = own.run(None, {self._input: x})[0][0]
+        n = x.shape[-1]
+        session = self._own.get(n, self.session)
+        if n == self._keeps_memory and n in self._own:
+            e = self._gpu(session.run, None, {self._input: x})[0][0]
         else:
-            e = self.session.run(None, {self._input: x}, self._shared_options)[0][0]
+            e = self._gpu(session.run, None, {self._input: x}, self._hand_back)[0][0]
         e = e.astype(np.float32)
         with self._lock:
             self.calls += 1

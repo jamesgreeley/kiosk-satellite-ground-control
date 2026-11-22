@@ -59,7 +59,7 @@ https://github.com/user-attachments/assets/985faf93-9b86-48ce-bbda-41d91d0a1b49
 
 Trimming leaves other voices out between the user's words. Isolation also removes them where they talk over the user, using the user's voiceprint. Turn it on under **Settings > Voice Match > Isolation**. It needs the Accurate speaker model. Each kiosk can turn it off with **Enable Isolation** in Kiosk Satellite.
 
-Isolation works on a whole turn at once, so each command waits for it once the user stops talking: about a tenth of a second on an NVIDIA GPU (see [What to run it on](#what-to-run-it-on)).
+Isolation works on a whole turn at once, so each command waits for it once the user stops talking: about a tenth of a second on an NVIDIA GPU (see [Performance Benchmarks](#performance-benchmarks)).
 
 <video src="assets/videos/voice-match-isolation.mp4" controls width="100%"></video>
 
@@ -78,10 +78,10 @@ How much latency each feature adds to a 5-second command.
 | | Raspberry Pi 4 | Intel N100 | Intel N100 | i9-13900H | MacBook Pro M5 |
 |---|---|---|---|---|---|
 | Speaker model | Light | Light | Accurate | Accurate | Accurate |
-| Recognition | 0.10 s | 0.02 s | 0.29 s | 0.04 s | 0.02 s |
-| Trimming | 0.41 s | 0.07 s | 0.70 s | 0.11 s | 0.05 s |
-| Isolation | Too slow | Needs Accurate | 6.11 s | 1.18 s | 0.77 s |
-| **All features** | **0.41 s** (no Isolation) | **0.07 s** (no Isolation) | **6.81 s** | **1.29 s** | **0.82 s** |
+| Recognition | 0.11 s | 0.02 s | 0.27 s | 0.04 s | 0.02 s |
+| Trimming | <0.01 s | <0.01 s | 0.14 s | 0.02 s | 0.01 s |
+| Isolation | Too slow | Needs Accurate | 5.71 s | 1.21 s | 0.78 s |
+| **All features** | **<0.01 s** (no Isolation) | **<0.01 s** (no Isolation) | **5.85 s** | **1.23 s** | **0.79 s** |
 
 The CPU image with Ground Control's default threads: 2 on the Pi and the N100, 4 on the others. The MacBook Pro runs it in Docker Desktop.
 
@@ -90,10 +90,10 @@ The CPU image with Ground Control's default threads: 2 on the Pi and the N100, 4
 | | RTX 3050 | RTX 4000 SFF Ada | GB10 |
 |---|---|---|---|
 | Speaker model | Accurate | Accurate | Accurate |
-| Recognition |  0.02 s | 0.01 s | 0.01 s |
-| Trimming |  0.03 s | 0.01 s | 0.01 s |
-| Isolation |  0.23 s | 0.11 s | 0.11 s |
-| **All features** | **0.26 s** | **0.12 s** | **0.12 s** |
+| Recognition | 0.02 s | 0.01 s | 0.01 s |
+| Trimming | 0.01 s | <0.01 s | <0.01 s |
+| Isolation | 0.23 s | 0.11 s | 0.16 s |
+| **All features** | **0.24 s** | **0.12 s** | **0.17 s** |
 
 The CUDA image: CUDA 12 on the RTX 3050 and the RTX 4000, CUDA 13 on the GB10. The RTX 3050 wasn't measured: its times are the RTX 4000's scaled by their compute speed, for the desktop RTX 3050 with 8 GB. Isolation's time grows with the work it does, so a GPU with about half the compute takes about twice as long.
 
@@ -110,7 +110,7 @@ A 5 s command between stretches of TV, sent through Ground Control's own code in
 
 The Accurate model makes the fewest mix-ups between people and with TV voices. The Light model uses about a third of the CPU, and a TV voice cutting in ends the command about a second later. Ground Control picks Accurate on an NVIDIA GPU, an Apple M-series chip or an x86 CPU with more than 4 cores, and Light on other ARM CPUs and smaller x86 CPUs like the N100. **Settings > Voice Match** changes it without needing to re-enroll users.
 
-The CUDA image works with NVIDIA GPUs on amd64 from the GTX 10 series (Pascal) to the RTX 50 series (Blackwell), and on arm64 with the GB10 and other Blackwell boards. It needs 3 GB of free GPU memory, or 4 GB with Isolation.
+The CUDA image works with NVIDIA GPUs on amd64 from the GTX 10 series (Pascal) to the RTX 50 series (Blackwell), and on arm64 with the GB10 and other Blackwell boards. It needs 1 GB of free GPU memory, or 2.5 GB with Isolation.
 
 ## Install
 

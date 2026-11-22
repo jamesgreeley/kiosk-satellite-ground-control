@@ -16,7 +16,7 @@ Every Voice Match feature runs on the machine Ground Control is on, not on the k
 
 See [Performance Benchmarks](../README.md#performance-benchmarks) for the measured times. Isolation is optional, so a small machine still runs Recognition and Trimming.
 
-The CUDA image works with NVIDIA GPUs on amd64 from the GTX 10 series (Pascal) to the RTX 50 series (Blackwell), and on arm64 with the GB10 and other Blackwell boards. It needs 3 GB of free GPU memory, or 4 GB with Isolation.
+The CUDA image works with NVIDIA GPUs on amd64 from the GTX 10 series (Pascal) to the RTX 50 series (Blackwell), and on arm64 with the GB10 and other Blackwell boards. It needs 1 GB of free GPU memory, or 2.5 GB with Isolation.
 
 ## Home Assistant App
 
@@ -105,11 +105,11 @@ Ground Control picks the Accurate speaker model on an Apple chip by itself. Keep
 
 The CUDA image needs:
 
-- An NVIDIA GPU with 3 GB of free memory, or 4 GB with Isolation. On amd64, any GPU from the GTX 10 series (Pascal) to the RTX 50 series (Blackwell). On arm64, the GB10 and other Blackwell boards.
+- An NVIDIA GPU with 1 GB of free memory, or 2.5 GB with Isolation. On amd64, any GPU from the GTX 10 series (Pascal) to the RTX 50 series (Blackwell). On arm64, the GB10 and other Blackwell boards.
 - An NVIDIA driver from the 570 series or newer on amd64, or 580 or newer on arm64.
 - The [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) on the host.
 
-Ground Control keeps about 1.3 GB on the GPU, or 1.5 GB with Isolation. A command needs up to 1 GB more while it runs, or 1.5 GB more with Isolation, and that memory is free again once it is done. On a GPU shared with an LLM or speech-to-text, leave that much free for Ground Control.
+Ground Control keeps about 0.7 GB on the GPU, or 0.9 GB with Isolation. A command needs up to 0.3 GB more while it runs, or 1.5 GB more with Isolation, and that memory is free again once it is done. Commands that end at the same moment are cleaned one after the other, so it is never more than that. On a GPU shared with an LLM or speech-to-text, leave that much free for Ground Control.
 
 The image is built for amd64 and arm64, so it also runs on an NVIDIA GB10. The CUDA image runs on the GPU or not at all. If it can't use the GPU, it stops with a line in its log that starts with `CUDA can't start` and says why, such as no GPU visible to the container or a driver that is too old. Use the CPU image on a machine without a supported GPU.
 

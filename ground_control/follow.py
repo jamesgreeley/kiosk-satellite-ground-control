@@ -738,6 +738,15 @@ class Follow:
             if not self._identified and self._strict and len(self._ids):
                 self._reject(events, self._last_user_end, None)
             return
+        if self._ref_kind not in ("anchor", "first") and (self._identified or not len(self._ids)):
+            # Nothing is left to learn from the command: the user is followed
+            # by a voiceprint of their own, and either known already or with
+            # nobody enrolled to compare them with. Embedding it anyway held
+            # the end of every such turn back, by 0.2 s on a GPU for a long one.
+            if not self._identified:
+                self._identified = True
+                self._set_speaker(None, None, None, events, self._last_user_end)
+            return
         emb = self.embedder.embed(speech)
         if self._ref_kind in ("anchor", "first"):
             ref = 2 * emb + (self._anchor_emb if self._anchor_emb is not None else 0)
