@@ -95,7 +95,20 @@ The CPU image with Ground Control's default threads: 2 on the Pi and the N100, 4
 | Isolation | 0.23 s | 0.11 s | 0.11 s |
 | **All features** | **0.24 s** | **0.12 s** | **0.12 s** |
 
-The CUDA image: CUDA 12 on the RTX 3050 and the RTX 4000, CUDA 13 on the GB10. Isolation's time grows with the work it does, so a GPU with about half the compute takes about twice as long. The GB10 runs with `KEEP_GPU_MEMORY` on, which keeps Isolation's GPU memory between commands (see [NVIDIA GPU](docs/installation.md#nvidia-gpu)). Without it, Isolation takes 0.16 s there.
+The CUDA image: CUDA 12 on the RTX 3050 and the RTX 4000, CUDA 13 on the GB10. Isolation's time grows with the work it does, so a GPU with about half the compute takes about twice as long. The GB10 runs with `KEEP_GPU_MEMORY` on, which keeps Isolation's GPU memory between commands (see [GPU Memory](docs/installation.md#gpu-memory)). Without it, Isolation takes 0.16 s there.
+
+### GPU Memory
+
+How much GPU memory the CUDA image uses with the Accurate speaker model, measured on the RTX 4000 SFF Ada and the GB10.
+
+| | amd64 image (CUDA 12) | arm64 image (CUDA 13) |
+|---|---|---|
+| Kept, Recognition and Trimming | 0.6 GB | 0.7 GB |
+| Kept, with Isolation | 0.8 GB | 0.9 GB |
+| Most during a command | 0.9 GB | 0.9 GB |
+| Most during a command, with Isolation | 2.3 GB | 2.4 GB |
+
+Ground Control keeps the first two amounts for as long as it runs. What a command adds is free again once it is done. See [GPU Memory](docs/installation.md#gpu-memory).
 
 ### How It Is Measured
 
