@@ -2,6 +2,11 @@
 
 All notable changes to Kiosk Satellite Ground Control are documented here.
 
+## Unreleased
+
+### Changed
+- **README Downloads badge counts every image.** It showed only the Docker image's downloads and left out the Home Assistant app images for amd64 and aarch64, more than half of the total. A workflow now adds up all three every 6 hours and the badge shows the sum. The badge links to the repository's list of packages.
+
 ## v2026.11.7 - 2026-11-21
 
 ### Added

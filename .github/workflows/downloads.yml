@@ -1,0 +1,56 @@
+name: Downloads badge
+
+# The README's Downloads badge adds up the pulls of all three image packages:
+# the Docker image and the Home Assistant app image for amd64 and aarch64.
+# GitHub shows each total only on the package's page, so this reads the three
+# pages every 6 hours and writes the sum to downloads.json on the "badges"
+# branch, which Shields reads as an endpoint badge.
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: downloads-badge
+  cancel-in-progress: false
+
+jobs:
+  count:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Add up the downloads
+        id: count
+        env:
+          REPO: ${{ github.repository }}
+        run: |
+          total=0
+          for p in kiosk-satellite-ground-control amd64-kiosk-satellite-ground-control aarch64-kiosk-satellite-ground-control; do
+            n=$(curl -fsSL "https://github.com/${REPO}/pkgs/container/${p}" | tr -d '\n' \
+              | grep -oP 'Total downloads</span>\s*<h3 title="\K\d+' || true)
+            if [ -z "$n" ]; then
+              echo "::error::no download count on the ${p} page"
+              exit 1
+            fi
+            echo "${p}: ${n}"
+            total=$((total + n))
+          done
+          echo "total: ${total}"
+          echo "total=${total}" >> "$GITHUB_OUTPUT"
+
+      - name: Write downloads.json to the badges branch
+        env:
+          TOTAL: ${{ steps.count.outputs.total }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          mkdir badges && cd badges
+          git init -q -b badges
+          printf '{"schemaVersion":1,"label":"Downloads","message":"%s","color":"e8604c"}\n' "$TOTAL" > downloads.json
+          git add downloads.json
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "Downloads: ${TOTAL}"
+          # One commit, replaced each time, so the branch never grows a history.
+          git push -q -f "https://x-access-token:${TOKEN}@github.com/${REPO}.git" badges
