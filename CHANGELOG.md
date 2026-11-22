@@ -7,6 +7,9 @@ All notable changes to Kiosk Satellite Ground Control are documented here.
 ### Changed
 - **How Ground Control is installed, for Kiosk Satellite Analytics.** Ground Control tells each kiosk how it is installed: as the Home Assistant app, in standalone Docker or with Python from the source, on amd64 or aarch64, the CUDA version of the CUDA image and whether the speaker model runs on the GPU. Kiosk Satellite 2026.11.26 adds it to its daily report when **Usage** is on. The kiosks also hear the version and the speaker model again when the people change, not only when they connect.
 
+### Fixed
+- **Open in Kiosk Satellite going to a missing page (Kiosk Satellite #1563).** As the Home Assistant app, the **Open** button on a kiosk's Ground Control settings led to `/hassio/ingress/<slug>`, which Home Assistant 2026.2 and later answer with a 404. Ground Control now gives the kiosks `/app/<slug>`, the app's page in Home Assistant since 2026.2, and the old path to an older Home Assistant.
+
 ## v2026.11.9 - 2026-11-22
 
 ### Changed

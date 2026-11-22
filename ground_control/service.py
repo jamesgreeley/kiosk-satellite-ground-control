@@ -43,7 +43,7 @@ class GroundControl:
     def __init__(self, cfg: Config) -> None:
         self.cfg = cfg
         self.app_path: str | None = None
-        """As a Home Assistant app, its page there (``/hassio/ingress/<slug>``)."""
+        """As a Home Assistant app, its page there (``/app/<slug>``, ``/hassio/ingress/<slug>`` before Home Assistant 2026.2)."""
         self.vad = VadModel(verified_path(cfg.models_dir, VAD_FILE, VAD_SHA256))
         self.people = People(cfg.data_dir, self.vad)
         self.sessions = SessionStore(cfg.data_dir, keep_days=cfg.keep_days, keep_audio=cfg.keep_audio)

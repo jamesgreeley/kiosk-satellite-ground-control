@@ -926,16 +926,31 @@ async def logs_report(request: web.Request) -> web.Response:
 ADVERTISER = web.AppKey("advertiser", object)
 
 
+def app_path(slug: str, ha_version: str | None) -> str:
+    """The app's page in Home Assistant. 2026.2 moved it from ``/hassio/ingress`` to ``/app`` (Kiosk Satellite #1563)."""
+    try:
+        year, month = (int(p) for p in (ha_version or "").split(".")[:2])
+    except ValueError:
+        return f"/app/{slug}"
+    return f"/hassio/ingress/{slug}" if (year, month) < (2026, 2) else f"/app/{slug}"
+
+
 async def _find_app_path(vm: GroundControl, supervisor_token: str) -> None:
     """As a Home Assistant app: where its page is, for the kiosks' Open."""
     import aiohttp
 
+    headers = {"Authorization": f"Bearer {supervisor_token}"}
     try:
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5)) as http, \
-                http.get("http://supervisor/addons/self/info",
-                         headers={"Authorization": f"Bearer {supervisor_token}"}) as r:
-            slug = (await r.json())["data"]["slug"]
-        vm.app_path = f"/hassio/ingress/{slug}"
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5)) as http:
+            async with http.get("http://supervisor/addons/self/info", headers=headers) as r:
+                slug = (await r.json())["data"]["slug"]
+            version = None
+            try:
+                async with http.get("http://supervisor/core/info", headers=headers) as r:
+                    version = (await r.json())["data"]["version"]
+            except (aiohttp.ClientError, asyncio.TimeoutError, KeyError, ValueError, TypeError):
+                pass  # a current Home Assistant is the likely one
+        vm.app_path = app_path(slug, version)
     except (aiohttp.ClientError, asyncio.TimeoutError, KeyError, ValueError) as err:
         _LOG.warning("could not read this app's slug from the Supervisor: %s", err)
 
