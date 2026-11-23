@@ -905,6 +905,8 @@ def _session_text(stats: dict[str, Any], events: list[dict[str, Any]]) -> str:
     elif speaker.get("name"):
         score = f" {speaker['score']}" if speaker.get("score") is not None else ""
         who = f"{speaker['name']} ({speaker.get('by') or 'voice'}{score})"
+    elif speaker.get("by") == "answer":
+        who = f"a short answer taken ({speaker.get('score')}, needed {speaker.get('line')})"
     elif any(e["type"] == "speaker" for e in events):
         who = "an unknown voice"
     else:

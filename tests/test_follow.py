@@ -599,13 +599,13 @@ def test_without_a_wake_clip_the_end_of_the_wake_word_is_not_looked_for(househol
 # ── an answer with no wake word ──────────────────────────────────────────
 
 def test_the_line_for_an_answer_rises_with_how_much_was_said(household, vad, embedder):
-    """A short answer needs a score a third of the way from the other-voice
-    line to the recognition threshold. More of it needs more, up to the
-    threshold at two seconds."""
+    """A short answer needs a score just over the other-voice line, a seventh
+    of the way to the recognition threshold. More of it needs more, up to
+    the threshold at two seconds."""
     people, *_ = household
     f = Follow(FollowConfig(policy="enrolled"), ACCURATE, embedder, vad, people)
-    start = ACCURATE.other_threshold + (ACCURATE.threshold - ACCURATE.other_threshold) / 3
-    assert f.answer_line(0.3) == f.answer_line(0.75) == pytest.approx(start) == pytest.approx(0.36)
+    start = ACCURATE.other_threshold + (ACCURATE.threshold - ACCURATE.other_threshold) / 7
+    assert f.answer_line(0.3) == f.answer_line(0.75) == pytest.approx(start) == pytest.approx(0.32)
     assert start < f.answer_line(1.0) < f.answer_line(1.5) < ACCURATE.threshold
     assert f.answer_line(2.0) == f.answer_line(5.0) == ACCURATE.threshold
 

@@ -136,11 +136,13 @@ class FollowConfig:
     line to the recognition threshold, rising to the threshold at
     ``reject_after_s``, as a voice's score against its own voiceprint does.
     From there on it is recognized as any command."""
-    answer_line_share: float = 1 / 3
+    answer_line_share: float = 1 / 7
     """Where the line for a short answer starts, between the other-voice line
-    and the recognition threshold: 0.36 with the Accurate model's 0.29 and
-    0.50. On real answers scored as below, the person's own were all over
-    0.40 and other voices nearly all under 0.35."""
+    and the recognition threshold: 0.32 with the Accurate model's 0.29 and
+    0.50. Real one-word answers, scored as below, ran from 0.33 to 0.51
+    against the voiceprint of the person who said them. At 0.36 one "yes" in
+    seven was turned away and another passed by 0.005. A wrong no fails the
+    automation that asked, a wrong yes lets someone answer one question."""
     answer_window_s: float = 1.5
     """A short answer is scored on at least this much audio centered on it,
     with the room around it, as the voice checks are. Its speech frames alone
