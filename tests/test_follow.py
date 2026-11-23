@@ -599,12 +599,14 @@ def test_without_a_wake_clip_the_end_of_the_wake_word_is_not_looked_for(househol
 # ── an answer with no wake word ──────────────────────────────────────────
 
 def test_the_line_for_an_answer_rises_with_how_much_was_said(household, vad, embedder):
-    """A short answer needs the other-voice line. More of it needs more, up
-    to the recognition threshold at two seconds."""
+    """A short answer needs a score a third of the way from the other-voice
+    line to the recognition threshold. More of it needs more, up to the
+    threshold at two seconds."""
     people, *_ = household
     f = Follow(FollowConfig(policy="enrolled"), ACCURATE, embedder, vad, people)
-    assert f.answer_line(0.3) == f.answer_line(0.75) == ACCURATE.other_threshold
-    assert ACCURATE.other_threshold < f.answer_line(1.0) < f.answer_line(1.5) < ACCURATE.threshold
+    start = ACCURATE.other_threshold + (ACCURATE.threshold - ACCURATE.other_threshold) / 3
+    assert f.answer_line(0.3) == f.answer_line(0.75) == pytest.approx(start) == pytest.approx(0.36)
+    assert start < f.answer_line(1.0) < f.answer_line(1.5) < ACCURATE.threshold
     assert f.answer_line(2.0) == f.answer_line(5.0) == ACCURATE.threshold
 
 
@@ -621,7 +623,7 @@ def test_a_short_answer_with_no_wake_word_is_taken_on_a_device_that_answers_chos
     assert s.speech_share("user", f.released, vad) >= 0.5
     speaker = of(events, "speaker")[-1]
     assert speaker["name"] is None and speaker["by"] == "answer"
-    assert speaker["score"] >= speaker["line"] == ACCURATE.other_threshold
+    assert speaker["score"] >= speaker["line"] == round(f.answer_line(0.5), 3)
     took = [t for t in f.timeline if t.get("answer")][0]
     assert took["id"] == ana.id and took["speech_s"] < 1.0
     stats = of(events, "stats")[0]

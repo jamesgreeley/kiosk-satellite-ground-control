@@ -50,7 +50,7 @@ from typing import Any
 import numpy as np
 
 from . import SAMPLE_RATE
-from .engine import Embedder
+from .engine import QUANTUM, Embedder
 from .models import ISOLATOR_MODEL, SpeakerModel
 from .people import People
 from .vad import FRAME, VadModel
@@ -130,11 +130,23 @@ class FollowConfig:
     short_answer_s: float = 0.75
     """Without a wake word, such as an answer to a question Home Assistant
     asked, there is nothing but the answer to tell who is talking. A "yes"
-    is too short to recognize anyone. A device that answers only
-    enrolled or chosen people takes such an answer when it sounds like one of
-    them: at the other-voice line up to this much speech, rising to the
-    recognition threshold at ``reject_after_s``, as a voice's score against
-    its own voiceprint does. From there on it is recognized as any command."""
+    is too short to recognize anyone. A device that answers only enrolled or
+    chosen people takes such an answer when it sounds like one of them: up to
+    this much speech at ``answer_line_share`` of the way from the other-voice
+    line to the recognition threshold, rising to the threshold at
+    ``reject_after_s``, as a voice's score against its own voiceprint does.
+    From there on it is recognized as any command."""
+    answer_line_share: float = 1 / 3
+    """Where the line for a short answer starts, between the other-voice line
+    and the recognition threshold: 0.36 with the Accurate model's 0.29 and
+    0.50. On real answers scored as below, the person's own were all over
+    0.40 and other voices nearly all under 0.35."""
+    answer_window_s: float = 1.5
+    """A short answer is scored on at least this much audio centered on it,
+    with the room around it, as the voice checks are. Its speech frames alone
+    are too little for the speaker model: a "yes" scored 0.18 against the
+    voiceprint of the person who said it and 0.42 this way, while other
+    voices stayed where they were."""
     min_answer_s: float = 0.2
     """Less speech than this says nothing about a voice."""
     wake_word_wait_s: float = 0.8
@@ -833,7 +845,7 @@ class Follow:
             with_wake_word = len(self._anchor_speech) > 0
         if len(speech) < SR:
             if not self._identified and self._strict and len(self._ids):
-                if self._no_wake_word and self._take_answer(speech, None, events):
+                if self._no_wake_word and self._take_answer(events):
                     return
                 self._reject(events, self._last_user_end, None)
             return
@@ -867,7 +879,7 @@ class Follow:
                     if not self._allowed(self._ids[best]):
                         self._reject(events, self._last_user_end, score)
                     return
-            if self._strict and len(self._ids) and self._no_wake_word and self._take_answer(speech, emb, events):
+            if self._strict and len(self._ids) and self._no_wake_word and self._take_answer(events):
                 return
             self._set_speaker(None, score, None, events, self._last_user_end)
             if self._strict and len(self._ids):
@@ -883,10 +895,20 @@ class Follow:
         """The score an answer of ``speech_s`` seconds needs, with no wake
         word, to count as one of the people the device answers."""
         cfg, m = self.cfg, self.model
+        start = m.other_threshold + cfg.answer_line_share * (m.threshold - m.other_threshold)
         share = (speech_s - cfg.short_answer_s) / max(cfg.reject_after_s - cfg.short_answer_s, 1e-9)
-        return m.other_threshold + min(1.0, max(0.0, share)) * (m.threshold - m.other_threshold)
+        return start + min(1.0, max(0.0, share)) * (m.threshold - start)
 
-    def _take_answer(self, speech: np.ndarray, emb: np.ndarray | None, events: list[dict[str, Any]]) -> bool:
+    def _answer_audio(self) -> np.ndarray:
+        """The audio from the user's first word to their last, widened to
+        ``answer_window_s`` and to whole half seconds, as the speaker model
+        takes it, with the answer in the middle."""
+        a, b = self._user_speech[0][0], self._user_speech[-1][1]
+        n = max(int(self.cfg.answer_window_s * SR), -(-(b - a) // QUANTUM) * QUANTUM)
+        lo = max(self._base, min((a + b) // 2 - n // 2, self.n - n))
+        return self._audio(lo, lo + n)
+
+    def _take_answer(self, events: list[dict[str, Any]]) -> bool:
         """An answer too short to recognize anyone, on a device that answers
         only enrolled or chosen people: taken when it sounds like one of them,
         by a line that rises with how much was said (``answer_line``).
@@ -895,18 +917,17 @@ class Follow:
         threshold. The closest of their voiceprints is the one followed from
         here on. It is also the one Isolation keeps."""
         allowed = [i for i, pid in enumerate(self._ids) if self._allowed(pid)]
-        if not allowed or len(speech) < self.cfg.min_answer_s * SR:
+        speech_s = sum(b - a for a, b in self._user_speech) / SR
+        if not allowed or speech_s < self.cfg.min_answer_s:
             return False
-        if emb is None:
-            emb = self.embedder.embed(speech)
-        scores = self._rows[allowed] @ emb
+        scores = self._rows[allowed] @ self.embedder.embed(self._answer_audio())
         best = int(np.argmax(scores))
         score = float(scores[best])
-        line = self.answer_line(len(speech) / SR)
+        line = self.answer_line(speech_s)
         at = self._last_user_end
         self.timeline.append({"t": round(at / SR, 3), "kind": "identify", "score": round(score, 3),
                               "id": self._ids[allowed[best]], "turn": self.turns, "answer": True,
-                              "line": round(line, 3), "speech_s": round(len(speech) / SR, 2)})
+                              "line": round(line, 3), "speech_s": round(speech_s, 2)})
         if score < line:
             return False
         self._identified = True

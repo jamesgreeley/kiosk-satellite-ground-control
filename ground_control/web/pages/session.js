@@ -99,7 +99,7 @@ function steps(record) {
         : both ? `Score ${e.score}, from the wake word and the command together. The command alone was too short.` : `Score ${e.score}.`, e.t]);
     }
     if (e.type === "speaker" && !e.name && e.by === "answer") {
-      out.push(["Short answer taken", `Score ${e.score} against the closest of the people this kiosk answers. With no wake word, an answer this short needs ${e.line}. It is too short to say who is speaking.`, e.t]);
+      out.push(["Short answer taken", `Score ${e.score} against the closest of the people this kiosk answers, with the room around the answer. With no wake word, an answer this short needs ${e.line}. It is too short to say who is speaking.`, e.t]);
     } else if (e.type === "speaker" && !e.name) out.push(["Unknown voice", `Best score ${e.score}, under the threshold.`, e.t]);
     if (e.type === "other_voice" && record.mode === "follow") {
       out.push(["Another voice left out", "It never reached the assistant.", e.t]);

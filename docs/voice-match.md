@@ -36,8 +36,9 @@ In a conversation, a follow-up carries on with the person recognized in its firs
 
 When Home Assistant asks a question (`assist_satellite.ask_question`, `assist_satellite.start_conversation`) or a conversation is started from the screen, there is no wake word to help and "yes" is too short to recognize anyone. A kiosk that answers chosen people still takes a short answer when it sounds like one of them:
 
-- **Up to 0.75 seconds of speech** needs a score at the **Other voice threshold** against one of their voiceprints.
+- **Up to 0.75 seconds of speech** needs a score a third of the way from the **Other voice threshold** to the **Threshold** against one of their voiceprints: 0.36 with the Accurate model's defaults.
 - **More speech needs a higher score,** rising to the **Threshold** at 2 seconds, since a voice scores higher against its own voiceprint the more there is of it.
+- **The answer is scored with the room around it,** on 1.5 seconds centered on it. One word on its own is too little to tell a voice by.
 - **From 2 seconds on** the answer is recognized like any command.
 
 A short answer is taken without a name: the Speaker sensor says who is speaking only at the **Threshold**. An answer from someone the kiosk doesn't answer is still dropped, though a very short one can get through now and then. With a TV on, turn on Isolation, which keeps the TV out of the answer.
