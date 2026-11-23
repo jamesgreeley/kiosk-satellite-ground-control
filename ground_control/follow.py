@@ -127,10 +127,17 @@ class FollowConfig:
     household_wait_s: float = 2.5
     """Without a wake word, a device that answers anyone waits this much speech
     for an enrolled voice, then follows the voice it heard."""
+    short_answers: bool | None = None
+    """Whether a short answer is taken as below. The kiosk says how the turn
+    started: a reply to something Home Assistant asked (``ask_question``,
+    ``start_conversation``) or a follow-up gets it, a wake word or a turn
+    started by hand doesn't. None when the kiosk doesn't say, as Kiosk
+    Satellite before 2026.11.31: then every session that came without a wake
+    word gets it. False also when it is turned off in the settings."""
     short_answer_s: float = 0.75
-    """Without a wake word, such as an answer to a question Home Assistant
-    asked, there is nothing but the answer to tell who is talking. A "yes"
-    is too short to recognize anyone. A device that answers only enrolled or
+    """A reply to a question Home Assistant asked comes with no wake word, so
+    there is nothing but the answer to tell who is talking. A "yes" is too
+    short to recognize anyone. A device that answers only enrolled or
     chosen people takes such an answer when it sounds like one of them: up to
     this much speech at ``answer_line_share`` of the way from the other-voice
     line to the recognition threshold, rising to the threshold at
@@ -846,10 +853,11 @@ class Follow:
             speech = self._identity_audio(6.0)
             with_wake_word = len(self._anchor_speech) > 0
         if len(speech) < SR:
-            if not self._identified and self._strict and len(self._ids):
-                if self._no_wake_word and self._take_answer(events):
+            if not self._identified and len(self._ids):
+                if self._second_look(events):
                     return
-                self._reject(events, self._last_user_end, None)
+                if self._strict:
+                    self._reject(events, self._last_user_end, None)
             return
         if self._ref_kind not in ("anchor", "first") and (self._identified or not len(self._ids)):
             # Nothing is left to learn from the command: the user is followed
@@ -881,16 +889,20 @@ class Follow:
                     if not self._allowed(self._ids[best]):
                         self._reject(events, self._last_user_end, score)
                     return
-            if self._strict and len(self._ids) and self._no_wake_word and self._take_answer(events):
+            if len(self._ids) and self._second_look(events):
                 return
             self._set_speaker(None, score, None, events, self._last_user_end)
             if self._strict and len(self._ids):
                 self._reject(events, self._last_user_end, score)
 
     @property
-    def _no_wake_word(self) -> bool:
-        """The kiosk sent no wake word with this session: Home Assistant asked
-        a question, it started a conversation itself or one was started by hand."""
+    def _takes_answers(self) -> bool:
+        """Whether this session's first turn can be a short answer
+        (``FollowConfig.short_answers``). A kiosk that doesn't say how the
+        turn started gets it for a session without a wake word: Home Assistant
+        asked a question, it started a conversation or one was started by hand."""
+        if self.cfg.short_answers is not None:
+            return self.cfg.short_answers
         return self.anchor_audio is None
 
     def answer_line(self, speech_s: float) -> float:
@@ -910,30 +922,51 @@ class Follow:
         lo = max(self._base, min((a + b) // 2 - n // 2, self.n - n))
         return self._audio(lo, lo + n)
 
-    def _take_answer(self, events: list[dict[str, Any]]) -> bool:
-        """An answer too short to recognize anyone, on a device that answers
-        only enrolled or chosen people: taken when it sounds like one of them,
-        by a line that rises with how much was said (``answer_line``).
+    def _second_look(self, events: list[dict[str, Any]]) -> bool:
+        """Before the first turn's voice goes unrecognized: the same turn
+        scored once more with the room around it (``_answer_audio``). Speech
+        frames put together are what recognition works on, and for a short
+        turn that can fall short where the turn as it was heard does not.
 
-        Nobody is named: who is speaking is only ever said at the recognition
-        threshold. The closest of their voiceprints is the one followed from
-        here on. It is also the one Isolation keeps."""
-        allowed = [i for i, pid in enumerate(self._ids) if self._allowed(pid)]
+        - At the recognition threshold the person is named, as by any other
+          recognition. Of 50 real short commands after a wake word, the
+          speech frames recognized 49 and this the one left.
+        - Under it, on a device that answers only enrolled or chosen people,
+          a reply to a question (``_takes_answers``) is taken when it sounds
+          like one of them, by a line that rises with how much was said
+          (``answer_line``). Nobody is named then: who is speaking is only
+          ever said at the recognition threshold. The closest of their
+          voiceprints is the one followed from here on. It is also the one
+          Isolation keeps.
+
+        True when the turn was dealt with here, taken or turned away."""
         speech_s = sum(b - a for a, b in self._user_speech) / SR
-        if not allowed or speech_s < self.cfg.min_answer_s:
+        if not len(self._ids) or speech_s < self.cfg.min_answer_s:
             return False
-        scores = self._rows[allowed] @ self.embedder.embed(self._answer_audio())
-        best = int(np.argmax(scores))
-        score = float(scores[best])
-        line = self.answer_line(speech_s)
+        scores = self._rows @ self.embedder.embed(self._answer_audio())
         at = self._last_user_end
+        best = int(np.argmax(scores))
+        named = float(scores[best]) >= self.model.threshold
+        allowed = [i for i, pid in enumerate(self._ids) if self._allowed(pid)]
+        line = self.answer_line(speech_s) if self._strict and self._takes_answers and allowed else None
+        if not named and line is not None:
+            best = max(allowed, key=lambda i: float(scores[i]))
+        score = float(scores[best])
         self.timeline.append({"t": round(at / SR, 3), "kind": "identify", "score": round(score, 3),
-                              "id": self._ids[allowed[best]], "turn": self.turns, "answer": True,
-                              "line": round(line, 3), "speech_s": round(speech_s, 2)})
-        if score < line:
+                              "id": self._ids[best], "turn": self.turns, "room": True,
+                              **({"answer": True, "line": round(line, 3), "speech_s": round(speech_s, 2)}
+                                 if line is not None else {})})
+        if named:
+            self._identified = True
+            self._ref, self._ref_kind = self._rows[best], "person"
+            self._set_speaker(self._ids[best], score, "voice", events, at)
+            if not self._allowed(self._ids[best]):
+                self._reject(events, at, score)
+            return True
+        if line is None or score < line:
             return False
         self._identified = True
-        self._ref, self._ref_kind = self._rows[allowed[best]], "person"
+        self._ref, self._ref_kind = self._rows[best], "person"
         self._set_speaker(None, score, "answer", events, at, line=line)
         return True
 

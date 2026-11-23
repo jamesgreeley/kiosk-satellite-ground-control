@@ -59,7 +59,8 @@ function chart(record, total, color) {
   const pts = (record.timeline || []).filter((p) => p.t !== undefined && p.score !== undefined
     && (record.mode === "follow" || p.turn === 0 || p.turn === undefined)).map((p) => {
     const who = p.kind === "anchor" || p.kind === "identify";
-    const label = p.kind === "identify" && p.wake_word ? "Who is speaking, from the wake word and the command"
+    const label = p.kind === "identify" && p.room ? "Who is speaking, from the turn with the room around it"
+      : p.kind === "identify" && p.wake_word ? "Who is speaking, from the wake word and the command"
       : p.kind === "check" && p.low ? "Not the user's voice" : POINT[p.kind] || "Check";
     return h("span", {
       class: `pt ${who ? "who" : ""}`,
@@ -252,6 +253,9 @@ async function spectrograms(rows, raw) {
   });
 }
 
+// How a turn started, when it wasn't a wake word.
+const STARTED = { question: "Asked by the assistant", follow_up: "Follow-up", manual: "Started by hand" };
+
 const ENGINES = { vswakeword: "vsWakeWord", microwakeword: "microWakeWord", openwakeword: "openWakeWord", pryon: "Amazon" };
 
 /** What the kiosk said about how the session started: the wake word and what
@@ -264,6 +268,7 @@ function wakeChips(wake) {
   return [
     word,
     wake.assistant ? chip(wake.assistant === "realtime" ? "Realtime assistant" : "Assist pipeline", "big") : null,
+    STARTED[wake.interaction] ? chip(STARTED[wake.interaction], "big") : null,
     wake.seamless ? chip("Talk right after the wake word", "big") : null,
   ];
 }

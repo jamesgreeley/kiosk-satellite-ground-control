@@ -312,3 +312,26 @@ def test_the_wake_word_aligner_loads_with_the_first_command_that_needs_it(cfg):
         assert "Wake Word Aligner License" in loaded.session.get_modelmeta().custom_metadata_map["license"]
     finally:
         vm.close()
+
+
+def test_short_answers_follow_what_the_kiosk_says_and_the_setting(cfg):
+    """A reply to something Home Assistant asked can be a short answer. A
+    kiosk that doesn't say how the turn started leaves it to whether a wake
+    word came. The setting turns short answers off for every kiosk."""
+    from ground_control.service import GroundControl
+
+    vm = GroundControl(cfg)
+    try:
+        assert vm.settings()["short_answers"] is True
+        assert vm.new_follow(asked=True).cfg.short_answers is True
+        assert vm.new_follow(asked=False).cfg.short_answers is False
+        assert vm.new_follow().cfg.short_answers is None
+        vm.update_settings({"short_answers": False})
+        assert vm.settings()["short_answers"] is False
+        assert vm.new_follow(asked=True).cfg.short_answers is False
+        assert vm.new_follow().cfg.short_answers is False
+        again = GroundControl(cfg)
+        assert again.short_answers is False
+        again.close()
+    finally:
+        vm.close()

@@ -319,6 +319,9 @@ def _check_features(vm: GroundControl, device_id: str | None, features: dict[str
 # ── sessions ──────────────────────────────────────────────────────────────
 
 WAKE_TEXT = ("wake_word", "wake_word_engine", "wake_word_model", "language")
+INTERACTIONS = ("wake_word", "question", "follow_up", "manual")
+ASKED = ("question", "follow_up")
+"""The turns that are a reply to something Home Assistant said."""
 
 
 def wake_details(start: dict[str, Any]) -> dict[str, Any]:
@@ -331,6 +334,10 @@ def wake_details(start: dict[str, Any]) -> dict[str, Any]:
       starts when the engine fired and can hold the end of the wake word.
     - ``assistant``: ``assist`` (a Home Assistant Assist pipeline) or ``realtime``.
     - ``language``: the kiosk's language, for how the wake word is said there.
+    - ``interaction``: how the turn started. ``wake_word``, ``question`` (a
+      reply to something Home Assistant asked: ``ask_question``,
+      ``start_conversation`` or a conversation it opened), ``follow_up`` (the
+      conversation goes on) or ``manual`` (started by hand, with no wake word).
     """
     out: dict[str, Any] = {}
     for key in WAKE_TEXT:
@@ -341,6 +348,8 @@ def wake_details(start: dict[str, Any]) -> dict[str, Any]:
         out["seamless"] = start["seamless"]
     if start.get("assistant") in ("assist", "realtime"):
         out["assistant"] = start["assistant"]
+    if start.get("interaction") in INTERACTIONS:
+        out["interaction"] = start["interaction"]
     return out
 
 
@@ -369,7 +378,11 @@ async def session_ws(request: web.Request) -> web.WebSocketResponse:
         isolation = start.get("isolation") is not False
         # A follow-up has no wake word of its own: nothing to leave out.
         first = speaker is None and not start.get("continues")
-        session = await vm.run(vm.new_follow, policy, anchor, people, speaker, isolation, wake if first else None)
+        # A short answer is only for a reply to something Home Assistant
+        # asked. A kiosk that doesn't say how the turn started: None.
+        asked = wake["interaction"] in ASKED if "interaction" in wake else None
+        session = await vm.run(vm.new_follow, policy, anchor, people, speaker, isolation, wake if first else None,
+                               asked)
     else:
         session = vm.new_session(mode=mode, policy=policy, people=people, learn=start.get("learn"))
     device_id = start.get("device_id")
@@ -889,6 +902,9 @@ def _wake_text(wake: dict[str, Any]) -> str:
     if wake.get("wake_word"):
         engine = f" ({wake['wake_word_engine']})" if wake.get("wake_word_engine") else ""
         parts.append(f'wake word "{wake["wake_word"]}"{engine}')
+    if wake.get("interaction") in ("question", "follow_up", "manual"):
+        parts.append({"question": "a reply to a question from Home Assistant", "follow_up": "a follow-up",
+                      "manual": "started by hand"}[wake["interaction"]])
     if wake.get("seamless"):
         parts.append("talk right after the wake word")
     if wake.get("assistant"):

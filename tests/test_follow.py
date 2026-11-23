@@ -614,11 +614,20 @@ def test_a_short_answer_with_no_wake_word_is_taken_on_a_device_that_answers_chos
         household, speakers, voice, vad, embedder):
     """Home Assistant asked a question (ask_question, start_conversation), so
     there is no wake word and "yes" is too short to recognize anyone (#20).
-    It sounds like the person the device answers: it goes on, without a name."""
+    It sounds like the person the device answers: it goes on, without a name.
+
+    The recognition threshold is set out of reach here, as it is for a real
+    "yes" from across a room: these clean recordings would be recognized."""
+    from dataclasses import replace
+
     people, ana, _ = household
     user = held_out(speakers[0])
     s = Script().add("quiet", silence(0.5)).add("user", user[2 * SR:int(2.7 * SR)]).add("quiet", silence(1.5))
-    events, f = run(people, embedder, vad, s, policy="people", people=(ana.id,))
+    f = Follow(FollowConfig(policy="people", people=(ana.id,)), replace(ACCURATE, threshold=0.95), embedder, vad, people)
+    events = []
+    for c in chunks(s.audio):
+        events += f.feed(c)
+    events += f.finish()
     assert not of(events, "rejected") and len(of(events, "turn_end")) == 1
     assert s.speech_share("user", f.released, vad) >= 0.5
     speaker = of(events, "speaker")[-1]
@@ -628,6 +637,33 @@ def test_a_short_answer_with_no_wake_word_is_taken_on_a_device_that_answers_chos
     assert took["id"] == ana.id and took["speech_s"] < 1.0
     stats = of(events, "stats")[0]
     assert not stats["rejected"] and stats["speaker"]["by"] == "answer"
+
+
+def test_a_reply_that_reaches_the_threshold_with_the_room_around_it_is_recognized_by_name(
+        household, speakers, voice, vad, embedder):
+    """A reply's speech frames alone are too little to recognize anyone until
+    there are two seconds of them. Scored with the room around it, a reply
+    that reaches the recognition threshold is someone recognized, not a short
+    answer taken without a name."""
+    people, ana, _ = household
+    user = held_out(speakers[0])
+    s = Script().add("quiet", silence(0.5)).add("user", user[2 * SR:int(2.7 * SR)]).add("quiet", silence(1.5))
+    events, f = run(people, embedder, vad, s, policy="people", people=(ana.id,))
+    speaker = of(events, "speaker")[-1]
+    assert speaker["name"] == "Ana" and speaker["by"] == "voice" and speaker["score"] >= ACCURATE.threshold
+    # It was the reply's own path that named her: its speech alone is under a second.
+    assert [t for t in f.timeline if t.get("answer")][0]["speech_s"] < 1.0
+    assert not of(events, "rejected")
+
+
+def test_a_reply_recognized_as_someone_the_device_doesnt_answer_is_turned_away(
+        household, speakers, voice, vad, embedder):
+    people, ana, leo = household
+    user = held_out(speakers[0])
+    s = Script().add("quiet", silence(0.5)).add("user", user[2 * SR:int(2.7 * SR)]).add("quiet", silence(1.5))
+    events, f = run(people, embedder, vad, s, policy="people", people=(leo.id,), short_answers=True)
+    assert not [e for e in of(events, "speaker") if e["by"] == "answer"]
+    assert s.released_from("user", f.released) <= 0.3 or of(events, "rejected")
 
 
 def test_a_short_answer_from_someone_the_device_doesnt_answer_is_still_turned_away(
@@ -675,3 +711,73 @@ def test_the_speaker_model_takes_audio_of_any_length(embedder):
     for n in (0, 160, 512, 1024, 1599):
         e = embedder.embed(np.zeros(n, dtype=np.float32) + 0.01)
         assert e.shape == (embedder.dim,) and np.isfinite(e).all()
+
+
+def test_a_short_answer_is_only_taken_for_a_turn_that_can_be_one(household, speakers, voice, vad, embedder):
+    """The kiosk says how the turn started. A reply to something Home
+    Assistant asked can be a short answer. A turn started by hand can't, and
+    neither can any turn with short answers turned off in the settings."""
+    from dataclasses import replace
+
+    people, ana, _ = household
+    user = held_out(speakers[0])
+    s = Script().add("quiet", silence(0.5)).add("user", user[2 * SR:int(2.7 * SR)]).add("quiet", silence(1.5))
+    # The recognition threshold out of reach, as for a real "yes" from across
+    # a room: these clean recordings would be recognized by name either way.
+    far = replace(ACCURATE, threshold=0.95)
+
+    def play(**kw):
+        f = Follow(FollowConfig(policy="people", people=(ana.id,), **kw), far, embedder, vad, people)
+        events = []
+        for c in chunks(s.audio):
+            events += f.feed(c)
+        return events + f.finish(), f
+
+    events, f = play(short_answers=False)
+    assert of(events, "rejected") and not [t for t in f.timeline if t.get("answer")]
+    events, f = play(short_answers=True)
+    assert not of(events, "rejected") and of(events, "speaker")[-1]["by"] == "answer"
+    # Recognized by name at the usual threshold, short answers or not.
+    events, f = run(people, embedder, vad, s, policy="people", people=(ana.id,), short_answers=False)
+    assert not of(events, "rejected") and of(events, "speaker")[-1]["name"] == "Ana"
+
+
+def test_a_short_command_recognition_misses_is_looked_at_again_with_the_room_around_it(
+        household, speakers, voice, vad, embedder):
+    """Recognition works on the speech frames of the wake word and the
+    command put together. For a short command that can fall short of the
+    threshold where the command as it was heard doesn't, and a device that
+    answers chosen people turned its own person away. Before that, the turn
+    is scored once more with the room around it."""
+    people, ana, _ = household
+    user = held_out(speakers[0])
+    # A wake word under the threshold on its own, then a command under a second.
+    anchor, command = user[9 * SR:10 * SR], user[int(10.2 * SR):int(11.1 * SR)]
+    s = Script().add("quiet", silence(0.4)).add("user", command).add("quiet", silence(1.5))
+    f = Follow(FollowConfig(policy="people", people=(ana.id,)), ACCURATE, embedder, vad, people, anchor=anchor)
+    # The speech frames say nothing here, as when they fall short.
+    noise = np.random.default_rng(0).standard_normal(int(1.5 * SR)).astype(np.float32) * 0.01
+    f._identity_audio = lambda last_s=4.0: noise
+    events = []
+    for c in chunks(s.audio):
+        events += f.feed(c)
+    events += f.finish()
+    assert not of(events, "rejected")
+    speaker = of(events, "speaker")[-1]
+    assert speaker["name"] == "Ana" and speaker["by"] == "voice"
+    looks = [t for t in f.timeline if t.get("room")]
+    assert len(looks) == 1 and "answer" not in looks[0] and looks[0]["score"] >= ACCURATE.threshold
+
+
+def test_a_second_look_doesnt_let_a_guest_through_after_a_wake_word(tmp_path, speakers, voice, vad, embedder):
+    """With a wake word there is no line of its own for a short answer: the
+    second look only ever recognizes someone at the threshold."""
+    people = People(tmp_path, vad)
+    ana = people.add("Ana")
+    people.enroll(ana.id, voice[speakers[0]]["enroll"], {"accurate": embedder})
+    guest = held_out(speakers[2])
+    s = Script().add("quiet", silence(0.4)).add("user", guest[2 * SR:int(2.7 * SR)]).add("quiet", silence(1.5))
+    events, f = run(people, embedder, vad, s, anchor=anchor_of(guest), policy="people", people=(ana.id,))
+    assert of(events, "rejected") or s.released_from("user", f.released) <= 0.3
+    assert not [e for e in of(events, "speaker") if e["name"]]
+    assert not [t for t in f.timeline if t.get("answer")]

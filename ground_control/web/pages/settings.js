@@ -132,7 +132,9 @@ export async function render({ area } = {}) {
         row("Threshold", `How close a voice has to be to count as someone enrolled. Higher means fewer mix-ups and more unknown voices. Each model has its own, ${s.default_threshold} by default.`,
           number("thr", s.threshold, "threshold"), "thr"),
         row("Learn from commands", "Confident commands fold into the speaker's voice, so it follows colds and room changes.",
-          toggle(s.learn, "Learn from commands", (v) => save({ learn: v })))),
+          toggle(s.learn, "Learn from commands", (v) => save({ learn: v }))),
+        row("Take short answers", "Accepts a short reply to a question from the assistant, like \"yes\" or \"no\", when the voice vaguely sounds like one of the people the kiosk accepts. A reply this short isn't enough to recognize who is speaking, so with this off it is ignored. Only applies to kiosks that answer chosen people.",
+          toggle(s.short_answers, "Take short answers", (v) => save({ short_answers: v })))),
 
       section("Trimming", "Other voices are cut out between the user's words, and long pauses are shortened."),
       h("div", { class: "card" },

@@ -30,18 +30,32 @@ The user is whoever said the wake word. The kiosk sends the wake word with the c
 
 A voice counts as someone enrolled when its score against their voiceprint is above the **Threshold**. Below it, the voice is unknown. A kiosk set to answer chosen people drops a command from an unknown voice or from someone not chosen.
 
+A short command is recognized from the speech of the wake word and the command together. When that falls short of the **Threshold**, the command is scored once more as it was heard, with the room around it, before the voice is left unknown or turned away.
+
 In a conversation, a follow-up carries on with the person recognized in its first turn, so a one word answer like "yes" goes through.
 
-### Answers Without a Wake Word
+### Short Answers
 
-When Home Assistant asks a question (`assist_satellite.ask_question`, `assist_satellite.start_conversation`) or a conversation is started from the screen, there is no wake word to help and "yes" is too short to recognize anyone. A kiosk that answers chosen people still takes a short answer when it sounds like one of them:
+When Home Assistant asks a question (`assist_satellite.ask_question`, `assist_satellite.start_conversation`), the reply comes with no wake word to help and "yes" is too short to recognize anyone. A kiosk that answers chosen people still takes a short reply when it sounds like one of them:
 
 - **Up to 0.75 seconds of speech** needs a score just over the **Other voice threshold** against one of their voiceprints, a seventh of the way to the **Threshold**: 0.32 with the Accurate model's defaults.
 - **More speech needs a higher score,** rising to the **Threshold** at 2 seconds, since a voice scores higher against its own voiceprint the more there is of it.
 - **The answer is scored with the room around it,** on 1.5 seconds centered on it. One word on its own is too little to tell a voice by.
 - **From 2 seconds on** the answer is recognized like any command.
 
-A short answer is taken without a name: the Speaker sensor says who is speaking only at the **Threshold**. An answer from someone the kiosk doesn't answer is still dropped, though a very short one can get through now and then. With a TV on, turn on Isolation, which keeps the TV out of the answer.
+A reply that reaches the **Threshold** this way is recognized by name, as any command is. A reply of a second or more often does, where its speech alone would not. Under the **Threshold**, a short answer is taken without a name: the Speaker sensor only says who is speaking at the **Threshold**. An answer from someone the kiosk doesn't answer is still dropped, though a very short one can get through now and then. With a TV on, turn on Isolation, which keeps the TV out of the answer.
+
+Which turns can be a short answer depends on what the kiosk says about how the turn started:
+
+| Turn | Short answer |
+| --- | --- |
+| A reply to something Home Assistant asked | Yes |
+| A follow-up in a conversation | Yes |
+| A wake word | No. A short command is recognized from the wake word and the command together. |
+| A conversation started by hand, with no wake word | No |
+| Kiosk Satellite before 2026.11.31, which doesn't say how the turn started | Yes, for every turn without a wake word |
+
+**Take short answers** under **Settings > Voice Match > Recognition** turns this off. A short reply to a question is then dropped on a kiosk that answers chosen people, as before Ground Control 2026.11.13.
 
 ## Trimming
 
@@ -124,6 +138,7 @@ Ground Control picks Accurate on an NVIDIA GPU, an Apple M-series chip or an x86
 | Speaker model | auto | Accurate or Light. See [Speaker Models](#speaker-models). |
 | Threshold | 0.5 Accurate, 0.4 Light | How close a voice has to be to count as someone enrolled. Higher means fewer mix-ups and more unknown voices. Each model has its own. |
 | Learn from commands | on | Confident commands fold into the speaker's voice, so it follows colds and room changes. |
+| Take short answers | on | Accepts a short reply to a question from the assistant, like "yes" or "no", when the voice vaguely sounds like one of the people the kiosk accepts. A reply this short isn't enough to recognize who is speaking, so with this off it is ignored. Only applies to kiosks that answer chosen people. See [Short Answers](#short-answers). |
 | **Trimming** | | |
 | Other voice threshold | 0.29 Accurate, 0.26 Light | Two checks in a row under this score mean someone else is talking. |
 | **Wake Word Aligner** | | |

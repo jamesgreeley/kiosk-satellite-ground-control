@@ -14,7 +14,7 @@ Each row shows when the session started, the kiosk, the speaker, the mode, the o
 
 ## A Session's Page
 
-The top of the page shows the speaker, the outcome, the mode, who the kiosk answers and the speaker model. With Kiosk Satellite 2026.11.30 or later it also shows the wake word and its engine, whether an Assist pipeline or a realtime assistant answered and whether **Talk right after the wake word** was on.
+The top of the page shows the speaker, the outcome, the mode, who the kiosk answers and the speaker model. With Kiosk Satellite 2026.11.30 or later it also shows the wake word and its engine, whether an Assist pipeline or a realtime assistant answered and whether **Talk right after the wake word** was on. With Kiosk Satellite 2026.11.31 or later it shows how the turn started when it wasn't a wake word: a question from Home Assistant, a follow-up or by hand.
 
 | Section | What it shows |
 | --- | --- |

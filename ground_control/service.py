@@ -64,6 +64,9 @@ class GroundControl:
         self._isolator = None
         self._isolator_lock = threading.Lock()
         self.align = bool(saved.get("aligner", True))
+        self.short_answers = bool(saved.get("short_answers", True))
+        """Take a short reply to a question Home Assistant asked when it
+        sounds like one of the people the kiosk answers (``FollowConfig.short_answers``)."""
         """Leave the end of the wake word out of the command, for a kiosk
         with "Talk right after the wake word" on."""
         self._aligner = None
@@ -108,7 +111,8 @@ class GroundControl:
                 "isolator": self.isolate, "isolator_available": self._isolator_files() != [],
                 "isolator_model": ISOLATOR_MODEL,
                 "isolator_on_gpu": self._isolator.on_gpu if self._isolator is not None else None,
-                "aligner": self.align, "aligner_missing": self._aligner_missing()}
+                "aligner": self.align, "aligner_missing": self._aligner_missing(),
+                "short_answers": self.short_answers}
 
     def update_settings(self, values: dict[str, object]) -> None:
         """Thresholds (for the active model), learning and session keeping. Checked, then saved."""
@@ -144,6 +148,8 @@ class GroundControl:
                 self.isolator()  # load it now, so the first command doesn't wait
         if "aligner" in values:
             self.align = out["aligner"] = bool(values["aligner"])
+        if "short_answers" in values:
+            self.short_answers = out["short_answers"] = bool(values["short_answers"])
         self._save(**out)
 
     def _aligner_missing(self) -> str | None:
@@ -235,14 +241,17 @@ class GroundControl:
 
     def new_follow(self, policy: str = "anyone", anchor=None, people: tuple[str, ...] = (),
                    speaker: str | None = None, isolation: bool = True,
-                   wake: dict[str, object] | None = None) -> "Follow":
+                   wake: dict[str, object] | None = None, asked: bool | None = None) -> "Follow":
         """``isolation``: the kiosk's own switch. Isolation runs when that and
         the service's setting are both on.
 
         ``wake``: what the kiosk said about the wake word (``wake_details``).
         The end of the wake word is looked for only when the kiosk has "Talk
         right after the wake word" on for this session, which is when it
-        reaches the assistant. A follow-up has no wake word of its own."""
+        reaches the assistant. A follow-up has no wake word of its own.
+
+        ``asked``: the turn is a reply to something Home Assistant asked or a
+        follow-up, as the kiosk says. None when it doesn't say."""
         from .follow import Follow, FollowConfig
 
         find = None
@@ -255,7 +264,8 @@ class GroundControl:
                 def find(anchor_audio, head):
                     return aligner.find(anchor_audio, head, str(phrase), language if isinstance(language, str) else None)
 
-        return Follow(FollowConfig(policy=policy, people=people), self.model, self.active, self.vad, self.people,
+        cfg = FollowConfig(policy=policy, people=people, short_answers=asked if self.short_answers else False)
+        return Follow(cfg, self.model, self.active, self.vad, self.people,
                       anchor=anchor, speaker=speaker, isolator=self.isolator() if isolation else None,
                       wake_word_end=find)
 

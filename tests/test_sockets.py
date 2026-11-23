@@ -282,6 +282,49 @@ async def test_an_older_kiosk_says_nothing_about_the_wake_word(client):
     assert wake_details({"wake_word": "  Okay   Nabu ", "seamless": "yes", "assistant": "other", "language": 7,
                          "wake_word_engine": "x" * 200}) == {"wake_word": "Okay Nabu", "wake_word_engine": "x" * 80}
     assert wake_details({"seamless": False, "assistant": "realtime"}) == {"seamless": False, "assistant": "realtime"}
+    # How the turn started: one of four, anything else is left out.
+    assert wake_details({"interaction": "question"}) == {"interaction": "question"}
+    assert wake_details({"interaction": "shouted"}) == {}
+
+
+async def test_a_short_reply_to_a_question_is_taken_and_one_started_by_hand_is_not(client, speakers, voice):
+    """The kiosk says how each turn started (#20). On a kiosk that answers
+    chosen people, a short reply to a question from Home Assistant goes on.
+    The same words in a turn started by hand don't."""
+    r = await client.post("/api/people", json={"name": "Ana"}, headers=GOOD)
+    ana = await r.json()
+    await client.post(f"/api/people/{ana['id']}/enroll", data=wav_bytes(voice[speakers[0]]["enroll"]), headers=GOOD)
+    # The recognition threshold out of reach, as for a real "yes" from across
+    # a room: this clean recording would be recognized by name in any turn.
+    r = await client.patch("/api/settings", json={"threshold": 0.95}, headers=GOOD)
+    assert r.status == 200
+    user = voice[speakers[0]]["test"]
+    probs = client.app[VM].vad.stream().feed(user)
+    first = next(i for i, p in enumerate(probs) if p >= 0.5) * 512
+    quiet = np.zeros(SR // 2, dtype=np.float32)
+    audio = np.concatenate([quiet, user[first:first + int(0.7 * SR)], np.zeros(2 * SR, dtype=np.float32)])
+    ended = {}
+    for interaction in ("question", "manual"):
+        ws = await client.ws_connect("/api/session")
+        await ws.send_json({"type": "start", "token": "good", "ticket": approve(client), "device_id": "k1",
+                            "mode": "follow", "policy": "people", "people": [ana["id"]],
+                            "assistant": "assist", "interaction": interaction})
+        sid = (await next_of(ws, "ready"))["session"]
+        for c in chunks(audio):
+            await ws.send_bytes(float_to_pcm16(c))
+        await ws.send_json({"type": "end"})
+        stats = None
+        while stats is None:
+            msg = await asyncio.wait_for(ws.receive(), 10)
+            assert msg.type in (WSMsgType.BINARY, WSMsgType.TEXT), "socket ended before stats"
+            if msg.type == WSMsgType.TEXT and msg.json()["type"] == "stats":
+                stats = msg.json()
+        ended[interaction] = stats
+        await asyncio.sleep(0.3)
+        record = await (await client.get(f"/api/sessions/{sid}", headers=GOOD)).json()
+        assert record["wake"]["interaction"] == interaction
+    assert not ended["question"]["rejected"] and ended["question"]["speaker"]["by"] == "answer"
+    assert ended["manual"]["rejected"]
 
 
 async def test_a_follow_up_is_saved_in_the_same_session(client, speakers, voice):
