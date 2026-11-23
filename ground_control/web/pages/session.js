@@ -118,13 +118,14 @@ function steps(record) {
     h("span", { class: "t" }, `${Number(t).toFixed(2)} s`)));
 }
 
-/** The end of the wake word at the start of the stream and what was done with it. */
+/** What the Wake Word Aligner found at the start of the stream and what was done with it. */
 function wakeWordStep(p, word) {
   const name = word ? `"${word}"` : "the wake word";
-  if (!p.found) return ["Wake word's end not found", `The end of ${name} wasn't clear enough to tell from the command, so nothing was left out.`, 0];
-  if (!p.t) return ["Wake word over", `${name[0].toUpperCase()}${name.slice(1)} was over before the command's audio started. Nothing to leave out.`, 0];
+  const title = "Wake Word Aligner";
+  if (!p.found) return [title, `The end of ${name} wasn't clear enough to tell from the command, so nothing was left out.`, 0];
+  if (!p.t) return [title, `${name[0].toUpperCase()}${name.slice(1)} was over before the command's audio started. Nothing to leave out.`, 0];
   const how = p.rule === "pause" ? "The user paused after it." : "The command started right after it.";
-  return ["Wake word's end left out", `The first ${Number(p.t).toFixed(2)} s was still ${name}. ${how} It never reached the assistant.`, p.t];
+  return [title, `The first ${Number(p.t).toFixed(2)} s was still ${name} and was left out, in ${p.ms} ms. ${how}`, p.t];
 }
 
 function player(path, title, desc, length) {

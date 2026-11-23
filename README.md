@@ -25,7 +25,7 @@
 
 Ground Control is a companion service for [Kiosk Satellite](https://github.com/jxlarrea/kiosk-satellite). It runs on a computer or server in your home and handles the voice and vision processing that kiosks don't have the computing power for. Install it as a Home Assistant app, or run it in Docker on a CPU or an NVIDIA GPU.
 
-Kiosk Satellite Ground Control currently has two components: **Voice Match** which does speaker voice recognition, trimming and isolation. **Vision Match** which does facial recognition (coming soon).
+Kiosk Satellite Ground Control currently has two components: **Voice Match** which does speaker voice recognition, trimming, wake word alignment and isolation. **Vision Match** which does facial recognition (coming soon).
 
 <p align="center">
   <a href="assets/screenshots/people.png"><img src="assets/screenshots/people.png" alt="Ground Control People" width="650" /></a>
@@ -51,11 +51,15 @@ Turn on **Enable Trimming** in Kiosk Satellite and the kiosk sends everything it
 
 Trimming doesn't just end the command when someone else starts talking, which would lose whatever the user says after the other voice. It cuts the other voice out and keeps the user's words on both sides of it.
 
-With **Talk right after the wake word** on in Kiosk Satellite, the end of the wake word can reach the assistant in front of the command, like the "xa" of "Alexa". Trimming leaves it out, with any wake word and any wake word engine. See [Trimming the Wake Word](docs/voice-match.md#trimming-the-wake-word).
-
 <video src="assets/videos/voice-match-trimming.mp4" controls width="100%"></video>
 
 https://github.com/user-attachments/assets/985faf93-9b86-48ce-bbda-41d91d0a1b49
+
+### Wake Word Aligner
+
+With **Talk right after the wake word** on in Kiosk Satellite, the command's audio starts the moment the wake word is recognized, before the word is over. Its end then reaches the assistant in front of the command: the "xa" of "Alexa" turns "what time is it" into "So what time is it".
+
+With the Wake Word Aligner, the command starts where the wake word ends. It works with any wake word and any wake word engine, since only the wake word's text is needed. It needs Trimming and is on by default. See [Wake Word Aligner](docs/voice-match.md#wake-word-aligner).
 
 ### Isolation
 
@@ -82,6 +86,7 @@ How much latency each feature adds to a 5-second command.
 | Speaker model | Light | Light | Accurate | Accurate | Accurate |
 | Recognition | 0.11 s | 0.02 s | 0.27 s | 0.04 s | 0.02 s |
 | Trimming | <0.01 s | <0.01 s | 0.14 s | 0.02 s | 0.01 s |
+| Wake Word Aligner | 0.05 s | 0.02 s | 0.02 s | <0.01 s | 0.01 s |
 | Isolation | Too slow | Needs Accurate | 5.71 s | 1.21 s | 0.78 s |
 | **All features** | **<0.01 s** (no Isolation) | **<0.01 s** (no Isolation) | **5.85 s** | **1.23 s** | **0.79 s** |
 
@@ -94,10 +99,11 @@ The CPU image with Ground Control's default threads: 2 on the Pi and the N100, 4
 | Speaker model | Accurate | Accurate | Accurate |
 | Recognition | 0.02 s | 0.01 s | 0.01 s |
 | Trimming | 0.01 s | <0.01 s | <0.01 s |
+| Wake Word Aligner | 0.01 s | <0.01 s | 0.01 s |
 | Isolation | 0.23 s | 0.11 s | 0.11 s |
 | **All features** | **0.24 s** | **0.12 s** | **0.12 s** |
 
-The CUDA image: CUDA 12 on the RTX 3050 and the RTX 4000, CUDA 13 on the GB10. Isolation's time grows with the work it does, so a GPU with about half the compute takes about twice as long. The GB10 runs with `KEEP_GPU_MEMORY` on, which keeps Isolation's GPU memory between commands (see [GPU Memory](docs/installation.md#gpu-memory)). Without it, Isolation takes 0.16 s there.
+The CUDA image: CUDA 12 on the RTX 3050 and the RTX 4000, CUDA 13 on the GB10. Isolation's time grows with the work it does, so a GPU with about half the compute takes about twice as long. The GB10 runs with `KEEP_GPU_MEMORY` on, which keeps Isolation's GPU memory between commands (see [GPU Memory](docs/installation.md#gpu-memory)). Without it, Isolation takes 0.16 s there. The Wake Word Aligner runs on the machine's CPU, also in the CUDA image.
 
 ### GPU Memory
 
@@ -118,6 +124,7 @@ A 5 s command between stretches of TV, sent through Ground Control's own code in
 
 - **Recognition** is the time to check a voice. It runs while the user talks and holds nothing up. With a clear wake word, the speaker is known before the user says anything.
 - **Trimming** is the time to decide the command is over once the user stops. Whatever the TV does, the command ends there.
+- **Wake Word Aligner** is the time to find where the wake word ends. It runs once, about a second into the command, while the command's first audio is still held for its voice check. It holds nothing up at the end of the command.
 - **Isolation** runs once the command ends. On a CPU it uses a version of the model made for the CPU (LSTMs in 8 bits), twice as fast and nearly identical.
 - **All features** is what reaches the end of each command: Trimming, then Isolation.
 - On an N100, Ground Control starts on the Light model. Accurate keeps up with one kiosk at a time, but Isolation takes about 6 s with it.
@@ -190,7 +197,7 @@ The GPU needs to be from the GTX 10 series or newer, with an NVIDIA driver from 
 - [Installation](docs/installation.md): the Home Assistant app, Docker on a CPU or an NVIDIA GPU, options and updating.
 - [Kiosks](docs/kiosks.md): connecting and approving kiosks, kiosks on another network and each kiosk's page.
 - [People](docs/people.md): adding people, enrollment and personal commands.
-- [Voice Match](docs/voice-match.md): Recognition, Trimming, Isolation and the speaker models.
+- [Voice Match](docs/voice-match.md): Recognition, Trimming, the Wake Word Aligner, Isolation and the speaker models.
 - [Backup and moving](docs/backup.md): backing up the data and moving it to another machine, as an app or with Docker.
 - [Sessions](docs/sessions.md): what each voice command did, its audio and downloading it for an issue.
 - [Settings](docs/settings.md): every setting and the template for LLM conversation agents.

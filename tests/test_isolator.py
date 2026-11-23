@@ -265,7 +265,7 @@ def test_the_end_of_the_wake_word_is_looked_for_only_when_it_can_reach_the_assis
         def find(self, anchor, head, phrase, language):
             asked.append((phrase, language))
 
-    monkeypatch.setattr(vm, "aligner", lambda: Finds() if vm.trim_wake_word else None)
+    monkeypatch.setattr(vm, "aligner", lambda: Finds() if vm.align else None)
     anchor = np.zeros(2 * SR, dtype=np.float32)
     head = np.zeros(SR, dtype=np.float32)
     wake = {"wake_word": "Alexa", "seamless": True, "language": "fr"}
@@ -278,19 +278,19 @@ def test_the_end_of_the_wake_word_is_looked_for_only_when_it_can_reach_the_assis
         return True
 
     try:
-        assert vm.settings()["trim_wake_word"] is True
+        assert vm.settings()["aligner"] is True
         assert looked(anchor=anchor, wake=wake) and asked == [("Alexa", "fr")]
         assert not looked(anchor=anchor, wake={**wake, "seamless": False})
         assert not looked(anchor=anchor, wake={"seamless": True})
         assert not looked(anchor=anchor, wake=None)
         assert not looked(anchor=None, wake=wake)
         assert not looked(anchor=anchor, wake=wake, speaker="someone")
-        vm.update_settings({"trim_wake_word": False})
-        assert vm.settings()["trim_wake_word"] is False
+        vm.update_settings({"aligner": False})
+        assert vm.settings()["aligner"] is False
         assert not looked(anchor=anchor, wake=wake)
         # Kept across a restart.
         again = GroundControl(cfg)
-        assert again.trim_wake_word is False
+        assert again.align is False
         again.close()
     finally:
         vm.close()
@@ -304,9 +304,9 @@ def test_the_wake_word_aligner_loads_with_the_first_command_that_needs_it(cfg):
     try:
         assert vm._aligner is None
         if aligner.espeak() is None:
-            assert vm.settings()["trim_wake_word_missing"] == "espeak-ng" and vm.aligner() is None
+            assert vm.settings()["aligner_missing"] == "espeak-ng" and vm.aligner() is None
             return
-        assert vm.settings()["trim_wake_word_missing"] is None
+        assert vm.settings()["aligner_missing"] is None
         loaded = vm.aligner()
         assert loaded is not None and vm.aligner() is loaded
         assert "Wake Word Aligner License" in loaded.session.get_modelmeta().custom_metadata_map["license"]

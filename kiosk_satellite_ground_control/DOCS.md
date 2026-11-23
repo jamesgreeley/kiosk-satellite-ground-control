@@ -2,12 +2,13 @@
 
 Ground Control is a companion service for [Kiosk Satellite](https://github.com/jxlarrea/kiosk-satellite). It runs on a computer or server in your home and handles the voice and vision processing that kiosks don't have the computing power for.
 
-Kiosk Satellite Ground Control currently has two components: **Voice Match** which does speaker voice recognition, trimming and isolation. **Vision Match** which does facial recognition (coming soon).
+Kiosk Satellite Ground Control currently has two components: **Voice Match** which does speaker voice recognition, trimming, wake word alignment and isolation. **Vision Match** which does facial recognition (coming soon).
 
 **Voice Match** works with Home Assistant's Assist and the realtime assistants in Kiosk Satellite:
 
 - **Recognition:** who is speaking to a Kiosk Satellite, from the voiceprints of the people enrolled.
 - **Trimming:** other voices, like a TV, are cut out between the user's words, so a TV in the background doesn't keep the assistant listening.
+- **Wake Word Aligner:** the end of the wake word is left out of the command when a kiosk has **Talk right after the wake word** on.
 - **Isolation:** other voices talking over the user's words are removed too. Best on an NVIDIA GPU.
 
 ## The panel
@@ -17,6 +18,8 @@ Ground Control adds a panel to Home Assistant's sidebar. Enroll people there, se
 ## What Kiosk Satellite sends
 
 With **Enable Trimming** on in Kiosk Satellite, a kiosk sends everything its microphone hears, and Home Assistant or the realtime assistant gets back only the speech of the person who said the wake word. A TV or another person before, between and after their words is cut out, and the command ends when they stop. The assistant hears them about a second late while they talk, the time it takes to tell voices apart.
+
+With **Talk right after the wake word** on in Kiosk Satellite too, the end of the wake word is left out of the command, like the "xa" of "Alexa". **Use Wake Word Aligner** under **Settings > Voice Match** turns that off.
 
 With **Isolation** on in the panel, under **Settings > Voice Match**, the command goes out when the user stops talking, with the voices under their words removed too. Each kiosk can turn it off with **Enable Isolation** in Kiosk Satellite. It needs the Accurate speaker model. On a CPU each command waits about a second for it, so it is meant for an NVIDIA GPU.
 

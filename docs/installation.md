@@ -14,7 +14,7 @@ Every Voice Match feature runs on the machine Ground Control is on, not on the k
 | Intel N100 and other small x86 CPUs | Light | About 6 seconds per command with Accurate |
 | Raspberry Pi 4, Home Assistant Green and other ARM boards | Light | Too slow |
 
-See [Performance Benchmarks](../README.md#performance-benchmarks) for the measured times. Isolation is optional, so a small machine still runs Recognition and Trimming.
+See [Performance Benchmarks](../README.md#performance-benchmarks) for the measured times. Isolation is optional, so a small machine still runs Recognition, Trimming and the Wake Word Aligner.
 
 The CUDA image works with NVIDIA GPUs on amd64 from the GTX 10 series (Pascal) to the RTX 50 series (Blackwell), and on arm64 with the GB10 and other Blackwell boards. It needs 1 GB of free GPU memory, or 2.5 GB with Isolation.
 

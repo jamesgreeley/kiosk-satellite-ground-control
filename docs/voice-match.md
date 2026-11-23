@@ -6,6 +6,7 @@ Voice Match is Ground Control's first set of features: who is speaking to a kios
 
 - **Recognition:** who is speaking, from the voiceprints of the people enrolled.
 - **Trimming:** a TV or another person before, between and after the user's words is cut out of the command, and the command ends when the user stops.
+- **Wake Word Aligner:** the end of the wake word is left out of the command when the kiosk has **Talk right after the wake word** on.
 - **Isolation:** other voices talking over the user's words are removed too.
 
 Without Voice Match, a TV in the background can keep the assistant listening for many seconds after the command is over, and its words end up in the command.
@@ -46,18 +47,33 @@ After a turn, a voice has to sound clearly like the user to start another turn i
 
 The **Other voice threshold** decides when someone else is talking: two checks in a row under it mean another voice.
 
-### Trimming the Wake Word
+## Wake Word Aligner
 
 With **Talk right after the wake word** on in Kiosk Satellite, the command's audio starts the moment the wake word is recognized. A wake word engine recognizes the word before it is over, so its end can reach the assistant in front of the command. The "xa" of "Alexa" turns "what time is it" into "So what time is it".
 
-**Trim the wake word** leaves that end out. The wake word and the first 0.8 seconds of the command are checked for where the wake word ends and the command starts there:
+The Wake Word Aligner leaves that end out. The wake word and the first 0.8 seconds of the command are checked for where the wake word ends and the command starts there:
 
 - **It works with every wake word and every wake word engine.** Only the wake word's text is needed, pronounced in English and in the kiosk's language, so a custom wake word works too.
 - **A command said in one breath with the wake word gets half a second of silence in front.** Speech-to-text hears an extra word in audio that starts on a sound.
 - **When the end of the wake word isn't clear, nothing is left out** and the command goes on as it did before.
-- **It doesn't delay the command.** It takes about 5 ms on a fast x86 CPU, 9 ms on an Intel N100 and 38 ms on a Raspberry Pi 4, while the command is still held for its first voice check.
+- **It doesn't delay the command.** It runs once, while the command's first audio is still held for its voice check.
 
-It runs for kiosks with **Enable Trimming** and **Talk right after the wake word** on, with Kiosk Satellite 2026.11.30 or later. A session's page shows where the wake word ended under **Steps**.
+It always runs on the CPU, also in the CUDA image:
+
+| Machine | Time per command |
+| --- | --- |
+| Fast x86 CPU | About 4 ms |
+| MacBook Pro M5, in Docker | About 10 ms |
+| Intel N100 | About 15 ms |
+| Raspberry Pi 4 | About 50 ms |
+
+The Wake Word Aligner needs:
+
+1. **Use Wake Word Aligner** on in Ground Control, under **Settings > Voice Match**. It is on by default.
+2. **Enable Trimming** and **Talk right after the wake word** on in Kiosk Satellite on each kiosk that uses it.
+3. Kiosk Satellite 2026.11.30 or later.
+
+A session's page shows where the wake word ended under **Steps**.
 
 ## Isolation
 
@@ -99,7 +115,8 @@ Ground Control picks Accurate on an NVIDIA GPU, an Apple M-series chip or an x86
 | Learn from commands | on | Confident commands fold into the speaker's voice, so it follows colds and room changes. |
 | **Trimming** | | |
 | Other voice threshold | 0.29 Accurate, 0.26 Light | Two checks in a row under this score mean someone else is talking. |
-| Trim the wake word | on | Leaves the end of the wake word out of the command, for kiosks with Trimming and **Talk right after the wake word** on in Kiosk Satellite. See [Trimming the Wake Word](#trimming-the-wake-word). |
+| **Wake Word Aligner** | | |
+| Use Wake Word Aligner | on | Leaves the end of the wake word out of the command, for kiosks with Trimming and **Talk right after the wake word** on in Kiosk Satellite. See [Wake Word Aligner](#wake-word-aligner). |
 | **Isolation** | | |
 | Use Isolation | off | Removes other voices under the user's words, for kiosks with Trimming and Isolation on in Kiosk Satellite. Needs the Accurate model. |
 | Runs on | | NVIDIA GPU (CUDA) or CPU, set by the image. |

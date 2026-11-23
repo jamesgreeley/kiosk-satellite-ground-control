@@ -63,7 +63,7 @@ class GroundControl:
         self.isolate = bool(saved.get("isolator", False))
         self._isolator = None
         self._isolator_lock = threading.Lock()
-        self.trim_wake_word = bool(saved.get("trim_wake_word", True))
+        self.align = bool(saved.get("aligner", True))
         """Leave the end of the wake word out of the command, for a kiosk
         with "Talk right after the wake word" on."""
         self._aligner = None
@@ -108,7 +108,7 @@ class GroundControl:
                 "isolator": self.isolate, "isolator_available": self._isolator_files() != [],
                 "isolator_model": ISOLATOR_MODEL,
                 "isolator_on_gpu": self._isolator.on_gpu if self._isolator is not None else None,
-                "trim_wake_word": self.trim_wake_word, "trim_wake_word_missing": self._aligner_missing()}
+                "aligner": self.align, "aligner_missing": self._aligner_missing()}
 
     def update_settings(self, values: dict[str, object]) -> None:
         """Thresholds (for the active model), learning and session keeping. Checked, then saved."""
@@ -142,8 +142,8 @@ class GroundControl:
             self.isolate = out["isolator"] = on
             if on:
                 self.isolator()  # load it now, so the first command doesn't wait
-        if "trim_wake_word" in values:
-            self.trim_wake_word = out["trim_wake_word"] = bool(values["trim_wake_word"])
+        if "aligner" in values:
+            self.align = out["aligner"] = bool(values["aligner"])
         self._save(**out)
 
     def _aligner_missing(self) -> str | None:
@@ -158,7 +158,7 @@ class GroundControl:
     def aligner(self):
         """The Wake Word Aligner, loaded with the first command that needs
         it. None when it is off or can't run here."""
-        if not self.trim_wake_word or self._aligner_failed:
+        if not self.align or self._aligner_failed:
             return None
         with self._aligner_lock:
             if self._aligner is None and not self._aligner_failed:
@@ -167,8 +167,8 @@ class GroundControl:
                 missing = self._aligner_missing()
                 if missing:
                     self._aligner_failed = True
-                    _LOG.warning("the end of the wake word can't be left out: %s", "the Wake Word Aligner model is "
-                                 "not in this install" if missing == "model" else "espeak-ng is not installed")
+                    _LOG.warning("the Wake Word Aligner can't run: %s", "its model is not in this install"
+                                 if missing == "model" else "espeak-ng is not installed")
                     return None
                 try:
                     self._aligner = Aligner(verified_path(self.cfg.models_dir, ALIGNER_FILE, ALIGNER_SHA256),
