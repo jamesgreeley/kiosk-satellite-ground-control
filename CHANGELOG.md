@@ -2,7 +2,7 @@
 
 All notable changes to Kiosk Satellite Ground Control are documented here.
 
-## Unreleased
+## v2026.11.12 - 2026-11-23
 
 ### Added
 - **Wake Word Aligner (#19).** With **Talk right after the wake word** on in Kiosk Satellite, the end of the wake word reached the assistant in front of the command, like the "xa" of "Alexa". Speech-to-text then heard an extra word: "So what time is it". For kiosks with Trimming on, the end of the wake word is now found and left out. A command said in one breath with the wake word gets half a second of silence in front. It works with every wake word and every wake word engine, since only the wake word's text is needed, pronounced in English and in the kiosk's language. It takes 4 ms on a fast x86 CPU and 50 ms on a Raspberry Pi 4, once per command, and doesn't delay the command. The README's performance tables have its time on every machine. When the end of the wake word isn't clear, nothing is left out. **Use Wake Word Aligner** is on by default under **Settings > Voice Match** and needs Kiosk Satellite 2026.11.30 or later. See [Wake Word Aligner](docs/voice-match.md#wake-word-aligner).
