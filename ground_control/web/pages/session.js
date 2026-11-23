@@ -1,7 +1,8 @@
 import { api, audioBytes, audioUrl } from "../api.js";
 import { shell } from "../app.js";
+import { loudness } from "../loudness.js";
 import { analyze, draw } from "../spectrogram.js";
-import { answersLabel, ask, chip, clock, h, icon, modeLabel, outcome, outcomeChip, secs, section, toast } from "../ui.js";
+import { answersLabel, ask, chip, clock, h, icon, inform, modeLabel, outcome, outcomeChip, secs, section, toast } from "../ui.js";
 
 const BARS = 104;
 
@@ -123,7 +124,8 @@ function player(path, title, desc, length) {
   const canvas = h("canvas", { role: "img", "aria-label": `Spectrogram of ${title.toLowerCase()}` });
   const head = h("div", { class: "ph" });
   const spec = h("div", { class: "spec", hidden: true }, canvas, head);
-  const info = { path, canvas, spec, at: null };
+  const lv = h("div", { class: "lv", hidden: true });
+  const info = { path, title, canvas, spec, lv, at: null };
   const follow = () => {
     if (audio.duration) head.style.left = `${(info.at ? info.at(audio.currentTime) : audio.currentTime / audio.duration) * 100}%`;
     if (!audio.paused) requestAnimationFrame(follow);
@@ -141,7 +143,7 @@ function player(path, title, desc, length) {
   audio.addEventListener("ended", () => { btn.replaceChildren(icon("play", 20)); spec.classList.remove("on"); });
   return [h("div", { class: "row" }, btn,
     h("div", { class: "grow" }, h("div", { class: "rt" }, title), h("div", { class: "rd" }, desc)),
-    h("span", { class: "t" }, length), spec), audio, info];
+    h("span", { class: "t" }, length), spec, lv), audio, info];
 }
 
 /** What went to the assistant, put back where it was in what the kiosk heard,
@@ -168,11 +170,62 @@ function heardAt(t, released) {
   return released.length ? released[released.length - 1][1] : 0;
 }
 
+// The level tiles under a spectrogram: what each is, how far its meter goes
+// from the bottom of the scale to its top and what it means.
+const TILES = [
+  ["over", "Speech over noise", "dB", 0, 60, "How far the speech stood over the noise floor: Speech minus Noise floor. The higher it is, the clearer the voice was over the room."],
+  ["peak", "Peak", "dBFS", -90, 0, "The loudest single sample. At 0 dBFS the audio clipped: it was louder than the microphone or the kiosk's audio processing can record, which distorts it."],
+  ["speech", "Speech", "dBFS", -90, 0, "How loud the voice was: the average of the 10 loudest 20 ms stretches."],
+  ["average", "Average", "dBFS", -90, 0, "The level across the whole recording, speech and pauses together. Silence put in for what was left out doesn't count."],
+  ["floor", "Noise floor", "dBFS", -90, 0, "How loud it was between words: the room, a TV, a fan. It's the level 20% of the way up from the quietest 20 ms stretches."],
+];
+
+// One decimal, with a real minus sign and no minus on a zero.
+function num(v) {
+  const r = Math.round(v * 10) / 10;
+  return r < 0 ? `\u2212${(-r).toFixed(1)}` : r.toFixed(1);
+}
+
+const shown = (key, v) => (key === "over" && Math.round(v * 10) > 0 ? `+${num(v)}` : num(v));
+
+/** Every level of one recording, with what each means. */
+function levelsDialog(title, l) {
+  inform({
+    title: `${title} levels`,
+    content: h("div", { class: "lvd" },
+      TILES.map(([key, label, unit, , , about]) => h("div", { class: `lvdr ${key === "over" ? "key" : ""}` },
+        h("div", { class: "lvdh" },
+          h("span", { class: "lvdk" }, key === "peak" && l.clipped ? "Peak, clipped" : label),
+          h("span", { class: `lvdv ${key === "peak" && l.clipped ? "warn" : ""}` }, shown(key, l[key]), h("small", {}, unit))),
+        h("p", { class: "lvdx" }, about))),
+      h("p", { class: "lvdn" }, "dBFS counts down from 0, the loudest a recording can be: \u221220 dBFS is quieter than \u221210 dBFS.")),
+  });
+}
+
+function levelTiles(title, l) {
+  const open = () => levelsDialog(title, l);
+  return TILES.map(([key, label, unit, lo, hi]) => {
+    const v = l[key];
+    const warn = key === "peak" && l.clipped;
+    return h("button", { class: `lvc ${key === "over" ? "key" : ""} ${warn ? "warn" : ""}`, onclick: open,
+      "aria-label": `${label}: ${shown(key, v)} ${unit}. Show all the levels` },
+      h("span", { class: "lvk" }, warn ? "Peak, clipped" : label),
+      h("span", { class: "lvv" }, shown(key, v), h("small", {}, unit)),
+      h("span", { class: "lvm" }, h("i", { style: { width: `${Math.max(0, Math.min(1, (v - lo) / (hi - lo))) * 100}%` } })));
+  });
+}
+
 /** Each row's spectrogram, all against the loudest sound the kiosk heard, so
  * what was left out or removed shows up dark. */
 async function spectrograms(rows, raw) {
   const levels = await Promise.all(rows.map((r) => (r.path.endsWith("/audio/raw") && raw ? raw : audioBytes(r.path))
-    .then((buf) => { r.buf = buf; return analyze(r.place ? r.place(pcm(buf)) : pcm(buf)); }).catch(() => null)));
+    .then((buf) => {
+      r.buf = buf;
+      // The levels of the audio itself, not of the silence it's placed in.
+      const l = loudness(pcm(buf));
+      if (l) { r.lv.replaceChildren(...levelTiles(r.title, l)); r.lv.hidden = false; }
+      return analyze(r.place ? r.place(pcm(buf)) : pcm(buf));
+    }).catch(() => null)));
   const heard = levels[rows.findIndex((r) => r.path.endsWith("/audio/raw"))];
   const top = heard ? heard.max : Math.max(...levels.filter(Boolean).map((l) => l.max));
   rows.forEach((r, i) => {
@@ -294,14 +347,13 @@ export async function render({ id }) {
           chartKey(record, color)),
         h("div", { class: "cols" },
           h("section", {}, section("Steps"), h("div", { class: "card" }, steps(record),
-            h("div", { class: "row" }, h("div", { class: "grow" }, h("div", { class: "rt" }, "Result"), h("div", { class: "rd" }, `${outcome(stats)}. ${stats.checks ?? 0} checks, ${stats.cpu_ms ?? 0} ms of CPU.${stats.isolated_ms !== undefined ? ` Isolation: ${stats.isolated_ms} ms.` : ""}`))))),
-          h("section", {},
-            section("Audio"), h("div", { class: "card" }, audioSection),
+            h("div", { class: "row" }, h("div", { class: "grow" }, h("div", { class: "rt" }, "Result"), h("div", { class: "rd" }, `${outcome(stats)}. ${stats.checks ?? 0} checks, ${stats.cpu_ms ?? 0} ms of CPU.${stats.isolated_ms !== undefined ? ` Isolation: ${stats.isolated_ms} ms.` : ""}`)))),
             section("Use this voice"),
             h("div", { class: "card" },
               h("div", { class: "row" },
                 h("div", { class: "grow" }, h("div", { class: "rt" }, "Add to a person"), h("div", { class: "rd" }, follow ? "The user's speech is added, without the voices left out." : "Only the speech before another voice is added.")),
-                who, h("button", { class: "btn out", onclick: add, disabled: !record.has_audio || !people.length }, "Add")))))),
+                who, h("button", { class: "btn out", onclick: add, disabled: !record.has_audio || !people.length }, "Add")))),
+          h("section", {}, section("Audio"), h("div", { class: "card" }, audioSection)))),
     ],
     cleanup: () => audios.forEach((a) => { a.pause(); if (a.src) URL.revokeObjectURL(a.src); }),
   };

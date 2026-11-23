@@ -174,6 +174,21 @@ export function ask({ title, text = null, field = null, ok = "OK", danger = fals
   });
 }
 
+/** A dialog that only tells: ``content`` and a Close button. */
+export function inform({ title, content }) {
+  const dlg = h("dialog", { class: "dlg", "aria-labelledby": "dlg-title" });
+  const done = () => { dlg.close(); dlg.remove(); };
+  append(dlg, [
+    h("h2", { class: "dlgt", id: "dlg-title" }, title),
+    content,
+    h("div", { class: "dlgb" }, h("button", { class: "btn fill", onclick: done }, "Close"))]);
+  dlg.addEventListener("cancel", (e) => { e.preventDefault(); done(); });
+  dlg.addEventListener("click", (e) => { if (e.target === dlg) done(); });
+  document.body.append(dlg);
+  dlg.showModal();
+  dlg.querySelector(".btn.fill").focus();
+}
+
 let toastTimer = null;
 export function toast(text) {
   document.querySelector(".toast")?.remove();

@@ -2,6 +2,14 @@
 
 All notable changes to Kiosk Satellite Ground Control are documented here.
 
+## Unreleased
+
+### Added
+- **Audio levels in a session (#17).** Under each spectrogram, a session shows how loud that audio was: its peak, the speech, the average and the noise floor in dBFS, and how far the speech stood over the noise floor in dB. A peak at 0 dBFS shows as clipped. Click any of them for all the levels and what each one means.
+
+### Changed
+- **Use this voice under Steps.** On a session's page, **Use this voice** moved to the left column under **Steps**, so the longer **Audio** card has the right column to itself.
+
 ## v2026.11.10 - 2026-11-22
 
 ### Changed

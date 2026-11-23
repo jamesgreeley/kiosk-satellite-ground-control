@@ -312,3 +312,40 @@ tbody tr:hover td { background: var(--s2); }
 .spec canvas { display: block; width: 100%; height: 100%; }
 .spec .ph { position: absolute; top: 0; bottom: 0; left: 0; width: 2px; margin-left: -1px; background: #fff; opacity: 0; }
 .spec.on .ph { opacity: 0.9; }
+/* A session's audio levels, under each spectrogram: how far the speech
+   stood over the noise on the left, the levels it comes from on the right. */
+.lv { flex: 0 0 calc(100% - 52px); margin: 6px 0 2px 52px; display: grid; grid-template-columns: minmax(112px, 0.85fr) 1fr 1fr; gap: 6px; }
+.lv[hidden] { display: none; }
+.lvc { display: flex; flex-direction: column; gap: 4px; padding: 9px 12px 10px; border: 0; border-radius: 12px; background: var(--s2); color: var(--text); font: inherit; text-align: left; min-width: 0; cursor: pointer; transition: background .15s; }
+.lvc:hover { background: color-mix(in srgb, var(--text) 8%, var(--s2)); }
+.lvc.key:hover { background: color-mix(in srgb, var(--primary) 14%, var(--soft)); }
+.lvc:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.lvk { font-size: 11.5px; font-weight: 600; color: var(--muted); letter-spacing: 0.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lvv { font-size: 16px; font-weight: 600; line-height: 1.1; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.lvv small { font-size: 11px; font-weight: 500; color: var(--muted); margin-left: 3px; }
+.lvm { display: block; height: 4px; margin-top: auto; border-radius: 2px; background: color-mix(in srgb, var(--outline) 35%, transparent); overflow: hidden; }
+.lvm i { display: block; height: 100%; border-radius: 2px; background: var(--outline); }
+.lvc.key { grid-column: 1; grid-row: 1 / span 2; background: var(--soft); justify-content: center; gap: 6px; padding: 12px 14px; }
+.lvc.key .lvk, .lvc.key .lvv, .lvc.key .lvv small { color: var(--primary); }
+.lvc.key .lvk { white-space: normal; line-height: 1.25; }
+.lvc.key .lvv { font-size: 26px; letter-spacing: -0.01em; }
+.lvc.key .lvm { margin-top: 4px; }
+.lvc.key .lvm i { background: var(--primary); }
+.lvc.warn .lvk, .lvc.warn .lvv { color: var(--error); }
+.lvc.warn .lvm i { background: var(--error); }
+/* All of a recording's levels, in a dialog. */
+.lvd { display: flex; flex-direction: column; gap: 6px; }
+.lvdr { padding: 10px 14px 11px; border-radius: 14px; background: var(--s2); }
+.lvdr.key { background: var(--soft); }
+.lvdh { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.lvdk { font-size: 14.5px; font-weight: 600; }
+.lvdr.key .lvdk, .lvdr.key .lvdv { color: var(--primary); }
+.lvdv { font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.lvdv.warn { color: var(--error); }
+.lvdv small { font-size: 11.5px; font-weight: 500; color: var(--muted); margin-left: 3px; }
+.lvdx { margin: 4px 0 0; font-size: 13px; line-height: 1.45; color: var(--muted); }
+.lvdn { margin: 8px 2px 0; font-size: 13px; line-height: 1.45; color: var(--muted); }
+@media (max-width: 640px) {
+  .lv { flex-basis: 100%; margin-left: 0; grid-template-columns: 1fr 1fr; }
+  .lvc.key { grid-column: 1 / -1; grid-row: auto; order: -1; }
+}
