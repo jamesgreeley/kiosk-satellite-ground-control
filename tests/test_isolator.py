@@ -128,7 +128,7 @@ def isolator():
 
 def test_the_model_carries_its_license(isolator):
     meta = isolator.session.get_modelmeta().custom_metadata_map
-    assert meta["license"].startswith("CC BY-NC-ND 4.0")
+    assert meta["license"].startswith("Kiosk Satellite Ground Control Voice Isolator License")
     assert "Copyright" in meta["copyright"]
     assert isolator.version == meta["version"]
 

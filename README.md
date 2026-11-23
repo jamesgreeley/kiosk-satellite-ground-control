@@ -202,4 +202,6 @@ Thank you to everyone who supports my work through [Buy Me a Coffee](https://buy
 
 Free for personal, non-commercial use under [CC BY-NC-ND 4.0](LICENSE). Commercial use and redistribution of modified builds are not permitted.
 
-Each model has its license next to it in `models/`, in a file named after the model. ReDimNet2 by Palabra.ai and Silero VAD by the Silero Team keep their MIT licenses. The Voice Isolator model is under CC BY-NC-ND 4.0, like the rest of Ground Control.
+Each model has its license next to it in `models/`, in a file named after the model. ReDimNet2 by Palabra.ai and Silero VAD by the Silero Team keep their MIT licenses.
+
+The Voice Isolator models are under their own [license](models/voice_isolator.LICENSE.md), not CC BY-NC-ND 4.0. They may only be used as part of Ground Control with Kiosk Satellite. They may not be redistributed on their own or with other software, converted, modified or used to train other models.

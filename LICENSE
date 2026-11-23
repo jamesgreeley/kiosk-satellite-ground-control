@@ -34,5 +34,11 @@ The full legal text of the license is available at:
 https://creativecommons.org/licenses/by-nc-nd/4.0/legalcode
 
 Each model in models/ has its license next to it, in a file named after the
-model (for example models/voice_isolator.LICENSE.md). The speaker and voice
-activity models are third-party work under their own MIT licenses.
+model, and is not covered by this license. The speaker and voice activity
+models are third-party work under their own MIT licenses.
+
+The Voice Isolator models (models/voice_isolator.onnx and models/voice_isolator_cpu.onnx) are
+under the Kiosk Satellite Ground Control Voice Isolator License in
+models/voice_isolator.LICENSE.md: they may only be used as part of Kiosk
+Satellite Ground Control with Kiosk Satellite and may not be redistributed
+apart from it.

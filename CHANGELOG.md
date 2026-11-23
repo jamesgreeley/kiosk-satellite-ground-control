@@ -2,6 +2,11 @@
 
 All notable changes to Kiosk Satellite Ground Control are documented here.
 
+## Unreleased
+
+### Changed
+- **Voice Isolator license.** The Voice Isolator models have their own license instead of CC BY-NC-ND 4.0, which allowed anyone to share them on their own. They may only be used as part of Ground Control with Kiosk Satellite and may not be redistributed apart from Ground Control, converted, modified or used to train other models. See `models/voice_isolator.LICENSE.md`. The models' own metadata names the new license too, and their weights are the same. The rest of Ground Control stays under CC BY-NC-ND 4.0.
+
 ## v2026.11.11 - 2026-11-22
 
 ### Added
