@@ -318,6 +318,32 @@ def _check_features(vm: GroundControl, device_id: str | None, features: dict[str
 
 # ── sessions ──────────────────────────────────────────────────────────────
 
+WAKE_TEXT = ("wake_word", "wake_word_engine", "wake_word_model", "language")
+
+
+def wake_details(start: dict[str, Any]) -> dict[str, Any]:
+    """What a kiosk says about how a session started, all of it optional (an
+    older Kiosk Satellite sends none):
+
+    - ``wake_word``: the wake word as it is said, such as "Okay Nabu".
+    - ``wake_word_engine`` and ``wake_word_model``: what heard it.
+    - ``seamless``: "Talk right after the wake word" is on, so the stream
+      starts when the engine fired and can hold the end of the wake word.
+    - ``assistant``: ``assist`` (a Home Assistant Assist pipeline) or ``realtime``.
+    - ``language``: the kiosk's language, for how the wake word is said there.
+    """
+    out: dict[str, Any] = {}
+    for key in WAKE_TEXT:
+        value = start.get(key)
+        if isinstance(value, str) and value.strip():
+            out[key] = " ".join(value.split())[:80]
+    if isinstance(start.get("seamless"), bool):
+        out["seamless"] = start["seamless"]
+    if start.get("assistant") in ("assist", "realtime"):
+        out["assistant"] = start["assistant"]
+    return out
+
+
 async def session_ws(request: web.Request) -> web.WebSocketResponse:
     vm = request.app[VM]
     ws, start = await _kiosk_start(request)
@@ -331,6 +357,7 @@ async def session_ws(request: web.Request) -> web.WebSocketResponse:
         await ws.close(code=4400, message=b"bad mode or policy")
         return ws
     people = tuple(people) if policy == "people" else ()
+    wake = wake_details(start)
     if mode == "follow":
         anchor = None
         if isinstance(start.get("anchor"), str):
@@ -340,7 +367,9 @@ async def session_ws(request: web.Request) -> web.WebSocketResponse:
                 anchor = None
         speaker = start.get("speaker") if isinstance(start.get("speaker"), str) else None
         isolation = start.get("isolation") is not False
-        session = await vm.run(vm.new_follow, policy, anchor, people, speaker, isolation)
+        # A follow-up has no wake word of its own: nothing to leave out.
+        first = speaker is None and not start.get("continues")
+        session = await vm.run(vm.new_follow, policy, anchor, people, speaker, isolation, wake if first else None)
     else:
         session = vm.new_session(mode=mode, policy=policy, people=people, learn=start.get("learn"))
     device_id = start.get("device_id")
@@ -357,8 +386,9 @@ async def session_ws(request: web.Request) -> web.WebSocketResponse:
     started = time.time()
     kept: list[dict[str, Any]] = []
     who = kiosk.name if kiosk else device_id or "an unknown kiosk"
-    _LOG.info("session %s from %s: %s mode, answers %s%s%s", sid, who, mode, policy,
-              f" ({len(people)} chosen)" if policy == "people" else "", ", a follow-up" if joins else "")
+    _LOG.info("session %s from %s: %s mode, answers %s%s%s%s", sid, who, mode, policy,
+              f" ({len(people)} chosen)" if policy == "people" else "", ", a follow-up" if joins else "",
+              _wake_text(wake))
     if policy == "people":
         _check_people(vm, device_id, people)
     vm.hub.publish({"type": "session_start", "session": sid, "device_id": device_id, "mode": mode})
@@ -423,9 +453,14 @@ async def session_ws(request: web.Request) -> web.WebSocketResponse:
                   "other_threshold": vm.model.other_threshold,
                   "events": [e for e in kept if e["type"] != "stats"], "timeline": session.timeline,
                   "stats": stats}
+        if wake:
+            record["wake"] = wake
         if mode == "follow":
             # What went to the assistant, in seconds of what the kiosk sent.
             record["released"] = [[round(a / 16000, 3), round(b / 16000, 3)] for a, b in session.released]
+            if session.lead_in_s:
+                # Silence at the start of the sent audio that isn't in what the kiosk sent.
+                record["lead_in_s"] = session.lead_in_s
         if joins:
             await vm.run(vm.sessions.append, sid, record, session.raw_audio(), session.cleaned_audio())
         else:
@@ -848,6 +883,19 @@ def _event_text(e: dict[str, Any]) -> str:
     return f"{e['type']}{at}" + (f" {json.dumps(rest, separators=(',', ':'))}" if rest else "")
 
 
+def _wake_text(wake: dict[str, Any]) -> str:
+    """What the kiosk said about how a session started, for its line in the log."""
+    parts = []
+    if wake.get("wake_word"):
+        engine = f" ({wake['wake_word_engine']})" if wake.get("wake_word_engine") else ""
+        parts.append(f'wake word "{wake["wake_word"]}"{engine}')
+    if wake.get("seamless"):
+        parts.append("talk right after the wake word")
+    if wake.get("assistant"):
+        parts.append("a realtime assistant" if wake["assistant"] == "realtime" else "an Assist pipeline")
+    return "".join(f", {p}" for p in parts)
+
+
 def _session_text(stats: dict[str, Any], events: list[dict[str, Any]]) -> str:
     """How a session went, in one line: who, why it ended and how much audio."""
     speaker = stats.get("speaker") or {}
@@ -866,6 +914,8 @@ def _session_text(stats: dict[str, Any], events: list[dict[str, Any]]) -> str:
         parts.append(f"{stats['turns']} turns, {stats.get('released_s', 0)} s to the assistant")
     if stats.get("dropped_s"):
         parts.append(f"{stats['dropped_s']} s of other voices left out")
+    if stats.get("wake_word_s"):
+        parts.append(f"{stats['wake_word_s']} s of the wake word left out")
     if stats.get("cpu_ms") is not None:
         parts.append(f"{stats['cpu_ms']} ms of CPU")
     return ", ".join(parts)

@@ -14,10 +14,12 @@ Each row shows when the session started, the kiosk, the speaker, the mode, the o
 
 ## A Session's Page
 
+The top of the page shows the speaker, the outcome, the mode, who the kiosk answers and the speaker model. With Kiosk Satellite 2026.11.30 or later it also shows the wake word and its engine, whether an Assist pipeline or a realtime assistant answered and whether **Talk right after the wake word** was on.
+
 | Section | What it shows |
 | --- | --- |
 | Timeline | The waveform of the session colored by who was talking, the voice scores over time against the thresholds and where speech started and stopped. With Trimming, it marks the parts sent to the assistant and the other voices left out. |
-| Steps | Each step in order: the wake word and who said it, the user starting to talk, each recognition, other voices, Isolation and why the session ended. **Result** sums it up with the number of checks, the CPU time and how long Isolation took. |
+| Steps | Each step in order: the wake word and who said it, where the wake word ended when its end was left out, the user starting to talk, each recognition, other voices, Isolation and why the session ended. **Result** sums it up with the number of checks, the CPU time and how long Isolation took. |
 | Audio | The audio as heard by the kiosk's microphone, the audio sent to the assistant and the wake word. |
 | Use this voice | Adds the user's speech from this session to a person. |
 

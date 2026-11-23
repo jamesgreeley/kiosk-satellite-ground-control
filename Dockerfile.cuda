@@ -44,7 +44,8 @@ LABEL org.opencontainers.image.title="Kiosk Satellite Ground Control" \
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 MODELS_DIR=/app/models CUDA=true \
     PIP_BREAK_SYSTEM_PACKAGES=1 NVIDIA_VISIBLE_DEVICES=all NVIDIA_DRIVER_CAPABILITIES=compute,utility
 
-RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-pip \
+# espeak-ng says how a wake word is pronounced, to find where it ends.
+RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-pip espeak-ng \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=cuda /cuda/ /usr/local/lib/cuda/
@@ -65,7 +66,7 @@ RUN pip install --no-cache-dir . && pip uninstall -y onnxruntime \
     && rm -f /usr/local/lib/python3*/dist-packages/onnxruntime/capi/libonnxruntime_providers_tensorrt.so \
     && rm -rf /root/.cache
 COPY models/silero_vad.onnx models/redimnet2_b3_multi.onnx models/redimnet2_b1.onnx models/voice_isolator.onnx models/voice_isolator_cpu.onnx \
-     models/*.LICENSE.md ./models/
+     models/wake_word_aligner.onnx models/*.LICENSE.md ./models/
 
 VOLUME /data
 EXPOSE 10900

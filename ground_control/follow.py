@@ -31,11 +31,19 @@ and the released stretches are cut from its output.
 - ``rejected``: the device only takes enrolled voices and this isn't one.
   Nothing more is released.
 - ``stats``: from ``finish``.
+
+With "Talk right after the wake word" on, the kiosk's stream starts the
+moment the wake word engine fires, before the word is over, so its end would
+go to the backend in front of the command ("xa turn on the lights"). When
+the kiosk says so, the end of the wake word is found (``aligner``) and the
+user's speech only counts from there.
 """
 
 from __future__ import annotations
 
+import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -46,6 +54,8 @@ from .engine import Embedder
 from .models import ISOLATOR_MODEL, SpeakerModel
 from .people import People
 from .vad import FRAME, VadModel
+
+_LOG = logging.getLogger(__name__)
 
 SR = SAMPLE_RATE
 MAX_AUDIO_EVENT = SR // 2
@@ -117,12 +127,28 @@ class FollowConfig:
     household_wait_s: float = 2.5
     """Without a wake word, a device that answers anyone waits this much speech
     for an enrolled voice, then follows the voice it heard."""
+    wake_word_wait_s: float = 0.8
+    """With the end of the wake word to find, nothing is decided until this
+    much of the stream is in: the end of the word and the start of the
+    command are in it. It costs no time, since a frame is only decided once
+    the voice check centered on it is in, which is later than this."""
+    lead_in_s: float = 0.5
+    """A command said in one breath with the wake word starts right where the
+    word was cut, with none of the quiet a command has in front of it. Speech
+    to text hears a word in audio that starts on a sound ("So what time is
+    it"), so this much silence goes in front."""
+    fade_in_s: float = 0.015
+    """The first of the audio after that silence fades in, so the cut doesn't click."""
 
 
 class Follow:
     def __init__(self, cfg: FollowConfig, model: SpeakerModel, embedder: Embedder,
                  vad: VadModel, people: People, anchor: np.ndarray | None = None,
-                 speaker: str | None = None, isolator=None) -> None:
+                 speaker: str | None = None, isolator=None,
+                 wake_word_end: Callable[[np.ndarray, np.ndarray], Any] | None = None) -> None:
+        """``wake_word_end``: finds the end of the wake word from the anchor
+        and the start of the stream (``Aligner.find``), for a kiosk with "Talk
+        right after the wake word" on. Without it nothing is looked for."""
         self.cfg = cfg
         self.isolator = isolator
         """Isolation's model (the Voice Isolator), or None. It needs the Accurate model's voiceprints."""
@@ -200,6 +226,15 @@ class Follow:
         self._household_settled = False
         self.anchor_audio = anchor.astype(np.float32) if anchor is not None else None
         """The wake word as the kiosk sent it, for the session's audio."""
+        self._find_end = wake_word_end if anchor is not None and len(anchor) else None
+        """Set until the end of the wake word has been looked for."""
+        self._wake_end = 0
+        """How much of the stream's start is still the wake word, in samples."""
+        self._lead_in_due = False
+        self.wake_word: dict[str, Any] | None = None
+        """What looking for the end of the wake word found, once it has run."""
+        self.lead_in_s = 0.0
+        """Silence put in front of the command, at the start of the sent audio."""
         if anchor is not None and len(anchor):
             self._take_anchor(anchor.astype(np.float32))
         if speaker and not self._identified:
@@ -279,6 +314,8 @@ class Follow:
             was = self._speech[-1] if self._speech else False
             self._speech.append(p >= cfg.speech_threshold or (was and p >= cfg.speech_release))
             self._maybe_check(len(self._speech) * FRAME)
+        if self._find_end is not None and self.n >= int(cfg.wake_word_wait_s * SR):
+            self._find_wake_word_end()
         if self._waiting_for_household(False) and any(self._speech):
             last = len(self._speech) - 1 - self._speech[::-1].index(True)
             if self.n - (last + 1) * FRAME >= cfg.eos_silence_s * SR:
@@ -327,6 +364,7 @@ class Follow:
             "checks": sum(1 for x in self.timeline if x["kind"] == "check"),
             "cpu_ms": round(self._cpu * 1000),
             **({"isolated_ms": self.isolated_ms} if self.isolator is not None else {}),
+            **({"wake_word_s": round(self._wake_end / SR, 2)} if self.wake_word and self.wake_word["found"] else {}),
             "wall_ms": round((time.monotonic() - self._started) * 1000),
             "model": self.model.key,
         })
@@ -342,6 +380,46 @@ class Follow:
             self._base += drop
             keep_from = self._base
             self._checks = [c for c in self._checks if c[0] >= keep_from - self._win]
+
+    # ── the end of the wake word ──────────────────────────────────────────
+
+    def _find_wake_word_end(self) -> None:
+        """Looks for the end of the wake word in the anchor and the start of
+        the stream, once. What comes before it in the stream is not the
+        user's command."""
+        find, self._find_end = self._find_end, None
+        head = self._audio(0, int(self.cfg.wake_word_wait_s * SR)).copy()
+        try:
+            found = find(self.anchor_audio, head)
+        except Exception:  # noqa: BLE001 - the command goes on as it would have without this
+            _LOG.exception("looking for the end of the wake word failed")
+            return
+        if found is None:
+            self.wake_word = {"found": False}
+            self.timeline.append({"t": 0.0, "kind": "wake_word", "found": False})
+            return
+        self._wake_end = max(0, min(int(found.samples), len(head)))
+        self._lead_in_due = self._wake_end > 0
+        self.wake_word = {"found": True, "fit": found.fit, "rule": found.rule, "phonemes": found.phonemes,
+                          "ms": found.ms}
+        self.timeline.append({"t": round(self._wake_end / SR, 3), "kind": "wake_word", **self.wake_word})
+
+    def _after_wake_word(self, chunk: np.ndarray, a: int, events: list[dict[str, Any]]) -> np.ndarray:
+        """The first audio to go out, when it starts right where the wake
+        word was cut: silence goes out in front of it and it fades in. A
+        command after a pause has the room's own quiet in front and goes out
+        as it is."""
+        if not self._lead_in_due:
+            return chunk
+        self._lead_in_due = False
+        if a != self._wake_end:
+            return chunk
+        self.lead_in_s = self.cfg.lead_in_s
+        self._send(np.zeros(int(self.cfg.lead_in_s * SR), dtype=np.float32), a, events)
+        fade = min(len(chunk), int(self.cfg.fade_in_s * SR))
+        chunk = chunk.copy()
+        chunk[:fade] *= np.linspace(0.0, 1.0, fade, dtype=np.float32)
+        return chunk
 
     # ── who is talking, frame by frame ────────────────────────────────────
 
@@ -462,12 +540,17 @@ class Follow:
     # ── turns and release ─────────────────────────────────────────────────
 
     def _decide(self, events: list[dict[str, Any]], final: bool) -> None:
+        if self._find_end is not None:
+            # Where the wake word ends comes first: what is before it is not a command.
+            if not final:
+                return
+            self._find_wake_word_end()
         while self._decided < len(self._speech):
             f = self._decided
             if self._rejected:
                 self._decided = len(self._speech)
                 return
-            if self._speech[f]:
+            if self._speech[f] and (f + 1) * FRAME > self._wake_end:
                 label = self._label(f, final)
                 if label is None:
                     return
@@ -479,6 +562,8 @@ class Follow:
     def _apply(self, f: int, label: str, events: list[dict[str, Any]]) -> None:
         cfg = self.cfg
         fs, fe = f * FRAME, (f + 1) * FRAME
+        # The frame the wake word ends in counts from where it ends.
+        fs = max(fs, min(self._wake_end, fe))
         tail = (label == "other" and self.in_turn and self._prev_label in ("user", "tail")
                 and fe - self._heard_user_end <= int(cfg.tail_keep_s * SR))
         self._prev_label = "tail" if tail else label
@@ -502,7 +587,8 @@ class Follow:
                 self._other_reported = False
                 self._turn_user_s = 0.0
                 events.append({"type": "turn_start", "t": round(fs / SR, 3), "turn": self.turns})
-                pad_from = max(fs - int(cfg.pad_s * SR), self._last_other_end, self._decided_floor())
+                pad_from = max(fs - int(cfg.pad_s * SR), self._last_other_end, self._decided_floor(),
+                               self._wake_end)
                 if pad_from < fs:
                     self._release(pad_from, fs, events)
             elif self._pending_gap:
@@ -595,7 +681,7 @@ class Follow:
             else:
                 self._held.append((a, b))
             return
-        self._send(chunk, a, events)
+        self._send(self._after_wake_word(chunk, a, events), a, events)
 
     def _send_held(self, events: list[dict[str, Any]]) -> None:
         """The turn's held audio, through the Voice Isolator when the user's
@@ -617,7 +703,7 @@ class Follow:
             ms = round((time.perf_counter() - t0) * 1000)
             self.isolated_ms += ms
             self.timeline.append({"t": round(end / SR, 3), "kind": "isolated", "ms": ms, "turn": self.turns})
-        cleaned = np.concatenate([span[a - start:b - start] for a, b in held])
+        cleaned = self._after_wake_word(np.concatenate([span[a - start:b - start] for a, b in held]), start, events)
         # In pieces no bigger than the stream's own, so a whole turn doesn't
         # reach Home Assistant as one message.
         for i in range(0, len(cleaned), MAX_AUDIO_EVENT):

@@ -50,13 +50,17 @@ VAD_FILE = "silero_vad.onnx"
 VAD_SHA256 = "2623a2953f6ff3d2c1e61740c6cdb7168133479b267dfef114a4a3cc5bdd788f"
 
 ISOLATOR_FILE = "voice_isolator.onnx"
-ISOLATOR_SHA256 = "10e6f96f34d112dcf8e473f5a09510bcc822ea6741f7e2e334c6386d90ab22f3"
+ISOLATOR_SHA256 = "47e9e90cf5ee8f28d0da7e59fe31c795e87a4f43f0e3f1e5d97aae27cf5c865f"
 ISOLATOR_CPU_FILE = "voice_isolator_cpu.onnx"
-ISOLATOR_CPU_SHA256 = "64c125eec1ab1d64247c9e11dd6912b5ee4de9dc8bfe4f5361d7b40a6e8c5d54"
+ISOLATOR_CPU_SHA256 = "0016d71fd7d94cb3aa414b45182839a3fb5c0ee1aec4bcbd98f92911d25e370a"
 """The same model with its LSTMs in 8 bits: twice as fast on a CPU, 0.14 dB
 behind. On a GPU the full one runs, its quantized LSTMs wouldn't."""
 ISOLATOR_MODEL = "accurate"
 """The Voice Isolator is conditioned on this speaker model's voiceprints."""
+
+ALIGNER_FILE = "wake_word_aligner.onnx"
+ALIGNER_SHA256 = "894258d611a9c4a5175434838eecee364194fab51b2f0836b4e20b95bb89e7ca"
+"""The Wake Word Aligner: the phonemes heard in audio, to find where the wake word ends."""
 
 
 def apple_silicon(cpuinfo: Path = Path("/proc/cpuinfo")) -> bool:

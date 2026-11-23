@@ -223,3 +223,92 @@ def test_keeping_gpu_memory_is_a_setting_and_does_nothing_on_a_cpu(monkeypatch, 
     assert config.load().keep_gpu_memory
     on_cpu = Isolator(MODELS / ISOLATOR_FILE, threads=2, keep_memory=True)
     assert not on_cpu.keeps_memory and not isolator.keeps_memory
+
+
+def test_a_held_turn_starts_after_the_end_of_the_wake_word(household, speakers, voice, vad, embedder):
+    """With Isolation the turn goes out at its end: the silence in front of a
+    command cut from the wake word and the fade are put on the cleaned audio."""
+    from .test_follow import talking, wake_end
+
+    people, *_ = household
+    user = talking(voice[speakers[0]]["test"], vad)
+    audio = np.concatenate([user[:4 * SR], silence(1.5)])
+    f = Follow(FollowConfig(), ACCURATE, embedder, vad, people, anchor=held_out(speakers[0])[: int(1.2 * SR)],
+               isolator=Halves(), wake_word_end=wake_end(0.30))
+    events = []
+    for c in chunks(audio):
+        events += f.feed(c)
+    events += f.finish()
+    speech = [e for e in of(events, "audio") if not e.get("keepalive")]
+    assert max(len(e["audio"]) for e in speech) <= SR // 2
+    sent = np.concatenate([e["audio"] for e in speech])
+    cut, lead = int(0.30 * SR), int(0.5 * SR)
+    assert f.released[0][0] == cut and f.lead_in_s == 0.5
+    assert not sent[:lead].any() and abs(sent[lead]) < 1e-6
+    expected = np.concatenate([audio[a:b] for a, b in f.released]) * 0.5
+    assert np.allclose(sent[lead + 240:], expected[240:])
+    assert np.array_equal(f.cleaned_audio(), sent)
+
+
+def test_the_end_of_the_wake_word_is_looked_for_only_when_it_can_reach_the_assistant(cfg, monkeypatch):
+    """Only for a kiosk that says "Talk right after the wake word" is on, with
+    the wake word's text and its clip. Never for a follow-up. The setting
+    turns it off for every kiosk."""
+    from ground_control.service import GroundControl
+
+    vm = GroundControl(cfg)
+    asked = []
+
+    class Finds:
+        version = "test"
+
+        def find(self, anchor, head, phrase, language):
+            asked.append((phrase, language))
+
+    monkeypatch.setattr(vm, "aligner", lambda: Finds() if vm.trim_wake_word else None)
+    anchor = np.zeros(2 * SR, dtype=np.float32)
+    head = np.zeros(SR, dtype=np.float32)
+    wake = {"wake_word": "Alexa", "seamless": True, "language": "fr"}
+
+    def looked(**kw) -> bool:
+        f = vm.new_follow(**kw)
+        if f._find_end is None:
+            return False
+        f._find_end(anchor, head)
+        return True
+
+    try:
+        assert vm.settings()["trim_wake_word"] is True
+        assert looked(anchor=anchor, wake=wake) and asked == [("Alexa", "fr")]
+        assert not looked(anchor=anchor, wake={**wake, "seamless": False})
+        assert not looked(anchor=anchor, wake={"seamless": True})
+        assert not looked(anchor=anchor, wake=None)
+        assert not looked(anchor=None, wake=wake)
+        assert not looked(anchor=anchor, wake=wake, speaker="someone")
+        vm.update_settings({"trim_wake_word": False})
+        assert vm.settings()["trim_wake_word"] is False
+        assert not looked(anchor=anchor, wake=wake)
+        # Kept across a restart.
+        again = GroundControl(cfg)
+        assert again.trim_wake_word is False
+        again.close()
+    finally:
+        vm.close()
+
+
+def test_the_wake_word_aligner_loads_with_the_first_command_that_needs_it(cfg):
+    from ground_control import aligner
+    from ground_control.service import GroundControl
+
+    vm = GroundControl(cfg)
+    try:
+        assert vm._aligner is None
+        if aligner.espeak() is None:
+            assert vm.settings()["trim_wake_word_missing"] == "espeak-ng" and vm.aligner() is None
+            return
+        assert vm.settings()["trim_wake_word_missing"] is None
+        loaded = vm.aligner()
+        assert loaded is not None and vm.aligner() is loaded
+        assert "Wake Word Aligner License" in loaded.session.get_modelmeta().custom_metadata_map["license"]
+    finally:
+        vm.close()

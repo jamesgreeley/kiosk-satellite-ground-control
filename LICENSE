@@ -42,3 +42,7 @@ under the Kiosk Satellite Ground Control Voice Isolator License in
 models/voice_isolator.LICENSE.md: they may only be used as part of Kiosk
 Satellite Ground Control with Kiosk Satellite and may not be redistributed
 apart from it.
+
+The Wake Word Aligner model (models/wake_word_aligner.onnx) is under the
+Kiosk Satellite Ground Control Wake Word Aligner License in
+models/wake_word_aligner.LICENSE.md, with the same terms.

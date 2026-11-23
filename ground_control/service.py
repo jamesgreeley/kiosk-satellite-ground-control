@@ -17,8 +17,9 @@ import numpy as np
 
 from .config import Config
 from .engine import Embedder, malloc_trim
-from .models import (ISOLATOR_CPU_FILE, ISOLATOR_CPU_SHA256, ISOLATOR_FILE, ISOLATOR_MODEL, ISOLATOR_SHA256,
-                     SPEAKER_MODELS, VAD_FILE, VAD_SHA256, SpeakerModel, verified_path)
+from .models import (ALIGNER_FILE, ALIGNER_SHA256, ISOLATOR_CPU_FILE, ISOLATOR_CPU_SHA256, ISOLATOR_FILE,
+                     ISOLATOR_MODEL, ISOLATOR_SHA256, SPEAKER_MODELS, VAD_FILE, VAD_SHA256, SpeakerModel,
+                     verified_path)
 from .hub import Hub
 from .people import People
 from .session import Session, SessionConfig
@@ -62,6 +63,12 @@ class GroundControl:
         self.isolate = bool(saved.get("isolator", False))
         self._isolator = None
         self._isolator_lock = threading.Lock()
+        self.trim_wake_word = bool(saved.get("trim_wake_word", True))
+        """Leave the end of the wake word out of the command, for a kiosk
+        with "Talk right after the wake word" on."""
+        self._aligner = None
+        self._aligner_failed = False
+        self._aligner_lock = threading.Lock()
         self.active = self._load(self.status.model)
         if self.people.needs_rebuild(self.status.model):
             _LOG.info("building voiceprints for %s", self.status.model)
@@ -100,7 +107,8 @@ class GroundControl:
                 "threads": self.cfg.threads, "port": self.cfg.port,
                 "isolator": self.isolate, "isolator_available": self._isolator_files() != [],
                 "isolator_model": ISOLATOR_MODEL,
-                "isolator_on_gpu": self._isolator.on_gpu if self._isolator is not None else None}
+                "isolator_on_gpu": self._isolator.on_gpu if self._isolator is not None else None,
+                "trim_wake_word": self.trim_wake_word, "trim_wake_word_missing": self._aligner_missing()}
 
     def update_settings(self, values: dict[str, object]) -> None:
         """Thresholds (for the active model), learning and session keeping. Checked, then saved."""
@@ -134,7 +142,44 @@ class GroundControl:
             self.isolate = out["isolator"] = on
             if on:
                 self.isolator()  # load it now, so the first command doesn't wait
+        if "trim_wake_word" in values:
+            self.trim_wake_word = out["trim_wake_word"] = bool(values["trim_wake_word"])
         self._save(**out)
+
+    def _aligner_missing(self) -> str | None:
+        """What finding the end of a wake word needs that this install doesn't
+        have: ``model`` or ``espeak-ng``. None when it has both."""
+        from .aligner import espeak
+
+        if not (self.cfg.models_dir / ALIGNER_FILE).is_file():
+            return "model"
+        return None if espeak() else "espeak-ng"
+
+    def aligner(self):
+        """The Wake Word Aligner, loaded with the first command that needs
+        it. None when it is off or can't run here."""
+        if not self.trim_wake_word or self._aligner_failed:
+            return None
+        with self._aligner_lock:
+            if self._aligner is None and not self._aligner_failed:
+                from .aligner import Aligner
+
+                missing = self._aligner_missing()
+                if missing:
+                    self._aligner_failed = True
+                    _LOG.warning("the end of the wake word can't be left out: %s", "the Wake Word Aligner model is "
+                                 "not in this install" if missing == "model" else "espeak-ng is not installed")
+                    return None
+                try:
+                    self._aligner = Aligner(verified_path(self.cfg.models_dir, ALIGNER_FILE, ALIGNER_SHA256),
+                                            threads=self.cfg.threads)
+                except Exception as err:  # noqa: BLE001 - reported on the status page
+                    self._aligner_failed = True
+                    self.status.errors.append(f"Wake Word Aligner failed to load: {err}")
+                    _LOG.exception("Wake Word Aligner failed to load")
+                    return None
+                _LOG.info("Wake Word Aligner %s loaded", self._aligner.version)
+            return self._aligner
 
     def _isolator_files(self) -> list[tuple[str, str, bool]]:
         """The isolation models in this image, in the order to try them: the
@@ -189,13 +234,30 @@ class GroundControl:
         return Session(cfg, self.model, self.active, self.vad, self.people)
 
     def new_follow(self, policy: str = "anyone", anchor=None, people: tuple[str, ...] = (),
-                   speaker: str | None = None, isolation: bool = True) -> "Follow":
+                   speaker: str | None = None, isolation: bool = True,
+                   wake: dict[str, object] | None = None) -> "Follow":
         """``isolation``: the kiosk's own switch. Isolation runs when that and
-        the service's setting are both on."""
+        the service's setting are both on.
+
+        ``wake``: what the kiosk said about the wake word (``wake_details``).
+        The end of the wake word is looked for only when the kiosk has "Talk
+        right after the wake word" on for this session, which is when it
+        reaches the assistant. A follow-up has no wake word of its own."""
         from .follow import Follow, FollowConfig
 
+        find = None
+        phrase = (wake or {}).get("wake_word")
+        if wake and wake.get("seamless") and phrase and anchor is not None and speaker is None:
+            aligner = self.aligner()
+            if aligner is not None:
+                language = wake.get("language")
+
+                def find(anchor_audio, head):
+                    return aligner.find(anchor_audio, head, str(phrase), language if isinstance(language, str) else None)
+
         return Follow(FollowConfig(policy=policy, people=people), self.model, self.active, self.vad, self.people,
-                      anchor=anchor, speaker=speaker, isolator=self.isolator() if isolation else None)
+                      anchor=anchor, speaker=speaker, isolator=self.isolator() if isolation else None,
+                      wake_word_end=find)
 
     async def run(self, fn, *args):
         return await asyncio.get_running_loop().run_in_executor(self.pool, fn, *args)

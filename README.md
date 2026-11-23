@@ -51,6 +51,8 @@ Turn on **Enable Trimming** in Kiosk Satellite and the kiosk sends everything it
 
 Trimming doesn't just end the command when someone else starts talking, which would lose whatever the user says after the other voice. It cuts the other voice out and keeps the user's words on both sides of it.
 
+With **Talk right after the wake word** on in Kiosk Satellite, the end of the wake word can reach the assistant in front of the command, like the "xa" of "Alexa". Trimming leaves it out, with any wake word and any wake word engine. See [Trimming the Wake Word](docs/voice-match.md#trimming-the-wake-word).
+
 <video src="assets/videos/voice-match-trimming.mp4" controls width="100%"></video>
 
 https://github.com/user-attachments/assets/985faf93-9b86-48ce-bbda-41d91d0a1b49
@@ -204,4 +206,6 @@ Free for personal, non-commercial use under [CC BY-NC-ND 4.0](LICENSE). Commerci
 
 Each model has its license next to it in `models/`, in a file named after the model. ReDimNet2 by Palabra.ai and Silero VAD by the Silero Team keep their MIT licenses.
 
-The Voice Isolator models are under their own [license](models/voice_isolator.LICENSE.md), not CC BY-NC-ND 4.0. They may only be used as part of Ground Control with Kiosk Satellite. They may not be redistributed on their own or with other software, converted, modified or used to train other models.
+The Voice Isolator models and the Wake Word Aligner model are under their own licenses, not CC BY-NC-ND 4.0: the [Voice Isolator license](models/voice_isolator.LICENSE.md) and the [Wake Word Aligner license](models/wake_word_aligner.LICENSE.md). They may only be used as part of Ground Control with Kiosk Satellite. They may not be redistributed on their own or with other software, converted, modified or used to train other models.
+
+The Docker images and the Home Assistant app include [espeak-ng](https://github.com/espeak-ng/espeak-ng) (GPL 3.0), a separate program that Ground Control runs to get the pronunciation of a wake word.

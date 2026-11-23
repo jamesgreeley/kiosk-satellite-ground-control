@@ -87,7 +87,9 @@ function chartKey(record, color) {
 }
 
 function steps(record) {
-  const out = (record.followups || []).map((t) => ["Follow-up", "The assistant asked something and the user answered. This part is the answer.", t]);
+  // The end of the wake word first: the user's own first word can start right at it.
+  const out = (record.timeline || []).filter((p) => p.kind === "wake_word").map((p) => wakeWordStep(p, record.wake?.wake_word));
+  out.push(...(record.followups || []).map((t) => ["Follow-up", "The assistant asked something and the user answered. This part is the answer.", t]));
   for (const e of record.events || []) {
     if (e.type === "speech_start") out.push(["Speech started", "The voice check starts here.", e.t]);
     if (e.type === "speaker" && e.name) {
@@ -114,6 +116,15 @@ function steps(record) {
   return out.sort((a, b) => a[2] - b[2]).map(([title, desc, t]) => h("div", { class: "row" },
     h("div", { class: "grow" }, h("div", { class: "rt" }, title), h("div", { class: "rd" }, desc)),
     h("span", { class: "t" }, `${Number(t).toFixed(2)} s`)));
+}
+
+/** The end of the wake word at the start of the stream and what was done with it. */
+function wakeWordStep(p, word) {
+  const name = word ? `"${word}"` : "the wake word";
+  if (!p.found) return ["Wake word's end not found", `The end of ${name} wasn't clear enough to tell from the command, so nothing was left out.`, 0];
+  if (!p.t) return ["Wake word over", `${name[0].toUpperCase()}${name.slice(1)} was over before the command's audio started. Nothing to leave out.`, 0];
+  const how = p.rule === "pause" ? "The user paused after it." : "The command started right after it.";
+  return ["Wake word's end left out", `The first ${Number(p.t).toFixed(2)} s was still ${name}. ${how} It never reached the assistant.`, p.t];
 }
 
 function player(path, title, desc, length) {
@@ -147,10 +158,12 @@ function player(path, title, desc, length) {
 }
 
 /** What went to the assistant, put back where it was in what the kiosk heard,
- * with silence for what was left out, when the pieces add up to it. */
-function placed(samples, released, total) {
+ * with silence for what was left out, when the pieces add up to it. ``lead``:
+ * seconds of silence at the start of it that the kiosk never sent. */
+function placed(all, released, total, lead = 0) {
+  const samples = all.subarray(Math.round(lead * 16000));
   const sum = released.reduce((n, [a, b]) => n + (b - a), 0);
-  if (!released.length || Math.abs(sum * 16000 - samples.length) > 800) return samples;
+  if (!released.length || Math.abs(sum * 16000 - samples.length) > 800) return all;
   const out = new Int16Array(Math.round(total * 16000));
   let from = 0;
   for (const [a, b] of released) {
@@ -162,7 +175,8 @@ function placed(samples, released, total) {
 }
 
 /** Where ``t`` seconds into the sent audio was in what the kiosk heard. */
-function heardAt(t, released) {
+function heardAt(t, released, lead = 0) {
+  t = Math.max(0, t - lead);
   for (const [a, b] of released) {
     if (t <= b - a) return a + t;
     t -= b - a;
@@ -235,6 +249,22 @@ async function spectrograms(rows, raw) {
   });
 }
 
+const ENGINES = { vswakeword: "vsWakeWord", microwakeword: "microWakeWord", openwakeword: "openWakeWord", pryon: "Amazon" };
+
+/** What the kiosk said about how the session started: the wake word and what
+ * heard it, the assistant and Talk right after the wake word. */
+function wakeChips(wake) {
+  if (!wake) return [];
+  const engine = wake.wake_word_engine ? ENGINES[wake.wake_word_engine.toLowerCase()] || wake.wake_word_engine : "";
+  const word = wake.wake_word ? chip(`Wake word: ${wake.wake_word}${engine ? `, ${engine}` : ""}`, "big") : null;
+  if (word && wake.wake_word_model) word.title = `Wake word model: ${wake.wake_word_model}`;
+  return [
+    word,
+    wake.assistant ? chip(wake.assistant === "realtime" ? "Realtime assistant" : "Assist pipeline", "big") : null,
+    wake.seamless ? chip("Talk right after the wake word", "big") : null,
+  ];
+}
+
 export async function render({ id }) {
   const [record, { people }] = await Promise.all([api(`api/sessions/${id}`), api("api/people")]);
   const stats = record.stats || {};
@@ -281,11 +311,12 @@ export async function render({ id }) {
   let specs = [];
   if (record.has_audio) {
     const [rawRow, rawAudio, rawSpec] = player(`api/sessions/${id}/audio/raw`, "As heard", "As heard by the kiosk's microphone.", secs(total));
+    const lead = record.lead_in_s ? ` It starts with ${record.lead_in_s} s of silence, put in front of a command that started right after the wake word.` : "";
     const [cleanRow, cleanAudio, cleanSpec] = follow
       ? player(`api/sessions/${id}/audio/clean`, "Sent to the assistant",
-        stats.isolated_ms !== undefined ? "Only the user's speech: other voices left out between their words and removed under them."
-          : "Only the user's speech, other voices left out.",
-        secs(stats.released_s ?? 0))
+        (stats.isolated_ms !== undefined ? "Only the user's speech: other voices left out between their words and removed under them."
+          : "Only the user's speech, other voices left out.") + lead,
+        secs((stats.released_s ?? 0) + (record.lead_in_s || 0)))
       : player(`api/sessions/${id}/audio/clean`, record.mode === "gated" ? "Sent to the assistant" : "Cleaned",
         "Other voices replaced with silence.", secs(sent));
     audioSection = [rawRow, cleanRow];
@@ -293,9 +324,10 @@ export async function render({ id }) {
     // In follow mode, the sent audio lines up with what was heard.
     if (follow) {
       cleanSpec.place = (samples) => {
-        const out = placed(samples, record.released || [], total);
+        const lead = record.lead_in_s || 0;
+        const out = placed(samples, record.released || [], total, lead);
         // The line follows the sent audio on the same timeline.
-        if (out !== samples) cleanSpec.at = (t) => heardAt(t, record.released) / total;
+        if (out !== samples) cleanSpec.at = (t) => heardAt(t, record.released, lead) / total;
         return out;
       };
     }
@@ -327,7 +359,8 @@ export async function render({ id }) {
           outcomeChip(stats),
           chip(`${modeLabel(record.mode)} mode`, "big"),
           chip(`Answers: ${answersLabel(record, people)}`, "big"),
-          chip(`${record.model === "light" ? "Light" : "Accurate"} model`, "big")),
+          chip(`${record.model === "light" ? "Light" : "Accurate"} model`, "big"),
+          wakeChips(record.wake)),
         section("Timeline"),
         h("div", { class: "card tl" },
           follow

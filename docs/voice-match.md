@@ -46,6 +46,19 @@ After a turn, a voice has to sound clearly like the user to start another turn i
 
 The **Other voice threshold** decides when someone else is talking: two checks in a row under it mean another voice.
 
+### Trimming the Wake Word
+
+With **Talk right after the wake word** on in Kiosk Satellite, the command's audio starts the moment the wake word is recognized. A wake word engine recognizes the word before it is over, so its end can reach the assistant in front of the command. The "xa" of "Alexa" turns "what time is it" into "So what time is it".
+
+**Trim the wake word** leaves that end out. The wake word and the first 0.8 seconds of the command are checked for where the wake word ends and the command starts there:
+
+- **It works with every wake word and every wake word engine.** Only the wake word's text is needed, pronounced in English and in the kiosk's language, so a custom wake word works too.
+- **A command said in one breath with the wake word gets half a second of silence in front.** Speech-to-text hears an extra word in audio that starts on a sound.
+- **When the end of the wake word isn't clear, nothing is left out** and the command goes on as it did before.
+- **It doesn't delay the command.** It takes about 5 ms on a fast x86 CPU, 9 ms on an Intel N100 and 38 ms on a Raspberry Pi 4, while the command is still held for its first voice check.
+
+It runs for kiosks with **Enable Trimming** and **Talk right after the wake word** on, with Kiosk Satellite 2026.11.30 or later. A session's page shows where the wake word ended under **Steps**.
+
 ## Isolation
 
 Trimming cuts other voices out between the user's words. Isolation also removes them where they talk over the user, using the user's voiceprint. It runs on the whole turn once the user stops talking, so each command waits for it:
@@ -86,6 +99,7 @@ Ground Control picks Accurate on an NVIDIA GPU, an Apple M-series chip or an x86
 | Learn from commands | on | Confident commands fold into the speaker's voice, so it follows colds and room changes. |
 | **Trimming** | | |
 | Other voice threshold | 0.29 Accurate, 0.26 Light | Two checks in a row under this score mean someone else is talking. |
+| Trim the wake word | on | Leaves the end of the wake word out of the command, for kiosks with Trimming and **Talk right after the wake word** on in Kiosk Satellite. See [Trimming the Wake Word](#trimming-the-wake-word). |
 | **Isolation** | | |
 | Use Isolation | off | Removes other voices under the user's words, for kiosks with Trimming and Isolation on in Kiosk Satellite. Needs the Accurate model. |
 | Runs on | | NVIDIA GPU (CUDA) or CPU, set by the image. |

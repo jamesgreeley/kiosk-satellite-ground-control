@@ -12,12 +12,16 @@ LABEL org.opencontainers.image.title="Kiosk Satellite Ground Control" \
 
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 MODELS_DIR=/app/models
 
+# espeak-ng says how a wake word is pronounced, to find where it ends.
+RUN apt-get update && apt-get install -y --no-install-recommends espeak-ng \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 COPY pyproject.toml README.md LICENSE ./
 COPY ground_control ./ground_control
 RUN pip install --no-cache-dir . && rm -rf /root/.cache
 COPY models/silero_vad.onnx models/redimnet2_b3_multi.onnx models/redimnet2_b1.onnx models/voice_isolator_cpu.onnx \
-     models/*.LICENSE.md ./models/
+     models/wake_word_aligner.onnx models/*.LICENSE.md ./models/
 
 VOLUME /data
 EXPOSE 10900

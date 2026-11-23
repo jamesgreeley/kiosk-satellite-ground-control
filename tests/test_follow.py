@@ -471,3 +471,126 @@ def test_a_guest_is_still_told_apart_from_the_whole_command(household, speakers,
     assert of(events, "speaker")[-1]["id"] is None
     assert any(t["kind"] == "identify" for t in f.timeline)
     assert any(n > SR for n in counted.lengths[1:])
+
+
+# ── the end of the wake word ─────────────────────────────────────────────
+
+def wake_end(seconds: float | None, rule: str = "next sound"):
+    """Stands in for the Wake Word Aligner: the wake word ends ``seconds``
+    into the stream or isn't found (None). Counts how often it was asked."""
+    from ground_control.aligner import WakeWordEnd
+
+    def find(anchor, head):
+        find.calls.append((len(anchor), len(head)))
+        return None if seconds is None else WakeWordEnd(samples=int(seconds * SR), fit=-0.5, rule=rule,
+                                                        phonemes="ɐlɛksə", ms=3)
+    find.calls = []
+    return find
+
+
+def run_after_wake_word(folks, embedder, vad, audio, anchor, find, **kw):
+    f = Follow(FollowConfig(**kw), ACCURATE, embedder, vad, folks, anchor=anchor, wake_word_end=find)
+    events = []
+    for c in chunks(audio):
+        events += f.feed(c)
+    events += f.finish()
+    return events, f
+
+
+def talking(audio: np.ndarray, vad) -> np.ndarray:
+    """``audio`` from its first speech on, so it starts mid-word like a stream
+    that begins before the wake word is over."""
+    probs = vad.stream().feed(audio)
+    first = next(i for i, p in enumerate(probs) if p >= 0.5)
+    return audio[first * FRAME:]
+
+
+def test_the_end_of_the_wake_word_is_left_out_of_a_command_said_in_one_breath(
+        household, speakers, voice, vad, embedder):
+    people, ana, _ = household
+    user = talking(voice[speakers[0]]["test"], vad)
+    audio = np.concatenate([user[:4 * SR], silence(1.5)])
+    find = wake_end(0.30)
+    events, f = run_after_wake_word(people, embedder, vad, audio, anchor_of(held_out(speakers[0])), find)
+    cut = int(0.30 * SR)
+    # Asked once, with the wake clip and the first 0.8 s of the stream.
+    assert find.calls == [(int(1.2 * SR), int(0.8 * SR))]
+    # Nothing before the end of the wake word went out and the command starts right there.
+    assert f.released[0][0] == cut
+    assert of(events, "turn_start")[0]["t"] == 0.3
+    # Half a second of silence in front of it, then the command, faded in.
+    sent = f.cleaned_audio()
+    lead = int(0.5 * SR)
+    assert f.lead_in_s == 0.5 and not sent[:lead].any()
+    assert np.allclose(sent[lead + 240:lead + 2000], audio[cut + 240:cut + 2000])
+    assert abs(sent[lead]) < 1e-6 and np.abs(sent[lead:lead + 240]).max() <= np.abs(audio[cut:cut + 240]).max()
+    assert len(sent) == lead + sum(b - a for a, b in f.released)
+    stats = of(events, "stats")[0]
+    assert stats["wake_word_s"] == 0.3 and stats["speaker"]["name"] == "Ana"
+    assert [t for t in f.timeline if t["kind"] == "wake_word"] == [
+        {"t": 0.3, "kind": "wake_word", "found": True, "fit": -0.5, "rule": "next sound", "phonemes": "ɐlɛksə", "ms": 3}]
+
+
+def test_a_command_after_a_pause_gets_no_silence_in_front(household, speakers, voice, vad, embedder):
+    people, *_ = household
+    user = talking(voice[speakers[0]]["test"], vad)
+    # The end of the wake word, a pause, then the command.
+    audio = np.concatenate([user[:int(0.25 * SR)], silence(1.2), user[:4 * SR], silence(1.5)])
+    events, f = run_after_wake_word(people, embedder, vad, audio, anchor_of(held_out(speakers[0])),
+                                    wake_end(0.30, "pause"))
+    # The command has the room's own quiet in front: it goes out as it is.
+    assert f.released[0][0] >= int(1.2 * SR)
+    assert f.lead_in_s == 0.0
+    assert len(f.cleaned_audio()) == sum(b - a for a, b in f.released)
+    assert of(events, "stats")[0]["wake_word_s"] == 0.3
+
+
+def test_a_wake_word_that_isnt_found_changes_nothing(household, speakers, voice, vad, embedder):
+    people, *_ = household
+    user = talking(voice[speakers[0]]["test"], vad)
+    audio = np.concatenate([user[:4 * SR], silence(1.5)])
+    anchor = anchor_of(held_out(speakers[0]))
+    script = Script().add("user", audio)
+    plain, f0 = run(people, embedder, vad, script, anchor=anchor)
+    events, f = run_after_wake_word(people, embedder, vad, audio, anchor, wake_end(None))
+    assert f.released == f0.released and f.lead_in_s == 0.0
+    assert np.array_equal(f.cleaned_audio(), f0.cleaned_audio())
+    assert "wake_word_s" not in of(events, "stats")[0]
+    assert [t for t in f.timeline if t["kind"] == "wake_word"] == [{"t": 0.0, "kind": "wake_word", "found": False}]
+
+
+def test_a_wake_word_over_before_the_stream_started_cuts_nothing(household, speakers, voice, vad, embedder):
+    people, *_ = household
+    user = talking(voice[speakers[0]]["test"], vad)
+    audio = np.concatenate([user[:4 * SR], silence(1.5)])
+    _, f = run_after_wake_word(people, embedder, vad, audio, anchor_of(held_out(speakers[0])), wake_end(0.0))
+    assert f.released[0][0] == 0 and f.lead_in_s == 0.0
+
+
+def test_a_failure_looking_for_the_wake_words_end_doesnt_stop_the_command(household, speakers, voice, vad, embedder):
+    people, *_ = household
+
+    def broken(anchor, head):
+        raise RuntimeError("no model")
+
+    audio = np.concatenate([talking(voice[speakers[0]]["test"], vad)[:4 * SR], silence(1.5)])
+    events, f = run_after_wake_word(people, embedder, vad, audio, anchor_of(held_out(speakers[0])), broken)
+    assert of(events, "turn_end") and f.released[0][0] == 0
+
+
+def test_the_end_of_the_wake_word_is_looked_for_in_a_stream_shorter_than_the_wait(
+        household, speakers, voice, vad, embedder):
+    people, *_ = household
+    find = wake_end(0.2)
+    audio = talking(voice[speakers[0]]["test"], vad)[: int(0.6 * SR)]
+    _, f = run_after_wake_word(people, embedder, vad, audio, anchor_of(held_out(speakers[0])), find)
+    assert find.calls == [(int(1.2 * SR), len(audio))]
+    assert not f.released or f.released[0][0] >= int(0.2 * SR)
+
+
+def test_without_a_wake_clip_the_end_of_the_wake_word_is_not_looked_for(household, speakers, voice, vad, embedder):
+    people, *_ = household
+    find = wake_end(0.3)
+    audio = np.concatenate([voice[speakers[0]]["test"][:4 * SR], silence(1.5)])
+    run_after_wake_word(people, embedder, vad, audio, None, find)
+    assert find.calls == []

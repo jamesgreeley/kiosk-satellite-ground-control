@@ -224,6 +224,66 @@ async def test_follow_sends_only_the_users_speech(client, speakers, voice):
     assert sessions[0]["mode"] == "follow"
 
 
+async def test_a_session_keeps_what_the_kiosk_said_about_the_wake_word(client, speakers, voice, monkeypatch):
+    """The wake word, what heard it, the assistant and Talk right after the
+    wake word are kept with the session. The end of the wake word is left
+    out of what goes to the assistant."""
+    import base64
+
+    from ground_control.aligner import WakeWordEnd
+
+    vm = client.app[VM]
+    asked = []
+
+    class Finds:
+        def find(self, anchor, head, phrase, language):
+            asked.append((phrase, language, len(head)))
+            return WakeWordEnd(samples=int(0.3 * SR), fit=-0.6, rule="next sound", phonemes="ɐlɛksə", ms=4)
+
+    monkeypatch.setattr(vm, "aligner", lambda: Finds())
+    user = voice[speakers[0]]["test"]
+    probs = vm.vad.stream().feed(user)
+    user = user[next(i for i, p in enumerate(probs) if p >= 0.5) * 512:]
+    anchor = voice[speakers[0]]["enroll"][-int(1.2 * SR):]
+    ws = await client.ws_connect("/api/session")
+    await ws.send_json({"type": "start", "token": "good", "ticket": approve(client), "device_id": "k1", "mode": "follow",
+                        "anchor": base64.b64encode(float_to_pcm16(anchor)).decode(),
+                        "wake_word": "Alexa", "wake_word_engine": "microWakeWord", "wake_word_model": "alexa",
+                        "seamless": True, "assistant": "assist", "language": "fr", "unknown": "ignored"})
+    sid = (await next_of(ws, "ready"))["session"]
+    for c in chunks(np.concatenate([user[:3 * SR], np.zeros(2 * SR, dtype=np.float32)])):
+        await ws.send_bytes(float_to_pcm16(c))
+    await ws.send_json({"type": "end"})
+    stats = None
+    while stats is None:
+        msg = await asyncio.wait_for(ws.receive(), 10)
+        assert msg.type in (WSMsgType.BINARY, WSMsgType.TEXT), "socket ended before stats"
+        if msg.type == WSMsgType.TEXT and msg.json()["type"] == "stats":
+            stats = msg.json()
+    assert stats["wake_word_s"] == 0.3 and stats["turns"] == 1
+    assert asked == [("Alexa", "fr", int(0.8 * SR))]
+    await asyncio.sleep(0.3)
+    record = await (await client.get(f"/api/sessions/{sid}", headers=GOOD)).json()
+    assert record["wake"] == {"wake_word": "Alexa", "wake_word_engine": "microWakeWord", "wake_word_model": "alexa",
+                              "seamless": True, "assistant": "assist", "language": "fr"}
+    assert record["released"][0][0] == 0.3 and record["lead_in_s"] == 0.5
+    assert [t for t in record["timeline"] if t["kind"] == "wake_word"][0]["found"] is True
+    # The sent audio starts with the silence put in front of the command.
+    r = await client.get(f"/api/sessions/{sid}/audio/clean", headers=GOOD)
+    with wave.open(io.BytesIO(await r.read())) as w:
+        sent = np.frombuffer(w.readframes(w.getnframes()), dtype="<i2")
+    assert not sent[: int(0.5 * SR)].any() and sent[int(0.5 * SR) + 400: int(0.5 * SR) + 2000].any()
+
+
+async def test_an_older_kiosk_says_nothing_about_the_wake_word(client):
+    from ground_control.server import wake_details
+
+    assert wake_details({"type": "start", "mode": "follow"}) == {}
+    assert wake_details({"wake_word": "  Okay   Nabu ", "seamless": "yes", "assistant": "other", "language": 7,
+                         "wake_word_engine": "x" * 200}) == {"wake_word": "Okay Nabu", "wake_word_engine": "x" * 80}
+    assert wake_details({"seamless": False, "assistant": "realtime"}) == {"seamless": False, "assistant": "realtime"}
+
+
 async def test_a_follow_up_is_saved_in_the_same_session(client, speakers, voice):
     import base64
 

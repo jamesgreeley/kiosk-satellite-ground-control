@@ -115,6 +115,10 @@ export async function render({ area } = {}) {
       : s.model !== s.isolator_model ? "Isolation needs the Accurate speaker model."
       : "Each command waits for Isolation once the user stops talking: about a tenth of a second on an NVIDIA GPU and about a second on a fast x86 CPU. It is too slow on a Raspberry Pi.";
 
+    const wakeWord = toggle(s.trim_wake_word && !s.trim_wake_word_missing, "Trim the wake word",
+      (v) => save({ trim_wake_word: v }));
+    if (s.trim_wake_word_missing) wakeWord.disabled = true;
+
     return [
       section("Recognition", "Who is speaking, from the voiceprints of the people enrolled."),
       h("div", { class: "card" },
@@ -132,6 +136,10 @@ export async function render({ area } = {}) {
       h("div", { class: "card" },
         row("Other voice threshold", `Two checks in a row under this score mean someone else is talking. ${s.default_other_threshold} by default.`,
           number("oth", s.other_threshold, "other_threshold"), "oth"),
+        row("Trim the wake word", "With Talk right after the wake word on in Kiosk Satellite, the end of the wake word can be heard in front of the command, like the \"xa\" of \"Alexa\". It is left out of what goes to the assistant.",
+          wakeWord),
+        s.trim_wake_word_missing ? hint(s.trim_wake_word_missing === "model" ? "The Wake Word Aligner model is not in this install."
+          : "Trimming the wake word needs espeak-ng, which is not installed. The Docker images and the Home Assistant app have it.") : null,
         hint("Each kiosk turns Trimming on or off in Kiosk Satellite, under Voice Satellite, Ground Control Voice Match.")),
 
       section("Isolation", "Other voices talking over the user's words are removed too, using the user's voiceprint."),
