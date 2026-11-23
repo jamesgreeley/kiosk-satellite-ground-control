@@ -127,6 +127,16 @@ class FollowConfig:
     household_wait_s: float = 2.5
     """Without a wake word, a device that answers anyone waits this much speech
     for an enrolled voice, then follows the voice it heard."""
+    short_answer_s: float = 0.75
+    """Without a wake word, such as an answer to a question Home Assistant
+    asked, there is nothing but the answer to tell who is talking. A "yes"
+    is too short to recognize anyone. A device that answers only
+    enrolled or chosen people takes such an answer when it sounds like one of
+    them: at the other-voice line up to this much speech, rising to the
+    recognition threshold at ``reject_after_s``, as a voice's score against
+    its own voiceprint does. From there on it is recognized as any command."""
+    min_answer_s: float = 0.2
+    """Less speech than this says nothing about a voice."""
     wake_word_wait_s: float = 0.8
     """With the end of the wake word to find, nothing is decided until this
     much of the stream is in: the end of the word and the start of the
@@ -468,7 +478,8 @@ class Follow:
         else:
             # A word too short for a check: its own audio is the reference.
             frames = [i for i, sp in enumerate(self._speech) if sp and i * FRAME >= self._base]
-            if not frames:
+            # A click is not a voice to follow. The speaker model can't take audio that short either.
+            if len(frames) * FRAME < self.cfg.blip_s * SR:
                 return
             ref = self.embedder.embed(np.concatenate([self._audio(i * FRAME, (i + 1) * FRAME) for i in frames]))
         self._ref = ref / max(float(np.linalg.norm(ref)), 1e-9)
@@ -822,6 +833,8 @@ class Follow:
             with_wake_word = len(self._anchor_speech) > 0
         if len(speech) < SR:
             if not self._identified and self._strict and len(self._ids):
+                if self._no_wake_word and self._take_answer(speech, None, events):
+                    return
                 self._reject(events, self._last_user_end, None)
             return
         if self._ref_kind not in ("anchor", "first") and (self._identified or not len(self._ids)):
@@ -854,9 +867,52 @@ class Follow:
                     if not self._allowed(self._ids[best]):
                         self._reject(events, self._last_user_end, score)
                     return
+            if self._strict and len(self._ids) and self._no_wake_word and self._take_answer(speech, emb, events):
+                return
             self._set_speaker(None, score, None, events, self._last_user_end)
             if self._strict and len(self._ids):
                 self._reject(events, self._last_user_end, score)
+
+    @property
+    def _no_wake_word(self) -> bool:
+        """The kiosk sent no wake word with this session: Home Assistant asked
+        a question, it started a conversation itself or one was started by hand."""
+        return self.anchor_audio is None
+
+    def answer_line(self, speech_s: float) -> float:
+        """The score an answer of ``speech_s`` seconds needs, with no wake
+        word, to count as one of the people the device answers."""
+        cfg, m = self.cfg, self.model
+        share = (speech_s - cfg.short_answer_s) / max(cfg.reject_after_s - cfg.short_answer_s, 1e-9)
+        return m.other_threshold + min(1.0, max(0.0, share)) * (m.threshold - m.other_threshold)
+
+    def _take_answer(self, speech: np.ndarray, emb: np.ndarray | None, events: list[dict[str, Any]]) -> bool:
+        """An answer too short to recognize anyone, on a device that answers
+        only enrolled or chosen people: taken when it sounds like one of them,
+        by a line that rises with how much was said (``answer_line``).
+
+        Nobody is named: who is speaking is only ever said at the recognition
+        threshold. The closest of their voiceprints is the one followed from
+        here on. It is also the one Isolation keeps."""
+        allowed = [i for i, pid in enumerate(self._ids) if self._allowed(pid)]
+        if not allowed or len(speech) < self.cfg.min_answer_s * SR:
+            return False
+        if emb is None:
+            emb = self.embedder.embed(speech)
+        scores = self._rows[allowed] @ emb
+        best = int(np.argmax(scores))
+        score = float(scores[best])
+        line = self.answer_line(len(speech) / SR)
+        at = self._last_user_end
+        self.timeline.append({"t": round(at / SR, 3), "kind": "identify", "score": round(score, 3),
+                              "id": self._ids[allowed[best]], "turn": self.turns, "answer": True,
+                              "line": round(line, 3), "speech_s": round(len(speech) / SR, 2)})
+        if score < line:
+            return False
+        self._identified = True
+        self._ref, self._ref_kind = self._rows[allowed[best]], "person"
+        self._set_speaker(None, score, "answer", events, at, line=line)
+        return True
 
     @property
     def _strict(self) -> bool:
@@ -872,7 +928,10 @@ class Follow:
                        "score": None if score is None else round(score, 3)})
 
     def _set_speaker(self, person_id: str | None, score: float | None, by: str | None,
-                     events: list[dict[str, Any]], at: int) -> None:
+                     events: list[dict[str, Any]], at: int, line: float | None = None) -> None:
+        """``by``: ``wake_word``, ``voice`` or ``conversation`` for someone
+        recognized, ``answer`` for a short answer taken without a name
+        (``line``: the score it needed), None for a voice nobody knows."""
         person = self.people.get(person_id) if person_id else None
         self.speaker = {
             "id": person.id if person else None,
@@ -880,6 +939,7 @@ class Follow:
             "color": person.color if person else None,
             "score": None if score is None else round(score, 3),
             "by": by,
+            **({"line": round(line, 3)} if line is not None else {}),
         }
         events.append({"type": "speaker", "t": round(at / SR, 3), **self.speaker})
 

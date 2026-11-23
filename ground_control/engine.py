@@ -24,6 +24,9 @@ _LOG = logging.getLogger(__name__)
 QUANTUM = 8000
 """Window lengths are whole multiples of this many samples (0.5 s)."""
 
+MIN_SAMPLES = 1600
+"""The least audio a speaker model takes (0.1 s). Shorter audio is filled up with silence."""
+
 OWN_SESSION_S = (0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0)
 """Window lengths that get a GPU session of their own: every length up to the
 4 s windows, which covers nearly every call during a command. A GPU session
@@ -223,6 +226,9 @@ class Embedder:
         step = QUANTUM
         if len(audio) >= step:
             audio = audio[len(audio) - (len(audio) // step) * step:]
+        elif len(audio) < MIN_SAMPLES:
+            # The models fail on less than about 60 ms: silence fills it up.
+            audio = np.concatenate([np.asarray(audio, dtype=np.float32), np.zeros(MIN_SAMPLES - len(audio), np.float32)])
         x = np.ascontiguousarray(audio, dtype=np.float32)
         x = x[None, None, :] if self._rank == 3 else x[None, :]
         n = x.shape[-1]

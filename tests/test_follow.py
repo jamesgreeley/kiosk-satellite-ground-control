@@ -594,3 +594,82 @@ def test_without_a_wake_clip_the_end_of_the_wake_word_is_not_looked_for(househol
     audio = np.concatenate([voice[speakers[0]]["test"][:4 * SR], silence(1.5)])
     run_after_wake_word(people, embedder, vad, audio, None, find)
     assert find.calls == []
+
+
+# ── an answer with no wake word ──────────────────────────────────────────
+
+def test_the_line_for_an_answer_rises_with_how_much_was_said(household, vad, embedder):
+    """A short answer needs the other-voice line. More of it needs more, up
+    to the recognition threshold at two seconds."""
+    people, *_ = household
+    f = Follow(FollowConfig(policy="enrolled"), ACCURATE, embedder, vad, people)
+    assert f.answer_line(0.3) == f.answer_line(0.75) == ACCURATE.other_threshold
+    assert ACCURATE.other_threshold < f.answer_line(1.0) < f.answer_line(1.5) < ACCURATE.threshold
+    assert f.answer_line(2.0) == f.answer_line(5.0) == ACCURATE.threshold
+
+
+def test_a_short_answer_with_no_wake_word_is_taken_on_a_device_that_answers_chosen_people(
+        household, speakers, voice, vad, embedder):
+    """Home Assistant asked a question (ask_question, start_conversation), so
+    there is no wake word and "yes" is too short to recognize anyone (#20).
+    It sounds like the person the device answers: it goes on, without a name."""
+    people, ana, _ = household
+    user = held_out(speakers[0])
+    s = Script().add("quiet", silence(0.5)).add("user", user[2 * SR:int(2.7 * SR)]).add("quiet", silence(1.5))
+    events, f = run(people, embedder, vad, s, policy="people", people=(ana.id,))
+    assert not of(events, "rejected") and len(of(events, "turn_end")) == 1
+    assert s.speech_share("user", f.released, vad) >= 0.5
+    speaker = of(events, "speaker")[-1]
+    assert speaker["name"] is None and speaker["by"] == "answer"
+    assert speaker["score"] >= speaker["line"] == ACCURATE.other_threshold
+    took = [t for t in f.timeline if t.get("answer")][0]
+    assert took["id"] == ana.id and took["speech_s"] < 1.0
+    stats = of(events, "stats")[0]
+    assert not stats["rejected"] and stats["speaker"]["by"] == "answer"
+
+
+def test_a_short_answer_from_someone_the_device_doesnt_answer_is_still_turned_away(
+        tmp_path, speakers, voice, vad, embedder):
+    people = People(tmp_path, vad)
+    ana = people.add("Ana")
+    people.enroll(ana.id, voice[speakers[0]]["enroll"], {"accurate": embedder})
+    guest = held_out(speakers[2])
+    s = Script().add("quiet", silence(0.5)).add("user", guest[2 * SR:int(2.7 * SR)]).add("quiet", silence(1.5))
+    events, f = run(people, embedder, vad, s, policy="people", people=(ana.id,))
+    assert not [e for e in of(events, "speaker") if e["by"] == "answer"]
+    assert s.released_from("user", f.released) <= 0.3 or of(events, "rejected")
+
+
+def test_a_short_answer_after_a_wake_word_is_judged_with_the_wake_word(household, speakers, voice, vad, embedder):
+    """The line for an answer is only for a session with no wake word: with
+    one, a short command is recognized from the wake word and the command."""
+    people, ana, _ = household
+    user = held_out(speakers[0])
+    s = Script().add("user", user[2 * SR:int(2.7 * SR)]).add("quiet", silence(1.5))
+    events, f = run(people, embedder, vad, s, anchor=anchor_of(user), policy="people", people=(ana.id,))
+    assert not [t for t in f.timeline if t.get("answer")]
+    assert of(events, "speaker")[-1]["name"] == "Ana"
+
+
+def test_a_click_before_an_answer_is_not_taken_for_the_user(tmp_path, speakers, voice, vad, embedder):
+    """A device that answers anyone, no wake word and one 32 ms frame of
+    speech long before the answer. The speaker model can't take audio that
+    short, which ended the session. A click is nobody's voice anyway."""
+    people = People(tmp_path, vad)
+    ana = people.add("Ana")
+    people.enroll(ana.id, voice[speakers[0]]["enroll"], {"accurate": embedder})
+    guest = held_out(speakers[2])
+    probs = vad.stream().feed(guest)
+    first = next(i for i, p in enumerate(probs) if p >= 0.5) * FRAME
+    click = guest[first + 3200:first + 3200 + int(0.04 * SR)]
+    s = (Script().add("quiet", silence(0.5)).add("click", click).add("quiet", silence(1.5))
+         .add("user", guest[2 * SR:int(2.9 * SR)]).add("quiet", silence(1.5)))
+    events, f = run(people, embedder, vad, s)
+    assert len(of(events, "turn_end")) == 1
+    assert s.speech_share("user", f.released, vad) >= 0.5
+
+
+def test_the_speaker_model_takes_audio_of_any_length(embedder):
+    for n in (0, 160, 512, 1024, 1599):
+        e = embedder.embed(np.zeros(n, dtype=np.float32) + 0.01)
+        assert e.shape == (embedder.dim,) and np.isfinite(e).all()

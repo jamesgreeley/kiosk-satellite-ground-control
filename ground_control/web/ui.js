@@ -286,7 +286,7 @@ export function outcomeChip(stats) {
   switch (stats?.end) {
     case "other_voice": return chip("Other voice cut", "c-info");
     case "rejected": return chip("Rejected", "c-err");
-    case "silence": return stats?.speaker?.name ? chip("Speaker finished", "c-ok") : chip("Unknown voice", "c-warn");
+    case "silence": return stats?.speaker?.name || stats?.speaker?.by === "answer" ? chip("Speaker finished", "c-ok") : chip("Unknown voice", "c-warn");
     default: return chip("Ended", "c-off");
   }
 }

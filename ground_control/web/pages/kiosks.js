@@ -178,7 +178,7 @@ async function detail(kiosk, people, status, onKiosk) {
         current = e.id ? byId[e.id] || e : null;
         drawNow(current, e.score ? `score ${e.score}` : null);
         drawChart();
-        addLog(e.name ? `${e.name} recognized` : "Unknown voice", e.score ? `Score ${e.score}.` : "The only person enrolled.");
+        addLog(e.name ? `${e.name} recognized` : e.by === "answer" ? "Short answer taken" : "Unknown voice", e.score ? `Score ${e.score}.` : "The only person enrolled.");
         break;
       case "score": points.push(e); drawChart(); break;
       case "other_voice": addLog("Someone else", `Two checks under ${status.other_threshold}.`); break;

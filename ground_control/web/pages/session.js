@@ -98,7 +98,9 @@ function steps(record) {
         : e.by === "conversation" ? "Recognized earlier in this conversation. Only their voice goes on."
         : both ? `Score ${e.score}, from the wake word and the command together. The command alone was too short.` : `Score ${e.score}.`, e.t]);
     }
-    if (e.type === "speaker" && !e.name) out.push(["Unknown voice", `Best score ${e.score}, under the threshold.`, e.t]);
+    if (e.type === "speaker" && !e.name && e.by === "answer") {
+      out.push(["Short answer taken", `Score ${e.score} against the closest of the people this kiosk answers. With no wake word, an answer this short needs ${e.line}. It is too short to say who is speaking.`, e.t]);
+    } else if (e.type === "speaker" && !e.name) out.push(["Unknown voice", `Best score ${e.score}, under the threshold.`, e.t]);
     if (e.type === "other_voice" && record.mode === "follow") {
       out.push(["Another voice left out", "It never reached the assistant.", e.t]);
     } else if (e.type === "other_voice") {
@@ -356,7 +358,7 @@ export async function render({ id }) {
       h("main", { class: "page" },
         h("div", { class: "chips" },
           speaker.name ? chip(speaker.score != null ? `${speaker.name}, ${speaker.score}` : speaker.name, "big", h("span", { class: "dot", style: { background: color, width: "10px", height: "10px" } }))
-            : chip(`Unknown voice${speaker.score ? `, ${speaker.score}` : ""}`, "big"),
+            : chip(`${speaker.by === "answer" ? "Short answer" : "Unknown voice"}${speaker.score ? `, ${speaker.score}` : ""}`, "big"),
           outcomeChip(stats),
           chip(`${modeLabel(record.mode)} mode`, "big"),
           chip(`Answers: ${answersLabel(record, people)}`, "big"),
