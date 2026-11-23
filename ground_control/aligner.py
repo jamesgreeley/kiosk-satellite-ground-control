@@ -90,8 +90,10 @@ def _ipa(text: str, voice: str) -> str:
     if program is None:
         return ""
     try:
-        done = subprocess.run([program, "-q", "-v", voice, "--ipa", "--stdin"], input=text, capture_output=True,
-                              text=True, timeout=5, check=False)
+        # With a line end: espeak-ng 1.51 drops the last letter of text that
+        # ends without one ("Alex" for "Alexa").
+        done = subprocess.run([program, "-q", "-v", voice, "--ipa", "--stdin"], input=text + "\n",
+                              capture_output=True, text=True, timeout=5, check=False)
     except (OSError, subprocess.SubprocessError):
         return ""
     return done.stdout if done.returncode == 0 else ""

@@ -171,7 +171,9 @@ def heard(wake: np.ndarray, command: np.ndarray, gap_s: float, inside_s: float):
 
 @needs_espeak
 def test_a_wake_word_is_pronounced_as_the_kiosks_language_says_it(model):
+    # The whole word: espeak-ng 1.51 drops the last letter of text given without a line end.
     assert model.pronunciations("Alexa") == [["ɐ", "l", "ɛ", "k", "s", "ə"]]
+    assert model.pronunciations("Ok Nova")[0][-2:] == ["v", "ə"]
     said = model.pronunciations("Hey Jarvis", "fr")
     assert len(said) == 2 and said[0][0] == "h" and said[1][0] != "h"
     assert model.pronunciations("", "fr") == []
