@@ -17,7 +17,7 @@ looking at the kiosk, each new finger reading and the last look.
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from .sessions import new_id
@@ -219,6 +219,14 @@ class VisionTracker:
             if isinstance(message.get("action"), str):
                 event["action"] = message["action"][:120]
         s.events.append(event)
+        # The frame the kiosk acted on: the last look before the outcome.
+        if what in ("gesture", "screensaver_dismissed") and s.last is not None and self._keep_frames() \
+                and len(s.frames) < MAX_FRAMES - 1:
+            kept = next((f for f in s.frames if f.n == s.last.n), None)
+            if kept is None:
+                s.frames.append(replace(s.last, reason=what))
+            elif kept.reason in ("look", "first", "facing", "reading") and what == "gesture":
+                kept.reason = what
         self._publish({**event, "type": "vision_outcome", "what": what, "device_id": self.device_id, "session": s.id})
 
     def lost(self, kind: str) -> None:

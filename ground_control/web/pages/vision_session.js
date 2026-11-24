@@ -10,7 +10,45 @@ const ENDS = {
 
 const REASONS = {
   first: "First look", facing: "Looking at the kiosk", reading: "New finger reading", last: "Last look", look: "Look",
+  gesture: "Gesture", screensaver_dismissed: "Screensaver dismissed",
 };
+
+/** A face looking at the kiosk, on a frame: green, like a connected kiosk. */
+const FACING = "#4f9a55";
+
+const OUTCOMES = ["screensaver_dismissed", "screensaver_postponed", "gesture"];
+
+function outcomeLabel(e) {
+  if (e.type === "gesture") return `${fingers(e.fingers ?? 0)}${e.action ? ` → ${e.action}` : ""}`;
+  return e.type === "screensaver_dismissed" ? "Screensaver dismissed" : "Screensaver postponed";
+}
+
+/** The kiosk's lane: what it did, as labels at their times. A label that
+ * would run into the one before it drops to a second row. */
+function kioskLane(outcomes, total) {
+  const track = h("div", { class: "vlt vko" }, outcomes.map((e) => h("span", {
+    class: `vpill ${e.type === "gesture" ? "g" : ""}`, title: `${e.t} s: ${outcomeLabel(e)}`,
+    style: { left: `${(e.t / total) * 100}%` },
+  }, outcomeLabel(e))));
+  requestAnimationFrame(() => {
+    const width = track.clientWidth;
+    const ends = [-Infinity, -Infinity];
+    for (const pill of track.children) {
+      const w = pill.offsetWidth;
+      let x = Math.min(pill.offsetLeft, width - w);
+      let row = ends.findIndex((end) => x >= end + 6);
+      if (row < 0) {
+        row = ends[0] <= ends[1] ? 0 : 1;
+        x = Math.min(Math.max(x, ends[row] + 6), width - w);
+      }
+      ends[row] = x + w;
+      pill.style.left = `${x}px`;
+      pill.style.top = `${row * 26}px`;
+    }
+    if (ends[1] === -Infinity) track.classList.add("one");
+  });
+  return h("div", { class: "vlane" }, h("span", { class: "vll" }, "Kiosk"), track);
+}
 
 const ms = (v) => (v === null || v === undefined ? "" : `${Number(v).toFixed(v < 10 ? 1 : 0)} ms`);
 const fingers = (n) => `${n} finger${n === 1 ? "" : "s"}`;
@@ -30,7 +68,7 @@ function timeline(record, total) {
   const looks = record.looks || [];
   const gc = (lk) => Object.values(lk.ms || {}).reduce((a, b) => a + b, 0);
   const top = Math.max(1, ...looks.map((lk) => Math.max(gc(lk), lk.rtt || 0)));
-  const outcomes = (record.events || []).filter((e) => ["screensaver_dismissed", "screensaver_postponed", "gesture"].includes(e.type));
+  const outcomes = (record.events || []).filter((e) => OUTCOMES.includes(e.type));
   return h("div", { class: "card tl" },
     h("div", { class: "legend" },
       h("span", {}, h("i", { class: "swb", style: { background: "var(--primary)" } }), "Face looking at the kiosk"),
@@ -38,8 +76,8 @@ function timeline(record, total) {
       h("span", {}, h("i", { class: "swb", style: { background: "var(--warn)" } }), "Hand, with its finger count"),
       h("span", {}, h("i", { class: "swb", style: { background: "var(--primary)", opacity: 0.5 } }), "Ground Control's time, and the round trip outlined")),
     h("div", { class: "vlanes" },
-      outcomes.map((e) => h("div", { class: "mk", style: { left: `calc(84px + (100% - 84px) * ${e.t / total})` } },
-        h("span", { class: "mklbl" }, e.type === "gesture" ? fingers(e.fingers ?? 0) : e.type === "screensaver_dismissed" ? "Dismissed" : "Postponed"))),
+      outcomes.map((e) => h("div", { class: "mk vguide", style: { left: `calc(84px + (100% - 84px) * ${e.t / total})` } })),
+      outcomes.length ? kioskLane(outcomes, total) : null,
       lane("Face", looks, total, (lk) => (lk.face
         ? { cls: lk.face.frontal ? "on" : "away", title: `${lk.t} s: ${lk.face.count} face${lk.face.count === 1 ? "" : "s"}, ${lk.face.frontal ? "looking at the kiosk" : "turned away"}` }
         : lk.want.includes("f") ? { cls: "none", title: `${lk.t} s: no face` } : null)),
@@ -85,7 +123,24 @@ const TIMES = [
   ["round_trip", "Round trip", "From the kiosk sending a frame to its result coming back, network included."],
 ];
 
-function performance(stats) {
+/** How long each gesture took: from the first look in a row that read its
+ * finger count to the kiosk running its action (the hold time included). */
+function gestureTimes(record) {
+  const looks = (record.looks || []).filter((lk) => lk.want.includes("h"));
+  return (record.events || []).filter((e) => e.type === "gesture").map((e) => {
+    let first = null;
+    for (let i = looks.length - 1; i >= 0; i--) {
+      const lk = looks[i];
+      if (lk.t > e.t) continue;
+      if (lk.hand?.fingers !== e.fingers) break;
+      first = lk.t;
+    }
+    return { e, s: first === null ? null : e.t - first };
+  });
+}
+
+function performance(record) {
+  const stats = record.stats || {};
   const t = stats.ms || {};
   const cell = (v, label) => h("span", { class: "pv" }, h("b", {}, ms(v)), h("small", {}, label));
   const rows = TIMES.filter(([k]) => t[k]?.p50 != null).map(([k, label, about]) => h("div", { class: "row" },
@@ -96,6 +151,12 @@ function performance(stats) {
   if (stats.failed) lost.push(`${stats.failed} frame${stats.failed === 1 ? "" : "s"} that couldn't be read`);
   return h("div", { class: "card" },
     rows.length ? rows : h("div", { class: "empty" }, "No times for this session."),
+    gestureTimes(record).map(({ e, s: took }) => h("div", { class: "row" },
+      h("div", { class: "grow" }, h("div", { class: "rt" }, `Gesture, ${outcomeLabel(e)}`),
+        h("div", { class: "rd" }, took === null
+          ? "Ground Control didn't read this hand. The kiosk read it with its own model."
+          : "From the first look that read the finger count to the kiosk running the action, the gesture's hold time included.")),
+      took === null ? null : h("span", { class: "pvs" }, h("span", { class: "pv" }, h("b", {}, `${took.toFixed(2)} s`), h("small", {}, "to the action"))))),
     h("div", { class: "row" }, h("div", { class: "grow" }, h("div", { class: "rd" },
       `${stats.looks} looks: ${stats.face_looks} for faces and ${stats.hand_looks} for hands. ${lost.length ? `${lost.join(" and ")}.` : "No frames lost."}`))));
 }
@@ -121,7 +182,7 @@ function frame(id, f, styles) {
       c.lineWidth = Math.max(2, w / 220);
       c.font = `600 ${Math.max(14, w / 30)}px system-ui, sans-serif`;
       for (const [x, y, bw, bh, frontal] of f.faces || []) {
-        c.strokeStyle = frontal ? styles.primary : styles.other;
+        c.strokeStyle = frontal ? FACING : styles.other;
         c.strokeRect(x * w, y * ht, bw * w, bh * ht);
       }
       if (f.hand) {
@@ -182,10 +243,11 @@ export async function renderVision(record) {
         timeline(record, total),
         h("div", { class: "cols" },
           h("section", {}, section("Steps"), h("div", { class: "card" }, steps(record))),
-          h("section", {}, section("Performance"), performance(stats))),
-        section("Frames", frames.length ? "Faces looking at the kiosk are outlined in teal, faces turned away in gray and the hand in amber with its finger count." : null),
+          h("section", {}, section("Performance"), performance(record))),
+        section("Frames"),
         frames.length
-          ? h("div", { class: "vframes" }, frames.map((f) => frame(id, f, styles)))
+          ? h("div", { class: "card vfcard" }, h("div", { class: "vframes" }, frames.map((f) => frame(id, f, styles))),
+            h("div", { class: "hint" }, icon("info", 18), "Faces looking at the kiosk are outlined in green, faces turned away in gray and the hand in amber with its finger count."))
           : h("div", { class: "card" }, h("div", { class: "empty" }, "No frames were kept for this session. Keep frames is in Settings, Vision Match."))),
     ],
   };

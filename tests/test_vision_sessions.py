@@ -55,8 +55,8 @@ def test_steps_frames_and_the_summary():
     record, frames = saved[0]
     assert [e["type"] for e in record["events"]] == ["face", "facing", "hand", "fingers", "gesture",
                                                       "fingers", "end"]
-    assert [f["reason"] for f in record["frames"]] == ["first", "facing", "reading", "reading", "last"]
-    assert [jpeg for _, jpeg in frames] == [b"0", b"1", b"2", b"4", b"5"]
+    assert [f["reason"] for f in record["frames"]] == ["first", "facing", "reading", "gesture", "reading", "last"]
+    assert [jpeg for _, jpeg in frames] == [b"0", b"1", b"2", b"3", b"4", b"5"]
     assert record["summary"] == ["3 fingers → Refresh the dashboard"]
     assert record["stats"]["readings"] == {"3": 2, "2": 1}
 
@@ -108,3 +108,26 @@ def test_a_postponed_screensaver_counts_once_a_session():
     t.outcome({"what": "something_else"}, now=4.0)
     t.close("closed", 5.0)
     assert [e["type"] for e in saved[0][0]["events"]] == ["face", "facing", "screensaver_postponed", "end"]
+
+
+def test_the_frame_a_gesture_acted_on_is_kept():
+    t, saved = tracker()
+    t.look(1, ("hands",), None, hand(3), MS, b"a", now=0.0)
+    t.look(2, ("hands",), None, hand(3), MS, b"b", now=0.5)
+    t.look(3, ("hands",), None, hand(3), MS, b"c", now=1.0)
+    t.outcome({"what": "gesture", "fingers": 3, "action": "Refresh the dashboard"}, now=1.1)
+    t.look(4, ("hands",), None, None, MS, b"d", now=1.5)
+    t.close("closed", 2.0)
+    record, frames = saved[0]
+    assert [(f["n"], f["reason"]) for f in record["frames"]] == [(0, "first"), (2, "gesture"), (3, "last")]
+    assert [j for _, j in frames] == [b"a", b"c", b"d"]
+
+
+def test_a_kiosks_vision_match_features_are_kept():
+    from ground_control.server import _features
+
+    out = _features({"vision_match": True, "face_detection": True, "hand_gestures": False,
+                     "dismiss_on_face": True, "postpone_on_face": "yes", "finger_gestures": 3, "other": 1})
+    assert out == {"vision_match": True, "face_detection": True, "hand_gestures": False,
+                   "dismiss_on_face": True, "postpone_on_face": False, "finger_gestures": 3}
+    assert "finger_gestures" not in _features({"finger_gestures": True})

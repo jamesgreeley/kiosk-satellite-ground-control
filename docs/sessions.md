@@ -41,10 +41,10 @@ The top of a vision session's page shows what the kiosk did, its length and the 
 
 | Section | What it shows |
 | --- | --- |
-| Timeline | Every look on one line per lane: **Face** marks a face looking at the kiosk or turned away, **Hand** marks a hand with its finger count and **Time** shows how long Ground Control took and the round trip from the kiosk. Lines across the lanes mark what the kiosk did: the screensaver dismissed or postponed and each finger gesture. |
+| Timeline | One lane each: **Kiosk** shows what the kiosk did, the screensaver dismissed or postponed and each finger gesture with its action. **Face** marks a face looking at the kiosk or turned away, **Hand** marks a hand with its finger count and **Time** shows how long Ground Control took and the round trip from the kiosk. |
 | Steps | Each step in order: a face seen, a face looking at the kiosk, a hand, each new finger reading, what the kiosk did and why the session ended. |
-| Performance | The median, 95th percentile and slowest time for reading the frame, Face Detection, Hand Gestures and Ground Control's whole look. Also the kiosk's time to encode each frame and the round trip from the kiosk. It also counts the frames dropped for a newer one and the frames that couldn't be read. |
-| Frames | Up to 8 frames with the faces and the hand drawn on them: the first look, the first face looking at the kiosk, each new finger reading and the last look. |
+| Performance | The median, 95th percentile and slowest time for reading the frame, Face Detection, Hand Gestures and Ground Control's whole look. Also the kiosk's time to encode each frame and the round trip from the kiosk. For each finger gesture, the time from the first look that read its finger count to the kiosk running its action, the gesture's hold time included. It also counts the frames dropped for a newer one and the frames that couldn't be read. |
+| Frames | Up to 8 frames with the faces and the hand drawn on them: the first look, the first face looking at the kiosk, each new finger reading, the frame each gesture or screensaver dismissal acted on and the last look. |
 
 ## Downloading a Session
 

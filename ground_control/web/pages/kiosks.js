@@ -76,6 +76,25 @@ function featureRows(kiosk, lastSession, people, status) {
   ];
 }
 
+/** The Vision Match settings the kiosk has on, as it last said. */
+function visionRows(kiosk, status) {
+  const f = kiosk.features || {};
+  if (!("vision_match" in f)) {
+    return [h("div", { class: "empty" }, "Not known yet. A Kiosk Satellite version with Vision Match says which features it has on when it connects.")];
+  }
+  const where = (on) => (!f.vision_match || !on ? chip("On the kiosk", "c-off") : chip("On Ground Control", "c-ok"));
+  const n = f.finger_gestures ?? 0;
+  return [
+    row("Vision Match", f.vision_match ? "Face Detection and Hand Gestures can run on Ground Control." : "Off on the kiosk, under Enable Vision Match. Its own models run everything.",
+      onOff(f.vision_match)),
+    row("Face Detection", "Where faces are found, for Dismiss on face and Postpone on face.", where(f.face_detection)),
+    row("Hand Gestures", "Where raised fingers are read, for Show fingers gestures.", where(f.hand_gestures)),
+    row("Dismiss on face", "A face looking at the kiosk dismisses the screensaver.", onOff(f.dismiss_on_face)),
+    row("Postpone on face", "A face in front of the kiosk puts off the next screensaver.", onOff(f.postpone_on_face && f.dismiss_on_face)),
+    row("Finger gestures", "Gestures set up with Show fingers.", n ? chip(`${n} set up`, "c-ok") : chip("None", "c-off")),
+  ];
+}
+
 export async function render({ id }) {
   const [{ kiosks }, { people }, status] = await Promise.all([api("api/kiosks"), api("api/people"), api("api/status")]);
   const kiosk = kiosks.find((k) => k.device_id === id) || kiosks[0];
@@ -254,10 +273,14 @@ async function detail(kiosk, people, status, onKiosk) {
     : [h("div", { class: "empty" }, "No sessions from this kiosk yet.")];
 
   const features = h("div", { class: "card" });
+  const visionFeatures = h("div", { class: "card" });
   const drawFeatures = () => {
     features.replaceChildren(...featureRows(kiosk, last, people, status),
       h("div", { class: "hint", style: { paddingTop: "14px" } }, icon("info", 18),
         "Set on the kiosk, in Kiosk Satellite under Ground Control, Voice Match."));
+    visionFeatures.replaceChildren(...visionRows(kiosk, status),
+      h("div", { class: "hint", style: { paddingTop: "14px" } }, icon("info", 18),
+        "Set on the kiosk, in Kiosk Satellite under Ground Control, Vision Match. Dismiss on face and Postpone on face are under Screensaver, Face Detection, and finger gestures under Gestures."));
   };
   drawFeatures();
 
@@ -278,7 +301,15 @@ async function detail(kiosk, people, status, onKiosk) {
       row("Kiosk Satellite", null, h("span", { class: "val" }, kiosk.version || "Unknown"))),
     section("Voice Match"),
     features,
-    section("Vision Match", "Looks a day. An empty look found no face or hand and opened no session."),
+    section("Vision Match"),
+    visionFeatures,
+    section("Who is talking"),
+    h("div", { class: "card" }, nowBox, h("div", { class: "tl", style: { paddingTop: "4px" } }, chartBox),
+      h("p", { class: "hint", style: { margin: 0 } }, "Each check of the current command. Colored passed, red means someone else.")),
+    section("What it sees"),
+    h("div", { class: "card" }, seeBox, h("div", { class: "tl", style: { paddingTop: "4px" } }, strip),
+      h("p", { class: "hint", style: { margin: 0 } }, "Each look of the current vision session, for kiosks with Vision Match on.")),
+    section("Looks", "Vision Match looks a day. An empty look found no face or hand and opened no session."),
     h("div", { class: "card" }, days.length
       ? days.map((d) => h("div", { class: "row" },
         h("div", { class: "grow" }, h("div", { class: "rt" },
@@ -287,12 +318,6 @@ async function detail(kiosk, people, status, onKiosk) {
           ...[[d.looks, "looks"], [d.empty, "empty"], [d.sessions, "sessions"]].map(([v, label]) =>
             h("span", { class: "pv" }, h("b", {}, v.toLocaleString()), h("small", {}, label))))))
       : h("div", { class: "empty" }, "No looks from this kiosk in the last 7 days.")),
-    section("Who is talking"),
-    h("div", { class: "card" }, nowBox, h("div", { class: "tl", style: { paddingTop: "4px" } }, chartBox),
-      h("p", { class: "hint", style: { margin: 0 } }, "Each check of the current command. Colored passed, red means someone else.")),
-    section("What it sees"),
-    h("div", { class: "card" }, seeBox, h("div", { class: "tl", style: { paddingTop: "4px" } }, strip),
-      h("p", { class: "hint", style: { margin: 0 } }, "Each look of the current vision session, for kiosks with Vision Match on.")),
     section("Events"),
     log,
     section("Recent sessions", null, h("a", { class: "txtlink", href: "#/sessions" }, "All sessions")),

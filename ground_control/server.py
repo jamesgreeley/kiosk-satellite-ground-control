@@ -139,11 +139,16 @@ async def _kiosk_start(request: web.Request) -> tuple[web.WebSocketResponse, dic
 
 
 def _features(value: Any) -> dict[str, Any] | None:
-    """The Voice Match settings a kiosk says it has on, kept to what the Kiosks page shows."""
+    """The Voice Match and Vision Match settings a kiosk says it has on, kept to what the Kiosks page shows."""
     if not isinstance(value, dict):
         return None
     out: dict[str, Any] = {k: value[k] is True for k in
-                           ("voice_match", "trimming", "isolation", "speaker_sensor", "show_speaker") if k in value}
+                           ("voice_match", "trimming", "isolation", "speaker_sensor", "show_speaker",
+                            "vision_match", "face_detection", "hand_gestures", "dismiss_on_face",
+                            "postpone_on_face") if k in value}
+    gestures = value.get("finger_gestures")
+    if isinstance(gestures, int) and not isinstance(gestures, bool) and 0 <= gestures <= 100:
+        out["finger_gestures"] = gestures
     if value.get("policy") in ("anyone", "enrolled", "people"):
         out["policy"] = value["policy"]
     people = value.get("people")

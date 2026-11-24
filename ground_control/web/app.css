@@ -262,8 +262,15 @@ tbody tr:hover td { background: var(--s2); }
 .vm.hand { width: 16px; background: var(--warn); }
 .vm.lat { bottom: 0; width: 4px; border-radius: 1px; background: var(--primary); opacity: .55; }
 .vm.lat::after { content: ""; position: absolute; left: -1px; right: -1px; bottom: 0; height: var(--rtt); border: 1px solid var(--text); border-bottom: 0; opacity: .5; }
-.vframes { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
-.vfig { margin: 0; background: var(--surface); border-radius: 20px; overflow: hidden; }
+.vframes { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+.vfcard { padding: 16px 16px 4px; }
+.vfcard .hint { padding: 12px 4px 8px; }
+.vfig { margin: 0; background: var(--s2); border-radius: 14px; overflow: hidden; }
+.vko { height: 52px; border-bottom: 0; }
+.vko.one { height: 26px; }
+.vpill { position: absolute; top: 0; height: 22px; line-height: 22px; padding: 0 9px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; background: var(--infc); color: var(--infk); }
+.vpill.g { background: var(--okc); color: var(--okk); }
+.vguide { border-left: 1px dashed var(--outline); opacity: .7; }
 .vf { display: block; width: 100%; height: auto; background: var(--s2); min-height: 120px; }
 .vfig figcaption { display: flex; justify-content: space-between; gap: 8px; padding: 10px 14px; font-size: 13.5px; font-weight: 500; }
 table.perf td:not(:first-child), table.perf th:not(:first-child) { text-align: right; white-space: nowrap; }
