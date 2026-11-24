@@ -14,7 +14,7 @@ from ground_control.auth import TokenCheck
 from ground_control.models import VISION_MODELS
 from ground_control.server import VM, build_app
 from ground_control.service import GroundControl
-from ground_control.vision import FINGERS, BadFrame, Look, Vision, decode, nms, turn_of
+from ground_control.vision import FACE_3D, FINGERS, FRONTAL_MAX_DEG, BadFrame, Look, Vision, decode, head_yaw, nms, turn_of
 
 from .conftest import MODELS
 from .kiosks import CLIENTS, approve, receive
@@ -64,7 +64,22 @@ def test_overlapping_faces_count_once():
     assert nms(boxes, np.array([0.9, 0.8, 0.7])) == [0, 2]
 
 
+def _project(yaw_deg: float, roll_deg: float = 0.0) -> np.ndarray:
+    """The generic face turned ``yaw_deg`` and rolled ``roll_deg``, as a camera sees it."""
+    a, b = np.radians(yaw_deg), np.radians(roll_deg)
+    yaw = np.array([[np.cos(a), 0, np.sin(a)], [0, 1, 0], [-np.sin(a), 0, np.cos(a)]])
+    roll = np.array([[np.cos(b), -np.sin(b), 0], [np.sin(b), np.cos(b), 0], [0, 0, 1]])
+    return (FACE_3D @ yaw.T @ roll.T)[:, :2] * 2 + [320, 240]
+
+
 def test_a_head_turned_away_is_not_frontal():
+    assert head_yaw(_project(0)) < 1
+    assert abs(head_yaw(_project(20, roll_deg=25)) - 20) < 1
+    assert abs(head_yaw(_project(-50)) - 50) < 1
+    assert head_yaw(_project(-50)) > FRONTAL_MAX_DEG > head_yaw(_project(15))
+
+
+def test_the_nose_check_still_applies():
     eye_a, eye_b = np.array([0.0, 0.0]), np.array([10.0, 0.0])
     assert abs(turn_of(eye_a, eye_b, np.array([5.0, 6.0]))) < 0.01
     assert turn_of(eye_a, eye_b, np.array([9.0, 6.0])) > 0.3
@@ -104,7 +119,7 @@ class FakeVision:
     def look(self, data, rotation=0, want=("face", "hands")):
         decode(data, rotation)
         time.sleep(self.delay)
-        face = {"box": [0.4, 0.2, 0.1, 0.15], "score": 0.9, "frontal": True, "turn": 0.02, "points": []}
+        face = {"box": [0.4, 0.2, 0.1, 0.15], "score": 0.9, "frontal": True, "yaw": 1.5, "points": []}
         hand = {"box": [0.6, 0.3, 0.05, 0.1], "score": 0.88, "gesture": "three", "fingers": 3}
         return Look([face] if "face" in want else None, hand if "hands" in want else None, {"decode": 1.0})
 

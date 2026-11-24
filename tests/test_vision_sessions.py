@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from ground_control.vision_sessions import GAP_S, MAX_FRAMES, MAX_S, VisionTracker, summary
 
-FACE = {"box": [0.4, 0.2, 0.1, 0.15], "score": 0.9, "frontal": True, "turn": 0.02}
-AWAY = {**FACE, "frontal": False, "turn": 0.9}
+FACE = {"box": [0.4, 0.2, 0.1, 0.15], "score": 0.9, "frontal": True, "yaw": 1.5}
+AWAY = {**FACE, "frontal": False, "yaw": 55.0}
 MS = {"decode": 1.0, "face": 3.0}
 
 
