@@ -116,7 +116,9 @@ export async function render() {
                 settings.vision_error ? chip("Can't run", "c-err")
                   : settings.vision_loaded ? chip(settings.vision_on_gpu ? "On, GPU" : "On, CPU", "c-ok") : chip("Not loaded yet"),
                 "vision-match"),
-              feature("person", "Face Recognition", "Who is looking at the kiosk.", chip("Coming soon"), "vision-match"))),
+              feature("person", "Face Recognition", "Who is looking at the kiosk, for each kiosk's Face sensor.",
+                settings.faces_enrolled ? chip(`${settings.faces_enrolled} ${settings.faces_enrolled === 1 ? "face" : "faces"}`, "c-ok") : chip("No faces yet"),
+                "vision-match"))),
           h("section", {},
             section("Recent sessions", null, h("a", { class: "txtlink", href: "#/sessions" }, "All sessions")),
             h("div", { class: "card" }, sessionRows)))),

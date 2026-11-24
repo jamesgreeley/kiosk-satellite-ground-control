@@ -263,6 +263,8 @@ tbody tr:hover td { background: var(--s2); }
 .vm.hand.brief { opacity: .4; }
 .vm.lat { bottom: 0; width: 4px; border-radius: 1px; background: var(--primary); opacity: .55; }
 .vm.lat::after { content: ""; position: absolute; left: -1px; right: -1px; bottom: 0; height: var(--rtt); border: 1px solid var(--text); border-bottom: 0; opacity: .5; }
+.facethumbs { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 20px 12px; }
+.facethumbs img { width: 56px; height: 56px; border-radius: 10px; object-fit: cover; background: var(--s2); }
 .vframes { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
 .vfcard { padding: 16px 16px 4px; }
 .vfcard .hint { padding: 12px 4px 8px; }

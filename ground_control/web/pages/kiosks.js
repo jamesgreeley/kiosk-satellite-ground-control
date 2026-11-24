@@ -92,6 +92,7 @@ function visionRows(kiosk, status) {
     row("Dismiss on face", "A face looking at the kiosk dismisses the screensaver.", onOff(f.dismiss_on_face)),
     row("Postpone on face", "A face in front of the kiosk puts off the next screensaver.", onOff(f.postpone_on_face && f.dismiss_on_face)),
     row("Finger gestures", "Gestures set up with Show fingers.", n ? chip(`${n} set up`, "c-ok") : chip("None", "c-off")),
+    row("Face Recognition", "Who is looking at the kiosk, in its Face sensor.", f.vision_match && f.face_recognition ? chip("On Ground Control", "c-ok") : onOff(false)),
   ];
 }
 
@@ -185,6 +186,7 @@ async function detail(kiosk, people, status, onKiosk) {
 
   // What the camera sees, while a vision session goes on: the last 10 seconds of looks.
   const seen = [];
+  let viewer = null;
   const seeBox = h("div", { class: "now" });
   const strip = h("div", { class: "vlanes", style: { marginTop: "4px" } });
   const drawSeen = () => {
@@ -195,7 +197,8 @@ async function detail(kiosk, people, status, onKiosk) {
     const face = !faceLook ? null : faceLook.face ? (faceLook.face.frontal ? "Looking at the kiosk" : "Face turned away") : "No face";
     const hand = handLook?.hand ? (handLook.hand.fingers != null ? fingers(handLook.hand.fingers) : "Hand") : null;
     const ms = lk ? Object.values(lk.ms || {}).reduce((a, b) => a + b, 0) : null;
-    seeBox.replaceChildren(...[h("span", { class: "disc vis" }, icon("eye", 20)),
+    seeBox.replaceChildren(...[viewer ? disc(byId[viewer.id] || viewer) : h("span", { class: "disc vis" }, icon("eye", 20)),
+      viewer ? h("span", { class: "big" }, viewer.name) : null,
       h("span", { class: "big" }, lk ? [face, hand].filter(Boolean).join(", ") || "No face" : "Nobody in front of it"),
       ms != null ? h("span", { class: "val" }, `${ms.toFixed(0)} ms`) : null].filter(Boolean));
     const end = Date.now() / 1000;
@@ -239,6 +242,11 @@ async function detail(kiosk, people, status, onKiosk) {
       case "session_end": kiosk.in_session = false; drawState(); break;
       case "enroll_start": addLog(`Enrolling ${e.name}`, "Started from the app."); break;
       case "enroll_saved": addLog("Enrollment saved", `${e.added_s} s of speech added.`); break;
+      case "vision_person":
+        viewer = e.person?.id ? e.person : null;
+        drawSeen();
+        if (viewer) addLog(`${viewer.name} recognized`, `Face Recognition, score ${viewer.score}.`);
+        break;
       case "vision_start": seen.length = 0; addLog("Vision session started", "A face or a hand in front of the kiosk."); break;
       case "vision_look":
         seen.push({ ...e, at: Date.now() / 1000 });

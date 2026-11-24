@@ -2,7 +2,7 @@
 
 Navigate to **People** in the Ground Control app.
 
-Everyone Voice Match can recognize is on this page, with their voice, their color and the things "my" means for them. The list on the left shows each person and how many kinds of device they are enrolled on.
+Everyone Voice Match and Face Recognition can recognize is on this page, with their voice, their face, their color and the things "my" means for them. The list on the left shows each person and how many kinds of device they are enrolled on.
 
 ## Adding a Person
 
@@ -40,6 +40,29 @@ The **Voice Match** section lists each enrollment with the kiosk it was recorded
 
 With **Learn from commands** on, under **Settings > Voice Match**, commands where a person was recognized with high confidence are folded into their voice. Their voiceprint follows a cold or a new room without enrolling again.
 
+## Face
+
+Face Recognition tells who is looking at a kiosk, from the faces enrolled here. Each kiosk with Vision Match turns it on in Kiosk Satellite, under **Settings > Ground Control > Vision Match**, and shows who it sees in its Face sensor in Home Assistant.
+
+### Enrolling a Face
+
+A face is enrolled through a kiosk's own camera, in a guided capture of about half a minute. Start it on the kiosk, or in the person's **Vision Match** section here: pick the kiosk and choose **Enroll face**. Only kiosks with Vision Match on are offered. The kiosk then shows the steps:
+
+1. Look at the screen.
+2. Turn a little to one side.
+3. Now a little to the other side.
+4. Take a step back.
+
+Each step needs a few good pictures of the face. The kiosk says what is wrong when one isn't good: no face, more than one face, come closer, turn more or less, too dark. A different face is left out, so someone walking past doesn't end up in the enrollment. The Ground Control app follows the steps as they happen.
+
+What was captured is kept when the capture stops early after the first step. Enrolling on another kiosk, or in other light, helps the face be recognized there.
+
+Only small pictures of the face, lined up and 112 pixels wide, are kept, so a change of vision model rebuilds the faces without anyone enrolling again. The **Vision Match** section shows them, with each enrollment and the kiosk it was captured on. Deleting an enrollment rebuilds the person's face without it.
+
+### How a Face Is Recognized
+
+A face looking at the kiosk is compared with every enrolled face. A name needs two looks in a row above the **Threshold** under **Settings > Vision Match > Face Recognition**, or one very close match, and the best match has to be clearly ahead of the next person. Once named, the face is checked again every 2 seconds. With no face looking at the kiosk for 3 seconds, nobody is in front of it.
+
 ## Color
 
 **Color on the kiosk** is the person's color: the name before a command on the voice overlay, the listening arc on a device with a light ring and the person's marks in the Ground Control app.
@@ -61,4 +84,4 @@ The kiosks get these with the voices, so "my" is known on the kiosk with no extr
 
 **Rename** changes the name everywhere, on the kiosks too.
 
-**Forget** deletes the person, their voice and all their enrollment audio. Kiosks that answered only chosen people stop answering them. A kiosk whose chosen people are all gone answers nobody until people are chosen again, and its page on the Kiosks page says so.
+**Forget** deletes the person, their voice, their face and all their enrollment audio and face pictures. Kiosks that answered only chosen people stop answering them. A kiosk whose chosen people are all gone answers nobody until people are chosen again, and its page on the Kiosks page says so.

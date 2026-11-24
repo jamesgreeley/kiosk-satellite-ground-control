@@ -8,6 +8,9 @@ does. Run it once per model release:
 
 - SCRFD 2.5G and 10G: copied unchanged from InsightFace's v0.7 model packs
   (``det_2.5g.onnx`` from buffalo_m, ``det_10g.onnx`` from buffalo_l).
+- ArcFace MobileFaceNet and R50: ``w600k_mbf.onnx`` from buffalo_s unchanged,
+  ``w600k_r50.onnx`` from buffalo_l with 16-bit weights (under 100 MB, the
+  same embeddings).
 - YOLOv10n and YOLOv10x gestures: HaGRIDv2's checkpoints, exported to ONNX at
   480x640 with opset 17. YOLOv10x then gets 16-bit weights, so it stays under
   GitHub's 100 MB file limit. It only runs on a GPU, where 16 bits is also faster.
@@ -49,6 +52,22 @@ def scrfd(work: Path) -> None:
                 shutil.copyfileobj(src, dst)
 
 
+def recognition(work: Path) -> None:
+    import onnx
+    from onnxconverter_common import float16
+
+    for pack, member, out, half in (("buffalo_s", "w600k_mbf.onnx", "arcface_w600k_mbf.onnx", False),
+                                    ("buffalo_l", "w600k_r50.onnx", "arcface_w600k_r50.onnx", True)):
+        with zipfile.ZipFile(fetch(INSIGHTFACE.format(pack), work / f"{pack}.zip")) as z:
+            name = next(n for n in z.namelist() if n.endswith(member))
+            with z.open(name) as src, (work / member).open("wb") as dst:
+                shutil.copyfileobj(src, dst)
+        if half:
+            onnx.save(float16.convert_float_to_float16(onnx.load(str(work / member)), keep_io_types=True), str(OUT / out))
+        else:
+            shutil.copyfile(work / member, OUT / out)
+
+
 def gestures(work: Path) -> None:
     import onnx
     from onnxconverter_common import float16
@@ -69,8 +88,10 @@ def main() -> None:
     work = Path(sys.argv[1] if len(sys.argv) > 1 else "vision-models")
     work.mkdir(parents=True, exist_ok=True)
     scrfd(work)
+    recognition(work)
     gestures(work)
-    for f in ("scrfd_2.5g.onnx", "scrfd_10g.onnx", "yolov10n_gestures.onnx", "yolov10x_gestures.onnx"):
+    for f in ("scrfd_2.5g.onnx", "scrfd_10g.onnx", "arcface_w600k_mbf.onnx", "arcface_w600k_r50.onnx",
+              "yolov10n_gestures.onnx", "yolov10x_gestures.onnx"):
         print(f, hashlib.sha256((OUT / f).read_bytes()).hexdigest())
 
 

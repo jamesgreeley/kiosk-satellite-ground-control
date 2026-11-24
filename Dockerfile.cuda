@@ -67,7 +67,8 @@ RUN pip install --no-cache-dir . && pip uninstall -y onnxruntime \
     && rm -rf /root/.cache
 COPY models/silero_vad.onnx models/redimnet2_b3_multi.onnx models/redimnet2_b1.onnx models/voice_isolator.onnx models/voice_isolator_cpu.onnx \
      models/wake_word_aligner.onnx models/scrfd_2.5g.onnx models/scrfd_10g.onnx models/yolov10n_gestures.onnx \
-     models/yolov10x_gestures.onnx models/*.LICENSE.md ./models/
+     models/yolov10x_gestures.onnx models/arcface_w600k_mbf.onnx models/arcface_w600k_r50.onnx \
+     models/*.LICENSE.md ./models/
 
 VOLUME /data
 EXPOSE 10900

@@ -33,6 +33,7 @@ from .suggestions import Suggestions
 from .service import GroundControl
 from .sessions import new_id
 from .updates import UpdateCheck
+from .faces import Recognizer
 from .vision_sessions import VisionTracker
 
 _LOG = logging.getLogger(__name__)
@@ -45,7 +46,7 @@ SUGGESTIONS = web.AppKey("suggestions", Suggestions)
 LOGIN = web.AppKey("login", HomeAssistantLogin)
 UPDATES = web.AppKey("updates", UpdateCheck)
 CLIENTS = web.AppKey("clients", ClientCheck)
-SOCKETS = ("/api/session", "/api/enroll", "/api/kiosk", "/api/vision", "/api/events")
+SOCKETS = ("/api/session", "/api/enroll", "/api/kiosk", "/api/vision", "/api/face_enroll", "/api/events")
 MIN_PARTIAL_ENROLL_S = 10.0
 WEB = Path(__file__).resolve().parent / "web"
 INGRESS_PROXY = "172.30.32.2"
@@ -144,8 +145,8 @@ def _features(value: Any) -> dict[str, Any] | None:
         return None
     out: dict[str, Any] = {k: value[k] is True for k in
                            ("voice_match", "trimming", "isolation", "speaker_sensor", "show_speaker",
-                            "vision_match", "face_detection", "hand_gestures", "dismiss_on_face",
-                            "postpone_on_face") if k in value}
+                            "vision_match", "face_detection", "hand_gestures", "face_recognition",
+                            "dismiss_on_face", "postpone_on_face") if k in value}
     gestures = value.get("finger_gestures")
     if isinstance(gestures, int) and not isinstance(gestures, bool) and 0 <= gestures <= 100:
         out["finger_gestures"] = gestures
@@ -159,10 +160,14 @@ def _features(value: Any) -> dict[str, Any] | None:
 
 def _person(vm: GroundControl, p) -> dict[str, Any]:
     enrollments = vm.people.enrollments(p.id)
+    faces = vm.faces.enrollments(p.id)
+    for f in faces:
+        f["crop_names"] = [c.name for c in vm.faces.crops(p.id, f["id"])]
     return {**asdict(p), "speech_s": round(vm.people.speech_seconds(p.id), 1),
             "clips": len(vm.people.clips(p.id)), "has_voice": vm.people.has_voice(p.id),
             "enrollments": enrollments, "models": sorted({e["model"] for e in enrollments if e.get("model")}),
-            "picture": bool((p.things or {}).get("person"))}
+            "picture": bool((p.things or {}).get("person")),
+            "has_face": bool(faces), "face_enrollments": faces}
 
 
 async def person_picture(request: web.Request) -> web.Response:
@@ -704,9 +709,10 @@ async def vision_ws(request: web.Request) -> web.WebSocketResponse:
     device_id = start.get("device_id")
     kiosk = vm.hub.seen(device_id, start.get("device_name"))
     who = kiosk.name if kiosk else device_id or "an unknown kiosk"
-    _LOG.info("vision from %s: %s", who, " and ".join(want))
+    recognize = start.get("recognize") is True and "face" in want
+    _LOG.info("vision from %s: %s%s", who, " and ".join(want), ", with Face Recognition" if recognize else "")
     await ws.send_json({"type": "ready", "model": vision.model.key, "want": list(want),
-                        "max_looks": vision.max_looks})
+                        "max_looks": vision.max_looks, "recognize": recognize})
     waiting: dict[str, Any] | None = None
     wake = asyncio.Event()
     looks = 0
@@ -727,6 +733,40 @@ async def vision_ws(request: web.Request) -> web.WebSocketResponse:
                             vision.on_gpu, keep_frames=lambda: vm.sessions.keep_frames, save=save,
                             publish=vm.hub.publish)
 
+    # Face Recognition: who is in front of this kiosk, over its face looks.
+    rec = Recognizer(vm.face_threshold)
+    prints: dict[str, Any] = {"ids": None}
+    shown: dict[str, Any] = {"key": (None, True)}
+
+    def faceprints() -> tuple[list[str], Any]:
+        if prints["ids"] is None:
+            prints["ids"], prints["m"] = vm.faces.faceprints(vision.model.key)
+        return prints["ids"], prints["m"]
+
+    def forget_prints() -> None:
+        prints["ids"] = None
+
+    vm.faces.on_change.append(forget_prints)
+
+    def person_of(match) -> dict[str, Any] | None:
+        if match is None:
+            return None
+        p = vm.people.get(match.person_id) if match.person_id else None
+        return {"id": p.id, "name": p.name, "color": p.color, "score": match.score} if p \
+            else {"id": None, "name": None, "score": match.score}
+
+    async def tell_person() -> dict[str, Any] | None:
+        """The person in front of the kiosk, said once when it changes."""
+        person = person_of(rec.current)
+        key = (person or {}).get("id"), person is None
+        if key != shown.get("key"):
+            shown["key"] = key
+            tracker.person(person)
+            vm.hub.publish({"type": "vision_person", "device_id": device_id, "person": person})
+            if person and person["id"]:
+                _LOG.info("%s is in front of %s (%.2f)", person["name"], who, person["score"])
+        return person
+
     def flush() -> None:
         counts = tracker.take_counts()
         if any(counts.values()):
@@ -735,6 +775,10 @@ async def vision_ws(request: web.Request) -> web.WebSocketResponse:
     async def ticker() -> None:
         while True:
             await asyncio.sleep(1.0)
+            if rec.tick(time.time()):
+                await tell_person()
+                if not ws.closed:
+                    await ws.send_json({"type": "person", "person": None})
             tracker.tick()
             flush()
 
@@ -746,8 +790,11 @@ async def vision_ws(request: web.Request) -> web.WebSocketResponse:
             job, waiting = waiting, None
             if job is None:
                 continue
+            now = time.time()
+            ids, _ = faceprints() if recognize else ([], None)
+            embed = recognize and bool(ids) and "face" in job["want"] and rec.wants(now)
             try:
-                look = await vm.run(vision.look, job["jpeg"], job["rotation"], job["want"])
+                look = await vm.run(vision.look, job["jpeg"], job["rotation"], job["want"], embed)
             except ValueError as err:
                 tracker.lost("failed")
                 if not ws.closed:
@@ -765,6 +812,13 @@ async def vision_ws(request: web.Request) -> web.WebSocketResponse:
                 result["faces"] = look.faces
             if "hands" in job["want"]:
                 result["hand"] = look.hand
+            if recognize and look.faces is not None:
+                if any(f["frontal"] for f in look.faces):
+                    rec.seen(now)
+                if look.embedding is not None:
+                    ids, m = faceprints()
+                    rec.add(look.embedding, ids, m, now)
+                result["person"] = await tell_person()
             _LOG.debug("vision %s frame %s: %s", who, job["id"], result)
             if not ws.closed:
                 await ws.send_json(result)
@@ -811,6 +865,8 @@ async def vision_ws(request: web.Request) -> web.WebSocketResponse:
     finally:
         task.cancel()
         ticking.cancel()
+        if forget_prints in vm.faces.on_change:
+            vm.faces.on_change.remove(forget_prints)
         tracker.tick()
         tracker.close("closed")
         flush()
@@ -823,6 +879,107 @@ def _ms(value: Any) -> float | None:
     if isinstance(value, (int, float)) and not isinstance(value, bool) and 0 <= value < 60000:
         return float(value)
     return None
+
+
+async def face_enroll_ws(request: web.Request) -> web.WebSocketResponse:
+    """Face Recognition's guided capture, through a kiosk's camera.
+
+    Starts like ``/api/vision`` with ``person_id`` or a new person's ``name``.
+    Each frame is a ``frame`` message and its JPEG, and gets a ``progress``
+    answer with the step, the crops it has and needs and a hint for the
+    person. When every step is done the crops are saved: ``saved``."""
+    vm = request.app[VM]
+    ws, start = await _kiosk_start(request)
+    if start is None:
+        return ws
+    vision = await vm.run(vm.vision)
+    if vision is None:
+        await _refuse(request, ws, "vision_unavailable", vm.settings().get("vision_error") or "no vision models",
+                      close_code=4503)
+        return ws
+    pid = start.get("person_id")
+    try:
+        if not pid:
+            pid = vm.people.add(str(start.get("name", ""))).id
+        elif vm.people.get(pid) is None:
+            raise ValueError("no such person")
+    except (ValueError, TypeError) as err:
+        await ws.send_json({"type": "error", "code": "bad_request", "message": str(err)})
+        await ws.close(code=4400)
+        return ws
+    from .faces import STEPS, FaceEnrollment
+    from .vision import decode
+
+    person = vm.people.get(pid)
+    device_id = start.get("device_id")
+    guide = FaceEnrollment(vision)
+    kiosk = vm.hub.kiosks.get(device_id) if device_id else None
+    where = kiosk.name if kiosk else start.get("device_name") or device_id or "a kiosk"
+
+    def live(event: dict[str, Any]) -> None:
+        vm.hub.publish({**event, "type": f"face_enroll_{event['type']}", "person_id": pid, "name": person.name,
+                        "device_id": device_id})
+
+    await ws.send_json({"type": "ready", "person_id": pid, "name": person.name,
+                        "steps": [{"step": name, "need": need} for name, need in STEPS]})
+    live({"type": "start", "steps": [{"step": name, "need": need} for name, need in STEPS]})
+    _LOG.info("enrolling the face of %s on %s", person.name, where)
+
+    def look(data: bytes, rotation: int) -> dict[str, Any]:
+        rgb = decode(data, rotation)
+        return guide.feed(rgb, vision.face(rgb), time.time())
+
+    header: dict[str, Any] | None = None
+    async for msg in ws:
+        if msg.type == WSMsgType.TEXT:
+            try:
+                data = json.loads(msg.data)
+            except ValueError:
+                continue
+            if not isinstance(data, dict):
+                continue
+            if data.get("type") == "end":
+                break
+            if data.get("type") == "frame":
+                rotation = data.get("rotation", 0)
+                header = {"id": data.get("id"), "rotation": rotation if rotation in (0, 90, 180, 270) else 0}
+        elif msg.type == WSMsgType.BINARY:
+            if header is None:
+                continue
+            frame, header = header, None
+            try:
+                event = await vm.run(look, msg.data, frame["rotation"])
+            except ValueError as err:
+                await ws.send_json({"type": "error", "id": frame["id"], "code": "bad_frame", "message": str(err)})
+                continue
+            event["id"] = frame["id"]
+            await ws.send_json(event)
+            live(event)
+            if guide.done:
+                break
+        else:
+            break
+    if guide.done or len(guide.crops[STEPS[0][0]]) >= STEPS[0][1]:
+        crops = guide.all_crops()
+        try:
+            source = _source(vm, device_id, start.get("device_name"), start.get("model"))
+            record = await vm.run(vm.faces.enroll, pid, crops, vm.face_embedders(), source)
+            saved: dict[str, Any] = {"type": "saved", "crops": len(crops), "enrollment": record["id"],
+                                     "complete": guide.done}
+        except ValueError as err:
+            saved = {"type": "error", "code": "not_saved", "message": str(err)}
+    else:
+        saved = {"type": "error", "code": "too_short", "message": "the face wasn't seen long enough, nothing was saved"}
+    live(saved)
+    if saved["type"] == "saved":
+        _LOG.info("face enrollment for %s saved: %d crops%s", person.name, saved["crops"],
+                  "" if saved["complete"] else ", before every step was done")
+    else:
+        _LOG.warning("face enrollment for %s not saved: %s", person.name, saved["message"])
+    if not ws.closed:
+        await ws.send_json(saved)
+        await ws.close()
+    return ws
 
 
 async def enroll_ws(request: web.Request) -> web.WebSocketResponse:
@@ -949,7 +1106,10 @@ async def _people_message(request: web.Request) -> dict[str, Any]:
 
 async def _people(vm: GroundControl) -> dict[str, Any]:
     """Who the kiosks can answer and what Ground Control runs, for their analytics."""
-    return {"type": "people", "people": await vm.run(vm.people.summary), "model": vm.model.key,
+    people = await vm.run(vm.people.summary)
+    for p in people:
+        p["has_face"] = vm.faces.has_face(str(p["id"]))
+    return {"type": "people", "people": people, "model": vm.model.key,
             "version": __version__, "app_path": vm.app_path,
             **describe_install(bool(vm.cfg.supervisor_token), vm.active.on_gpu)}
 
@@ -1020,14 +1180,19 @@ async def kiosk_enroll(request: web.Request) -> web.Response:
     kiosk = vm.hub.kiosks.get(request.match_info["device_id"])
     if kiosk is None or kiosk.access != "approved":
         raise web.HTTPConflict(text="that kiosk isn't approved")
+    face = body.get("kind") == "face"
     if kiosk.connected and not kiosk.enroll:
         raise web.HTTPConflict(text="Allow enrollment here is off on that kiosk")
-    sent = await vm.hub.send(request.match_info["device_id"], {
-        "type": "enroll", "person_id": person.id, "name": person.name, "color": person.color,
-        "target_s": float(body.get("target_s", 45.0))})
+    if face and not (kiosk.features or {}).get("vision_match"):
+        raise web.HTTPConflict(text="Vision Match is off on that kiosk")
+    message = {"type": "enroll_face", "person_id": person.id, "name": person.name, "color": person.color} if face \
+        else {"type": "enroll", "person_id": person.id, "name": person.name, "color": person.color,
+              "target_s": float(body.get("target_s", 45.0))}
+    sent = await vm.hub.send(request.match_info["device_id"], message)
     if not sent:
         raise web.HTTPConflict(text="that kiosk isn't connected")
-    _LOG.info("asked %s to enroll %s", _kiosk_name(vm, request.match_info["device_id"]), person.name)
+    _LOG.info("asked %s to enroll %s%s", _kiosk_name(vm, request.match_info["device_id"]), person.name,
+              "'s face" if face else "")
     return web.json_response({"sent": True})
 
 
@@ -1068,7 +1233,8 @@ async def people_forget(request: web.Request) -> web.Response:
     pid = _known(vm, request)
     name = vm.people.get(pid).name
     vm.people.forget(pid)
-    _LOG.info("forgot %s and their voice", name)
+    vm.faces.forget(pid)
+    _LOG.info("forgot %s, their voice and their face", name)
     return web.Response(status=204)
 
 
@@ -1096,6 +1262,27 @@ async def enrollment_delete(request: web.Request) -> web.Response:
         raise web.HTTPNotFound(text="no such enrollment") from err
     _LOG.info("deleted an enrollment of %s, their voice was rebuilt", vm.people.get(pid).name)
     return web.json_response(_person(vm, vm.people.get(pid)))
+
+
+async def face_enrollment_delete(request: web.Request) -> web.Response:
+    vm = request.app[VM]
+    pid = _known(vm, request)
+    try:
+        await vm.run(vm.faces.delete_enrollment, pid, request.match_info["eid"], vm.face_embedders())
+    except KeyError as err:
+        raise web.HTTPNotFound(text="no such face enrollment") from err
+    _LOG.info("deleted a face enrollment of %s, their face was rebuilt", vm.people.get(pid).name)
+    return web.json_response(_person(vm, vm.people.get(pid)))
+
+
+async def face_crop(request: web.Request) -> web.StreamResponse:
+    """One enrolled face crop, for the person's page."""
+    vm = request.app[VM]
+    pid = _known(vm, request)
+    path = vm.faces.crop_path(pid, request.match_info["eid"], request.match_info["name"])
+    if path is None:
+        raise web.HTTPNotFound(text="no such face crop")
+    return web.FileResponse(path, headers={"Content-Type": "image/jpeg", "Cache-Control": "private, max-age=3600"})
 
 
 # ── settings ──────────────────────────────────────────────────────────────
@@ -1295,6 +1482,7 @@ def build_app(vm: GroundControl, token_check: TokenCheck | None = None, mdns: bo
     r.add_get("/api/status", status)
     r.add_get("/api/session", session_ws)
     r.add_get("/api/enroll", enroll_ws)
+    r.add_get("/api/face_enroll", face_enroll_ws)
     r.add_get("/api/kiosk", kiosk_ws)
     r.add_get("/api/vision", vision_ws)
     r.add_get("/api/events", events_ws)
@@ -1306,6 +1494,8 @@ def build_app(vm: GroundControl, token_check: TokenCheck | None = None, mdns: bo
     r.add_delete("/api/people/{id}", people_forget)
     r.add_post("/api/people/{id}/enroll", people_enroll)
     r.add_delete("/api/people/{id}/enrollments/{eid}", enrollment_delete)
+    r.add_delete("/api/people/{id}/faces/{eid}", face_enrollment_delete)
+    r.add_get("/api/people/{id}/faces/{eid}/{name}", face_crop)
     r.add_get("/api/sessions", sessions_list)
     r.add_get("/api/sessions/counts", sessions_counts)
     r.add_get("/api/sessions/{sid}", session_get)
@@ -1335,6 +1525,7 @@ def build_app(vm: GroundControl, token_check: TokenCheck | None = None, mdns: bo
             loop.call_soon_threadsafe(lambda: loop.create_task(push()))
 
         vm.people.on_change.append(people_changed)
+        vm.faces.on_change.append(people_changed)
         if UPDATES in app:
             app[UPDATES].start()
         if vm.cfg.supervisor_token:

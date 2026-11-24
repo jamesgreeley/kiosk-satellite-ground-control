@@ -77,6 +77,12 @@ class VisionModel:
     hand_sha256: str
     hand_threshold: float
     """A hand at or above this score counts."""
+    rec_file: str
+    rec_sha256: str
+    rec_threshold: float
+    """Face Recognition: a face looking at the kiosk is someone enrolled at or
+    above this similarity to their faceprint. On kiosk-sized faces it let 0.1%
+    of strangers through, and families look more alike than strangers."""
     gpu_only: bool
     """Too slow for 4 looks a second on any CPU measured: offered only with CUDA."""
 
@@ -91,6 +97,9 @@ VISION_MODELS: dict[str, VisionModel] = {
         hand_file="yolov10n_gestures.onnx",
         hand_sha256="748b2f34f8bb45ea078c52ebc2c1344b1f1a6709e3b6104759c6f9a383b3d9f4",
         hand_threshold=0.4,
+        rec_file="arcface_w600k_mbf.onnx",
+        rec_sha256="9cc6e4a75f0e2bf0b1aed94578f144d15175f357bdc05e815e5c4a02b319eb4f",
+        rec_threshold=0.35,
         gpu_only=False,
     ),
     "accurate": VisionModel(
@@ -102,6 +111,9 @@ VISION_MODELS: dict[str, VisionModel] = {
         hand_file="yolov10x_gestures.onnx",
         hand_sha256="cab82c898c5ddf7a20c5120d5b190de669df71e47431f98266118be7aa1f85f0",
         hand_threshold=0.4,
+        rec_file="arcface_w600k_r50.onnx",
+        rec_sha256="3a728e738b4c0c802d3f2315ca877e76387f4fee9f240d4ae49e8da371dab25c",
+        rec_threshold=0.3,
         gpu_only=True,
     ),
 }

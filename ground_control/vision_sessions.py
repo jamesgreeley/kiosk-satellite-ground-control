@@ -71,6 +71,9 @@ class VisionSession:
     _hand_seen: bool = False
     _reading: int | None = None
     _pending: tuple[int, str, float, _Frame | None] | None = None
+    _person: str | None = None
+    people: dict[str, str] = field(default_factory=dict)
+    """Face Recognition: everyone recognized in the session, id to name."""
     """A new finger reading seen on one hand look: (fingers, gesture, t, its frame)."""
 
     def t(self, now: float) -> float:
@@ -250,6 +253,19 @@ class VisionTracker:
                 kept.reason = what
         self._publish({**event, "type": "vision_outcome", "what": what, "device_id": self.device_id, "session": s.id})
 
+    def person(self, person: dict[str, Any] | None, now: float | None = None) -> None:
+        """Face Recognition named someone in front of the kiosk, or nobody."""
+        s = self.current
+        if s is None:
+            return
+        pid = (person or {}).get("id")
+        if pid and pid != s._person:
+            now = self._clock() if now is None else now
+            s.events.append({"type": "recognized", "t": s.t(now), "person_id": pid, "name": person.get("name"),
+                             "score": person.get("score")})
+            s.people[pid] = person.get("name") or pid
+        s._person = pid
+
     def lost(self, kind: str) -> None:
         """A frame that got no result: ``dropped`` or ``failed``."""
         if self.current is not None:
@@ -307,6 +323,7 @@ class VisionTracker:
                 "decode": _spread([lk["ms"]["decode"] for lk in looks if "decode" in lk["ms"]]),
                 "face": _spread([lk["ms"]["face"] for lk in looks if "face" in lk["ms"]]),
                 "hands": _spread([lk["ms"]["hands"] for lk in looks if "hands" in lk["ms"]]),
+                "recognize": _spread([lk["ms"]["recognize"] for lk in looks if "recognize" in lk["ms"]]),
                 "encode": _spread([lk["enc"] for lk in looks if "enc" in lk]),
                 "round_trip": _spread([lk["rtt"] for lk in looks if "rtt" in lk]),
             },
@@ -321,14 +338,18 @@ class VisionTracker:
                        for f in frames],
             "summary": summary(s.events, stats),
         }
+        if s.people:
+            record["people"] = [{"id": pid, "name": name} for pid, name in s.people.items()]
         if s.continues:
             record["continues"] = s.continues
         return record
 
 
 def summary(events: list[dict[str, Any]], stats: dict[str, Any]) -> list[str]:
-    """A few words for the Sessions list: what the kiosk did, else what was seen."""
-    out = []
+    """A few words for the Sessions list: who was recognized, what the kiosk did, else what was seen."""
+    names = list(dict.fromkeys(e["name"] for e in events if e["type"] == "recognized" and e.get("name")))
+    out = [f"{name} recognized" for name in names]
+    seen = len(out)
     for e in events:
         if e["type"] == "screensaver_dismissed":
             out.append("Screensaver dismissed")
@@ -338,9 +359,9 @@ def summary(events: list[dict[str, Any]], stats: dict[str, Any]) -> list[str]:
             n = e.get("fingers")
             what = f"{n} finger{'s' if n != 1 else ''}" if n is not None else "Gesture"
             out.append(f"{what} → {e['action']}" if e.get("action") else what)
-    if out:
+    if len(out) > seen:
         return out
-    if stats["facing"]:
+    if stats["facing"] and not names:
         out.append("Looked at the kiosk")
     elif stats["faces"]:
         out.append("Face turned away")

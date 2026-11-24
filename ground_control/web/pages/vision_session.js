@@ -116,6 +116,7 @@ function steps(record) {
     if (e.type === "screensaver_dismissed") out.push(["Screensaver dismissed", "The kiosk woke the screen for the face looking at it.", e.t]);
     if (e.type === "screensaver_postponed") out.push(["Screensaver postponed", "Someone was still in front of the kiosk.", e.t]);
     if (e.type === "gesture") out.push([`${fingers(e.fingers ?? 0)} gesture`, e.action ? `${e.action}.` : "The kiosk ran the gesture's action.", e.t]);
+    if (e.type === "recognized") out.push([`${e.name || "Someone"} recognized`, `Face Recognition, score ${e.score} against their face.`, e.t]);
     if (e.type === "end") out.push(["End", `${ENDS[e.reason] || "Ended"}.`, e.t]);
   }
   return out.sort((a, b) => a[2] - b[2]).map(([title, desc, t]) => h("div", { class: "row" },
@@ -128,6 +129,7 @@ const TIMES = [
   ["decode", "Reading the frame", "Decoding the JPEG and turning it upright."],
   ["face", "Face Detection", "The face model."],
   ["hands", "Hand Gestures", "The hand model."],
+  ["recognize", "Face Recognition", "Lining the face up and the model that tells who it is."],
   ["encode", "Kiosk encoding", "The kiosk turning the camera frame into a JPEG."],
   ["round_trip", "Round trip", "From the kiosk sending a frame to its result coming back, network included."],
 ];
@@ -246,6 +248,7 @@ export async function renderVision(record) {
         h("div", { class: "chips" },
           (record.summary || []).map((w) => chip(w, `big ${/dismissed|→/.test(w) ? "c-ok" : "c-info"}`)),
           chip(`Vision Match, ${secs(stats.duration_s)}`, "big", icon("eye", 16)),
+          (record.people || []).map((p) => h("a", { class: "chip big", href: `#/people/${p.id}` }, p.name)),
           chip(`${record.model === "accurate" ? "Accurate" : "Light"} model, ${record.on_gpu ? "GPU" : "CPU"}`, "big"),
           record.continues ? h("a", { class: "chip big", href: `#/sessions/${record.continues}` }, "Goes on from an earlier session") : null),
         section("Timeline"),

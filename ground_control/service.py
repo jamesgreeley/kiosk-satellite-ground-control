@@ -10,6 +10,7 @@ import asyncio
 import json
 import logging
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
 
@@ -23,6 +24,7 @@ from .models import (ALIGNER_FILE, ALIGNER_SHA256, ISOLATOR_CPU_FILE, ISOLATOR_C
 from .hub import Hub
 from .people import People
 from .session import Session, SessionConfig
+from .faces import Faces
 from .sessions import SessionStore
 from .vad import VadModel
 
@@ -47,6 +49,7 @@ class GroundControl:
         """As a Home Assistant app, its page there (``/app/<slug>``, ``/hassio/ingress/<slug>`` before Home Assistant 2026.2)."""
         self.vad = VadModel(verified_path(cfg.models_dir, VAD_FILE, VAD_SHA256))
         self.people = People(cfg.data_dir, self.vad)
+        self.faces = Faces(cfg.data_dir)
         self.sessions = SessionStore(cfg.data_dir, keep_days=cfg.keep_days, keep_audio=cfg.keep_audio)
         self.hub = Hub(cfg.data_dir / "kiosks.json")
         if self.hub.new:
@@ -127,7 +130,10 @@ class GroundControl:
                 "vision_loaded": self._vision is not None,
                 "vision_on_gpu": self._vision.on_gpu if self._vision is not None else None,
                 "vision_max_looks": self._vision.max_looks if self._vision is not None else None,
-                "vision_error": self._vision_error}
+                "vision_error": self._vision_error,
+                "face_threshold": self.face_threshold,
+                "default_face_threshold": VISION_MODELS[self.vision_model].rec_threshold,
+                "faces_enrolled": sum(1 for p in self.people.all() if self.faces.has_face(p.id))}
 
     def update_settings(self, values: dict[str, object]) -> None:
         """Thresholds (for the active model), learning and session keeping. Checked, then saved."""
@@ -167,6 +173,11 @@ class GroundControl:
             self.align = out["aligner"] = bool(values["aligner"])
         if "short_answers" in values:
             self.short_answers = out["short_answers"] = bool(values["short_answers"])
+        if "face_threshold" in values:
+            v = float(values["face_threshold"])
+            if not 0.0 < v < 1.0:
+                raise ValueError("face_threshold must be between 0 and 1")
+            out["face_thresholds"] = {**(saved.get("face_thresholds") or {}), self.vision_model: round(v, 3)}
         if "vision_model" in values:
             key = values["vision_model"]
             if key not in self.vision_choices():
@@ -216,7 +227,7 @@ class GroundControl:
         here, and Accurate needs CUDA."""
         return [k for k, m in VISION_MODELS.items()
                 if (self.cfg.cuda or not m.gpu_only)
-                and all((self.cfg.models_dir / f).is_file() for f in (m.face_file, m.hand_file))]
+                and all((self.cfg.models_dir / f).is_file() for f in (m.face_file, m.hand_file, m.rec_file))]
 
     def vision(self):
         """Vision Match's models, loaded with the first look a kiosk asks for.
@@ -240,7 +251,23 @@ class GroundControl:
                 looks = self._vision.max_looks
                 _LOG.info("Vision Match %s models loaded on %s: %s face and %s hand looks a second", m.label,
                           "the GPU" if self._vision.on_gpu else "the CPU", looks["face"], looks["hands"])
+                people = [p.id for p in self.people.all()]
+                if self.faces.needs_rebuild(m.key, people):
+                    t0 = time.perf_counter()
+                    self.faces.rebuild(m.key, self._vision.recognizer, people)
+                    _LOG.info("faceprints rebuilt for the %s model in %.1f s", m.label, time.perf_counter() - t0)
             return self._vision
+
+    @property
+    def face_threshold(self) -> float:
+        """Face Recognition's threshold for the chosen vision model, as tuned or its default."""
+        tuned = (self._saved().get("face_thresholds") or {}).get(self.vision_model)
+        return float(tuned) if tuned is not None else VISION_MODELS[self.vision_model].rec_threshold
+
+    def face_embedders(self) -> dict:
+        """The loaded recognition model, so an enrollment lands in its faceprints."""
+        vision = self._vision
+        return {vision.model.key: vision.recognizer} if vision is not None else {}
 
     def _switch_vision(self) -> None:
         """Drop the loaded models. The next look loads the chosen ones."""

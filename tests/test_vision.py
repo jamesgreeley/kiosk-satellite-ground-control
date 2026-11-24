@@ -115,13 +115,16 @@ class FakeVision:
         self.max_looks = {"face": 12.5, "hands": 10.0}
         self.on_gpu = False
         self.delay = delay
+        self.face_embedding = np.eye(8, dtype=np.float32)[0]
 
-    def look(self, data, rotation=0, want=("face", "hands")):
+    def look(self, data, rotation=0, want=("face", "hands"), recognize=False):
         decode(data, rotation)
         time.sleep(self.delay)
         face = {"box": [0.4, 0.2, 0.1, 0.15], "score": 0.9, "frontal": True, "yaw": 1.5, "points": []}
         hand = {"box": [0.6, 0.3, 0.05, 0.1], "score": 0.88, "gesture": "three", "fingers": 3}
-        return Look([face] if "face" in want else None, hand if "hands" in want else None, {"decode": 1.0})
+        self.recognized = getattr(self, "recognized", 0) + bool(recognize)
+        return Look([face] if "face" in want else None, hand if "hands" in want else None, {"decode": 1.0},
+                    self.face_embedding if recognize else None)
 
 
 @pytest.fixture
@@ -244,3 +247,69 @@ async def test_a_look_with_a_face_saves_a_vision_session_when_the_socket_closes(
     assert frame.status == 200 and (await frame.read())[:2] == b"\xff\xd8"
     counts = store.looks(device_id="k1")["k1"][0]
     assert counts["looks"] == 2 and counts["sessions"] == 1 and counts["empty"] == 0
+
+
+async def test_a_kiosk_with_face_recognition_hears_who_is_in_front_of_it(client):
+    from tests.test_faces import FakeEmbedder
+
+    fake = FakeVision()
+    use(client, fake)
+    vm = client.app[VM]
+    ana = vm.people.add("Ana")
+    # A faceprint pointing where the fake look's embedding does.
+    vm.faces.enroll(ana.id, [np.full((112, 112, 3), 10, np.uint8)], {"light": FakeEmbedder()})
+    ws = await open_vision(client, recognize=True)
+    assert (await receive(ws, "ready"))["recognize"] is True
+    await ws.send_json({"type": "frame", "id": 1, "want": ["face"]})
+    await ws.send_bytes(jpeg(halves()))
+    result = await receive(ws, "result")
+    assert result["person"]["name"] == "Ana" and result["person"]["score"] > 0.9
+    assert fake.recognized == 1
+
+
+async def test_without_asking_for_it_a_kiosk_gets_no_recognition(client):
+    fake = FakeVision()
+    use(client, fake)
+    vm = client.app[VM]
+    from tests.test_faces import FakeEmbedder
+
+    vm.faces.enroll(vm.people.add("Ana").id, [np.full((112, 112, 3), 10, np.uint8)], {"light": FakeEmbedder()})
+    ws = await open_vision(client)
+    assert (await receive(ws, "ready"))["recognize"] is False
+    await ws.send_json({"type": "frame", "id": 1})
+    await ws.send_bytes(jpeg(halves()))
+    assert "person" not in await receive(ws, "result")
+    assert fake.recognized == 0
+
+
+async def test_a_face_is_enrolled_through_the_guided_capture(client, monkeypatch):
+    from ground_control import faces
+    from tests.test_faces import FakeEmbedder, _face
+
+    monkeypatch.setattr(faces, "MIN_GAP_S", 0.0)
+    plan = ([_face(2, 0.15)] * 4 + [_face(25, 0.15)] * 3 + [_face(25, 0.15, flip=True)] * 3 + [_face(2, 0.07)] * 3)
+    fake = FakeVision()
+    fake.recognizer = FakeEmbedder()
+    fake.face = lambda rgb: [plan.pop(0)] if plan else []
+    use(client, fake)
+    vm = client.app[VM]
+    ws = await client.ws_connect("/api/face_enroll")
+    await ws.send_json({"type": "start", "token": "good", "ticket": approve(client), "device_id": "k1", "name": "Mia"})
+    ready = await receive(ws, "ready")
+    assert [s["step"] for s in ready["steps"]] == ["look", "side_a", "side_b", "far"]
+    for i in range(13):
+        await ws.send_json({"type": "frame", "id": i, "rotation": 0})
+        await ws.send_bytes(jpeg(halves()))
+        progress = await receive(ws, "progress")
+        assert progress["hint"] == "ok", progress
+    saved = await receive(ws, "saved")
+    assert saved["crops"] == 13 and saved["complete"]
+    mia = next(p for p in vm.people.all() if p.name == "Mia")
+    people = (await (await client.get("/api/people", headers=GOOD)).json())["people"]
+    person = next(p for p in people if p["id"] == mia.id)
+    assert person["has_face"] and person["face_enrollments"][0]["crops"] == 13
+    eid = person["face_enrollments"][0]["id"]
+    crop = await client.get(f"/api/people/{mia.id}/faces/{eid}/00.jpg", headers=GOOD)
+    assert crop.status == 200 and (await crop.read())[:2] == b"\xff\xd8"
+    r = await client.delete(f"/api/people/{mia.id}/faces/{eid}", headers=GOOD)
+    assert r.status == 200 and not (await r.json())["has_face"]

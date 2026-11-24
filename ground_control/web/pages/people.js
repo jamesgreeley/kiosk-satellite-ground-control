@@ -1,4 +1,4 @@
-import { api } from "../api.js";
+import { api, audioUrl, socket } from "../api.js";
 import { shell } from "../app.js";
 import { ago, ask, chip, disc, h, icon, pageHead, refreshPicture, section, toast } from "../ui.js";
 
@@ -11,6 +11,82 @@ const THINGS = [
   ["person", "Person", "This person in Home Assistant", "person.", "person"],
 ];
 const TARGET_S = 45;
+
+// Face Recognition's guided capture, as Ground Control reports it.
+const FACE_STEPS = { look: "Look at the screen", side_a: "Turn a little to one side", side_b: "Now a little to the other side",
+  far: "Take a step back" };
+const FACE_HINTS = { ok: "", no_face: "No face in view.", several_faces: "Only one person in view, please.",
+  closer: "Come a little closer.", farther: "Step back a little more.", look_at_screen: "Look at the screen.",
+  turn_more: "Turn a little more.", turn_less: "Turn back a little.", other_side: "Now to the other side.",
+  too_dark: "Too dark to see the face.", other_face: "That's a different face." };
+
+/** The enrolled face crops, small, from the newest enrollment. */
+function faceThumbs(p) {
+  const e = (p.face_enrollments || []).at(-1);
+  if (!e) return null;
+  return h("div", { class: "facethumbs" }, (e.crop_names || []).map((name) => {
+    const img = h("img", { alt: "", width: 56, height: 56 });
+    audioUrl(`api/people/${p.id}/faces/${e.id}/${name}`).then((url) => { img.src = url; }).catch(() => img.remove());
+    return img;
+  }));
+}
+
+function faceEnrollmentRows(p) {
+  return (p.face_enrollments || []).map((e) => {
+    const where = e.source?.device_name || "Unknown kiosk";
+    const remove = async () => {
+      if (!await ask({ title: "Delete this face enrollment?", text: `${where}, ${e.crops} pictures. ${p.name}'s face is rebuilt without them.`,
+        ok: "Delete", danger: true })) return;
+      try {
+        await api(`api/people/${p.id}/faces/${e.id}`, { method: "DELETE" });
+        location.reload();
+      } catch (err) { toast(err.message); }
+    };
+    return h("div", { class: "row" },
+      h("span", { class: "ico" }, icon("eye", 24)),
+      h("div", { class: "grow" }, h("div", { class: "rt" }, where), h("div", { class: "rd" }, `${e.crops} face pictures. ${ago(e.at)}.`)),
+      h("button", { class: "ib", "aria-label": `Delete the ${where} face enrollment`, onclick: remove }, icon("trash")));
+  });
+}
+
+/** Start the guided capture on a kiosk and follow it live. */
+function faceEnroll(p, kiosks) {
+  const ready = kiosks.filter((k) => k.connected && k.access === "approved" && k.features?.vision_match);
+  const status = h("div", { class: "rd" }, ready.length
+    ? `${p.name} stands in front of the kiosk and follows the steps on its screen.`
+    : "Needs a connected kiosk with Vision Match on.");
+  const sel = h("select", { class: "fld", "aria-label": "Kiosk" }, ready.map((k) => h("option", { value: k.device_id }, k.name)));
+  const go = h("button", { class: "btn out sm", disabled: !ready.length }, "Enroll face");
+  let events = null;
+  go.addEventListener("click", async () => {
+    try {
+      await api(`api/kiosks/${encodeURIComponent(sel.value)}/enroll`, { method: "POST", json: { person_id: p.id, kind: "face" } });
+    } catch (err) { toast(err.message); return; }
+    go.disabled = true;
+    status.textContent = "Waiting for the kiosk to start.";
+    events?.close();
+    events = socket("api/events", { type: "listen" });
+    events.addEventListener("message", (m) => {
+      const e = JSON.parse(m.data);
+      if (e.person_id !== p.id || !e.type?.startsWith("face_enroll_")) return;
+      if (e.type === "face_enroll_progress") {
+        const n = `Step ${Math.min(e.step_index + 1, e.steps)} of ${e.steps}: ${FACE_STEPS[e.step]}. ${e.have} of ${e.need}.`;
+        status.textContent = [n, FACE_HINTS[e.hint] || ""].filter(Boolean).join(" ");
+      } else if (e.type === "face_enroll_saved") {
+        status.textContent = `Saved ${e.crops} face pictures.`;
+        events.close();
+        setTimeout(() => location.reload(), 1200);
+      } else if (e.type === "face_enroll_error") {
+        status.textContent = e.message || "Nothing was saved.";
+        go.disabled = false;
+        events.close();
+      }
+    });
+  });
+  return h("div", { class: "row" },
+    h("div", { class: "grow" }, h("div", { class: "rt" }, "Enroll on a kiosk"), status),
+    ready.length ? sel : null, go);
+}
 
 export async function render({ id }) {
   const [{ people }, { kiosks }, suggestions] = await Promise.all([api("api/people"), api("api/kiosks"),
@@ -118,7 +194,7 @@ function detail(p, kiosks, suggestions = {}) {
     }
   };
   const forget = async () => {
-    if (!await ask({ title: `Forget ${p.name}?`, text: "Their voice and all their enrollment audio are deleted.",
+    if (!await ask({ title: `Forget ${p.name}?`, text: "Their voice, their face and all their enrollment audio and face pictures are deleted.",
       ok: "Forget", danger: true })) return;
     await api(`api/people/${p.id}`, { method: "DELETE" });
     location.hash = "#/people";
@@ -178,11 +254,17 @@ function detail(p, kiosks, suggestions = {}) {
         h("div", { class: "meter", role: "img", "aria-label": `${p.speech_s} s of speech` }, h("span", { style: { width: `${pct}%` } })),
         h("span", { class: "val" }, `${p.speech_s} s`)),
       enrollmentRows(p)),
-    section("Vision Match"),
+    section("Vision Match", `${p.name}'s face, for Face Recognition on the kiosks with it on.`),
     h("div", { class: "card" },
       h("div", { class: "row" },
-        h("span", { class: "ico" }, icon("eye", 24)),
-        h("div", { class: "grow" }, h("div", { class: "rt" }, "Coming soon")))),
+        h("div", { class: "grow" }, h("div", { class: "rt" }, "Face enrolled"),
+          h("div", { class: "rd" }, p.has_face
+            ? `${(p.face_enrollments || []).reduce((n, e) => n + e.crops, 0)} face pictures. Enrolling on another kiosk, or in other light, helps.`
+            : "Not yet. The guided capture takes about half a minute.")),
+        p.has_face ? chip("Enrolled", "c-ok") : chip("Not enrolled", "c-off")),
+      faceThumbs(p),
+      faceEnrollmentRows(p),
+      faceEnroll(p, kiosks)),
     section(`What's ${p.name}'s`, `What "my" means when ${p.name} talks. "Add milk to my list" goes on this list on every kiosk.`),
     h("div", { class: "card" }, things,
       h("div", { class: "hint" }, icon("info", 18), 'Kiosk Satellite uses these when this person says "my", with its personal commands and to-do blueprints. Without a list of their own, "my list" is the shared list.')),

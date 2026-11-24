@@ -219,11 +219,13 @@ export async function render({ area } = {}) {
           toggle(s.keep_frames, "Keep frames", (v) => save({ keep_frames: v }))),
         row("Delete all frames", "The sessions stay, without their frames.", h("span", { class: "cell" }, saved, removeAll))),
 
-      section("Face Recognition", "Who is looking at the kiosk."),
+      section("Face Recognition", "Who is looking at the kiosk, from the faces enrolled on the People page."),
       h("div", { class: "card" },
-        h("div", { class: "soon" },
-          h("span", { class: "soonicon" }, icon("eye", 32)),
-          h("div", { class: "rt" }, "Coming soon"))),
+        row("Threshold", `How close a face has to be to count as someone enrolled. Higher means fewer mix-ups and more unknown faces. Each vision model has its own, ${s.default_face_threshold} by default.`,
+          number("fthr", s.face_threshold, "face_threshold"), "fthr"),
+        row("Faces enrolled", "People with a face, out of everyone on the People page.",
+          h("a", { class: "val", href: "#/people" }, String(s.faces_enrolled))),
+        hint("A name needs a face looking at the kiosk on two looks in a row, or one very close match. Each kiosk turns Face Recognition on in Kiosk Satellite, under Ground Control, Vision Match.")),
     ];
   };
 

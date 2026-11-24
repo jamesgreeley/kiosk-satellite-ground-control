@@ -251,6 +251,8 @@ class Look:
     faces: list[dict[str, Any]] | None
     hand: dict[str, Any] | None
     ms: dict[str, float]
+    embedding: np.ndarray | None = None
+    """Face Recognition: the largest face looking at the kiosk, when asked for."""
 
 
 class Vision:
@@ -264,27 +266,51 @@ class Vision:
                                   model.face_threshold, threads, use_cuda, self._gpu)
             self.hand = HandModel(verified_path(models_dir, model.hand_file, model.hand_sha256),
                                   model.hand_threshold, threads, use_cuda, self._gpu)
+            from .faces import FaceEmbedder
+
+            self.recognizer = FaceEmbedder(verified_path(models_dir, model.rec_file, model.rec_sha256),
+                                           threads, use_cuda, self._gpu)
         except Exception:
             self._gpu.close()
             raise
-        self.on_gpu = self.face.on_gpu and self.hand.on_gpu
+        self.on_gpu = self.face.on_gpu and self.hand.on_gpu and self.recognizer.on_gpu
         self.max_looks = self._measure()
 
-    def look(self, jpeg: bytes, rotation: int = 0, want: tuple[str, ...] = ("face", "hands")) -> Look:
+    def look(self, jpeg: bytes, rotation: int = 0, want: tuple[str, ...] = ("face", "hands"),
+             recognize: bool = False) -> Look:
+        """What a frame shows. With ``recognize``, also the embedding of the
+        largest face looking at the kiosk, for Face Recognition."""
         t0 = time.perf_counter()
         rgb = decode(jpeg, rotation)
         t1 = time.perf_counter()
         ms = {"decode": round((t1 - t0) * 1000, 1)}
-        faces = hand = None
+        faces = hand = embedding = None
         if "face" in want:
             faces = self.face(rgb)
             t2 = time.perf_counter()
             ms["face"] = round((t2 - t1) * 1000, 1)
             t1 = t2
+            facing = [f for f in faces if f["frontal"]]
+            if recognize and facing:
+                embedding = self.embed(rgb, facing[0])
+                t2 = time.perf_counter()
+                ms["recognize"] = round((t2 - t1) * 1000, 1)
+                t1 = t2
         if "hands" in want:
             hand = self.hand(rgb)
             ms["hands"] = round((time.perf_counter() - t1) * 1000, 1)
-        return Look(faces, hand, ms)
+        return Look(faces, hand, ms, embedding)
+
+    def embed(self, rgb: np.ndarray, face: dict[str, Any]) -> np.ndarray:
+        from .faces import align, points_px
+
+        return self.recognizer(align(rgb, points_px(face, rgb.shape[1], rgb.shape[0])))
+
+    def crop(self, rgb: np.ndarray, face: dict[str, Any]) -> np.ndarray:
+        """A face lined up for recognition, as kept for an enrollment."""
+        from .faces import align, points_px
+
+        return align(rgb, points_px(face, rgb.shape[1], rgb.shape[0]))
 
     def _measure(self) -> dict[str, float]:
         """Looks a second this machine keeps up with for one kiosk, from a few warm runs."""
