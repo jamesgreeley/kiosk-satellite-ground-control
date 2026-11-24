@@ -254,7 +254,12 @@ async function spectrograms(rows, raw) {
 }
 
 // How a turn started, when it wasn't a wake word.
-const STARTED = { question: "Asked by the assistant", follow_up: "Follow-up", manual: "Started by hand" };
+// ask_question and start_conversation reach a kiosk the same way. It says
+// which one as soon as Home Assistant's pipeline starts. A session that only
+// says "question" never got that far and shows neither.
+const STARTED = {
+  ask_question: "Ask Question", start_conversation: "Start Conversation", follow_up: "Follow-up", manual: "Started by hand",
+};
 
 const ENGINES = { vswakeword: "vsWakeWord", microwakeword: "microWakeWord", openwakeword: "openWakeWord", pryon: "Amazon" };
 

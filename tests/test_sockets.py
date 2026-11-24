@@ -284,6 +284,7 @@ async def test_an_older_kiosk_says_nothing_about_the_wake_word(client):
     assert wake_details({"seamless": False, "assistant": "realtime"}) == {"seamless": False, "assistant": "realtime"}
     # How the turn started: one of four, anything else is left out.
     assert wake_details({"interaction": "question"}) == {"interaction": "question"}
+    assert wake_details({"interaction": "start_conversation"}) == {"interaction": "start_conversation"}
     assert wake_details({"interaction": "shouted"}) == {}
 
 
@@ -312,6 +313,11 @@ async def test_a_short_reply_to_a_question_is_taken_and_one_started_by_hand_is_n
         sid = (await next_of(ws, "ready"))["session"]
         for c in chunks(audio):
             await ws.send_bytes(float_to_pcm16(c))
+        if interaction == "question":
+            # The kiosk learns which kind of question it was from what Home
+            # Assistant does with the reply, and says so before the end.
+            await ws.send_json({"type": "interaction", "interaction": "ask_question"})
+            await ws.send_json({"type": "interaction", "interaction": "shouted"})
         await ws.send_json({"type": "end"})
         stats = None
         while stats is None:
@@ -322,7 +328,7 @@ async def test_a_short_reply_to_a_question_is_taken_and_one_started_by_hand_is_n
         ended[interaction] = stats
         await asyncio.sleep(0.3)
         record = await (await client.get(f"/api/sessions/{sid}", headers=GOOD)).json()
-        assert record["wake"]["interaction"] == interaction
+        assert record["wake"]["interaction"] == ("ask_question" if interaction == "question" else interaction)
     assert not ended["question"]["rejected"] and ended["question"]["speaker"]["by"] == "answer"
     assert ended["manual"]["rejected"]
 

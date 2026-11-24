@@ -319,8 +319,8 @@ def _check_features(vm: GroundControl, device_id: str | None, features: dict[str
 # ── sessions ──────────────────────────────────────────────────────────────
 
 WAKE_TEXT = ("wake_word", "wake_word_engine", "wake_word_model", "language")
-INTERACTIONS = ("wake_word", "question", "follow_up", "manual")
-ASKED = ("question", "follow_up")
+INTERACTIONS = ("wake_word", "question", "ask_question", "start_conversation", "follow_up", "manual")
+ASKED = ("question", "ask_question", "start_conversation", "follow_up")
 """The turns that are a reply to something Home Assistant said."""
 
 
@@ -335,9 +335,13 @@ def wake_details(start: dict[str, Any]) -> dict[str, Any]:
     - ``assistant``: ``assist`` (a Home Assistant Assist pipeline) or ``realtime``.
     - ``language``: the kiosk's language, for how the wake word is said there.
     - ``interaction``: how the turn started. ``wake_word``, ``question`` (a
-      reply to something Home Assistant asked: ``ask_question``,
-      ``start_conversation`` or a conversation it opened), ``follow_up`` (the
+      reply to something Home Assistant asked), ``follow_up`` (the
       conversation goes on) or ``manual`` (started by hand, with no wake word).
+      ``ask_question`` and ``start_conversation`` reach a kiosk as the same
+      announcement, so its start says ``question`` for both. It says which
+      one in an ``interaction`` message right after, when Home Assistant's
+      pipeline starts: one that will answer is a ``start_conversation``, one
+      that ends at speech to text an ``ask_question``.
     """
     out: dict[str, Any] = {}
     for key in WAKE_TEXT:
@@ -443,9 +447,13 @@ async def session_ws(request: web.Request) -> web.WebSocketResponse:
                 await send(await vm.run(session.feed, pcm16_to_float(msg.data)))
                 live_scores()
             elif msg.type == WSMsgType.TEXT:
-                kind = json.loads(msg.data).get("type")
+                told = json.loads(msg.data)
+                kind = told.get("type")
                 if kind == "turn" and mode != "follow":
                     await send(session.new_turn())
+                elif kind == "interaction" and told.get("interaction") in INTERACTIONS:
+                    # Which kind of question it was, now that the kiosk knows.
+                    wake["interaction"] = told["interaction"]
                 elif kind == "end":
                     break
             else:
@@ -905,6 +913,8 @@ def _wake_text(wake: dict[str, Any]) -> str:
     if wake.get("interaction") in ("question", "follow_up", "manual"):
         parts.append({"question": "a reply to a question from Home Assistant", "follow_up": "a follow-up",
                       "manual": "started by hand"}[wake["interaction"]])
+    elif wake.get("interaction") in ("ask_question", "start_conversation"):
+        parts.append(f"a reply to {wake['interaction']}")
     if wake.get("seamless"):
         parts.append("talk right after the wake word")
     if wake.get("assistant"):
