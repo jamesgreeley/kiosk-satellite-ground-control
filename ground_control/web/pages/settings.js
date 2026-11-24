@@ -3,7 +3,7 @@
 // under it, then a card of rows.
 import { api, loggedIn, logOut } from "../api.js";
 import { shell } from "../app.js";
-import { chip, h, icon, pageHead, section, toast, toggle } from "../ui.js";
+import { ask, chip, h, icon, pageHead, section, toast, toggle } from "../ui.js";
 
 const TEMPLATE = [
   "{%- if llm_context.device_id %}",
@@ -41,6 +41,8 @@ function row(title, desc, control, id) {
 }
 
 const hint = (text) => h("div", { class: "hint" }, icon("info", 18), text);
+
+const size = (bytes) => (bytes >= 1e9 ? `${(bytes / 1e9).toFixed(1)} GB` : bytes >= 1e6 ? `${(bytes / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1e3))} KB`);
 
 function areas(current) {
   return h("div", { class: "card" },
@@ -140,7 +142,7 @@ export async function render({ area } = {}) {
       h("div", { class: "card" },
         row("Other voice threshold", `Two checks in a row under this score mean someone else is talking. ${s.default_other_threshold} by default.`,
           number("oth", s.other_threshold, "other_threshold"), "oth"),
-        hint("Each kiosk turns Trimming on or off in Kiosk Satellite, under Voice Satellite, Ground Control Voice Match.")),
+        hint("Each kiosk turns Trimming on or off in Kiosk Satellite, under Ground Control, Voice Match.")),
 
       section("Wake Word Aligner", "The end of the wake word is left out of the command, like the \"xa\" of \"Alexa\"."),
       h("div", { class: "card" },
@@ -184,6 +186,21 @@ export async function render({ area } = {}) {
     const looks = s.vision_max_looks
       ? h("span", { class: "val" }, `${s.vision_max_looks.face} face, ${s.vision_max_looks.hands} hand`)
       : h("span", { class: "val" }, "Measured when they load");
+    const saved = h("span", { class: "val" }, "");
+    const removeAll = h("button", { class: "btn out sm danger", disabled: true }, "Delete all");
+    const showFrames = (f) => {
+      saved.textContent = f.frames ? `${f.frames} frame${f.frames === 1 ? "" : "s"}, ${size(f.bytes)}` : "None saved";
+      removeAll.disabled = !f.frames;
+    };
+    api("api/frames").then(showFrames).catch(() => { saved.textContent = ""; });
+    removeAll.addEventListener("click", async () => {
+      if (!await ask({ title: "Delete all frames?", text: "Every frame kept with a vision session is deleted. The sessions stay, with their timeline, steps and times.", ok: "Delete", danger: true })) return;
+      try {
+        const gone = await api("api/frames", { method: "DELETE" });
+        toast(`Deleted ${gone.frames} frame${gone.frames === 1 ? "" : "s"}`);
+        showFrames({ frames: 0, bytes: 0 });
+      } catch (err) { toast(err.message); }
+    });
     return [
       section("Models", "Face Detection and Hand Gestures, for the kiosks that have Vision Match on."),
       h("div", { class: "card" },
@@ -194,7 +211,13 @@ export async function render({ area } = {}) {
         row("Runs on", "Set by the CUDA option, like the speaker model.", where),
         row("Looks a second", "For one kiosk, measured on this machine when the models load. Kiosks look at most 2 times a second for faces and 4 for hands.", looks),
         s.vision_error ? hint(s.vision_error)
-          : hint("Each kiosk turns Vision Match on in Kiosk Satellite, under Kiosk Satellite, Vision Match.")),
+          : hint("Each kiosk turns Vision Match on in Kiosk Satellite, under Ground Control, Vision Match.")),
+
+      section("Frames", "Camera frames kept with each vision session, for its page in Sessions."),
+      h("div", { class: "card" },
+        row("Keep frames", `Up to 8 frames a session: the first look, a face looking at the kiosk, each new finger reading and the last look. They are deleted with the session, after ${s.keep_days} day${s.keep_days === 1 ? "" : "s"}.`,
+          toggle(s.keep_frames, "Keep frames", (v) => save({ keep_frames: v }))),
+        row("Delete all frames", "The sessions stay, without their frames.", h("span", { class: "cell" }, saved, removeAll))),
 
       section("Face Recognition", "Who is looking at the kiosk."),
       h("div", { class: "card" },
@@ -217,7 +240,7 @@ export async function render({ area } = {}) {
 
     section("Sessions", "Saved sessions, for the Sessions page."),
     h("div", { class: "card" },
-      row("Keep sessions for", "Older sessions and their audio are deleted.",
+      row("Keep sessions for", "Older sessions, their audio and their frames are deleted.",
         (() => {
           const sel = h("select", { class: "fld", id: "keep" },
             [1, 7, 30, 90].map((d) => h("option", { value: d, selected: d === s.keep_days }, `${d} day${d === 1 ? "" : "s"}`)));

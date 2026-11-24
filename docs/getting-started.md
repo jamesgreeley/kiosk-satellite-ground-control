@@ -35,7 +35,7 @@ Enroll each person once on every kind of device they talk to, such as once on an
 
 ## 4. Turn On Voice Match
 
-On each kiosk, in Kiosk Satellite, go to **Settings > Voice Satellite > Ground Control Voice Match** and turn on **Enable Voice Match**. **Enable Trimming** and **Enable Isolation** are on by default.
+On each kiosk, in Kiosk Satellite, go to **Settings > Ground Control > Voice Match** and turn on **Enable Voice Match**. **Enable Trimming** and **Enable Isolation** are on by default.
 
 For Isolation, also turn on **Use Isolation** in Ground Control under **Settings > Voice Match**. It needs the Accurate speaker model and is best on an NVIDIA GPU.
 

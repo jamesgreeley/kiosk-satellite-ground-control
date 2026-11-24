@@ -33,6 +33,7 @@ from .suggestions import Suggestions
 from .service import GroundControl
 from .sessions import new_id
 from .updates import UpdateCheck
+from .vision_sessions import VisionTracker
 
 _LOG = logging.getLogger(__name__)
 
@@ -493,10 +494,44 @@ async def session_ws(request: web.Request) -> web.WebSocketResponse:
     return ws
 
 
+_LIST_FILTERS = ("kind", "device_id", "device", "person", "show", "q")
+
+
 async def sessions_list(request: web.Request) -> web.Response:
+    """A page of the Sessions list, newest first, with how many match in all.
+
+    Filters: ``kind`` (voice or vision), ``device_id``, ``device`` (a kiosk by
+    the name the list shows), ``person`` (a person's id or ``unknown``),
+    ``show`` (``cut`` or ``rej``), ``q`` (text in the kiosk or speaker) and
+    ``since`` (seconds since the epoch)."""
     vm = request.app[VM]
-    limit = min(int(request.query.get("limit", 100)), 500)
-    return web.json_response({"sessions": await vm.run(vm.sessions.list, limit, request.query.get("device"))})
+    q = request.query
+    try:
+        limit = max(1, min(int(q.get("limit", 100)), 500))
+        offset = max(0, int(q.get("offset", 0)))
+        since = float(q["since"]) if q.get("since") else None
+    except ValueError as err:
+        raise web.HTTPBadRequest(text="limit, offset and since must be numbers") from err
+    filters = {k: q[k] for k in _LIST_FILTERS if q.get(k)}
+    if filters.get("kind") not in (None, "voice", "vision"):
+        raise web.HTTPBadRequest(text="kind must be voice or vision")
+
+    def page() -> dict[str, Any]:
+        return {"sessions": vm.sessions.list(limit, offset=offset, since=since, **filters),
+                "total": vm.sessions.count(since=since, **filters), "offset": offset,
+                "kiosks": vm.sessions.kiosks()}
+
+    return web.json_response(await vm.run(page))
+
+
+async def sessions_counts(request: web.Request) -> web.Response:
+    """Sessions in the last ``hours`` (24 by default) by kind and outcome."""
+    vm = request.app[VM]
+    try:
+        hours = max(1.0, min(float(request.query.get("hours", 24)), 24 * 31))
+    except ValueError as err:
+        raise web.HTTPBadRequest(text="hours must be a number") from err
+    return web.json_response(await vm.run(vm.sessions.counts, time.time() - hours * 3600))
 
 
 async def session_get(request: web.Request) -> web.Response:
@@ -513,20 +548,50 @@ async def session_audio(request: web.Request) -> web.StreamResponse:
     return web.FileResponse(path, headers={"Content-Type": "audio/wav"})
 
 
+async def session_frame(request: web.Request) -> web.StreamResponse:
+    path = request.app[VM].sessions.frame_path(request.match_info["sid"], request.match_info["n"])
+    if path is None:
+        raise web.HTTPNotFound(text="no such frame")
+    return web.FileResponse(path, headers={"Content-Type": "image/jpeg", "Cache-Control": "private, max-age=3600"})
+
+
+async def frames_stats(request: web.Request) -> web.Response:
+    """How many vision frames are saved and their size, for Settings."""
+    vm = request.app[VM]
+    return web.json_response(await vm.run(vm.sessions.frames_stats))
+
+
+async def frames_delete(request: web.Request) -> web.Response:
+    """Every saved vision frame. The sessions stay, without their frames."""
+    vm = request.app[VM]
+    gone = await vm.run(vm.sessions.delete_frames)
+    _LOG.info("deleted %d vision frames (%.1f MB)", gone["frames"], gone["bytes"] / 1e6)
+    return web.json_response(gone)
+
+
+async def vision_looks(request: web.Request) -> web.Response:
+    """Each kiosk's looks, empty looks and vision sessions by day."""
+    vm = request.app[VM]
+    try:
+        days = max(1, min(int(request.query.get("days", 7)), 31))
+    except ValueError as err:
+        raise web.HTTPBadRequest(text="days must be a number") from err
+    return web.json_response(await vm.run(vm.sessions.looks, days, request.query.get("device_id")))
+
+
 SESSION_FILES = (("raw", "as-heard.wav"), ("clean", "sent-to-assistant.wav"), ("wake", "wake-word.wav"))
 
 
 def _session_zip(vm: GroundControl, record: dict[str, Any]) -> bytes:
-    """Everything about one session for an issue report: its audio, its record
-    and the service's details with the log lines from while it ran."""
+    """Everything about one session for an issue report: its audio or frames,
+    its record and the service's details with the log lines from while it ran."""
     import io
     import zipfile
 
     sid = record["id"]
     start = float(record.get("started") or 0.0) - 2.0
     # The record is written when its last turn ends, follow-ups included.
-    saved = vm.sessions.dir / f"{sid}.json"
-    end = (saved.stat().st_mtime if saved.is_file() else start) + 5.0
+    end = (vm.sessions.saved_at(sid) or record.get("saved_at") or start) + 5.0
     lines = [log_line(e) for e in LOGS.since(0, "DEBUG") if start <= e["t"] <= end]
     text = [*_report_header(vm), "", f"Session {sid}, log lines from while it ran:" if lines
             else f"Session {sid}: the log from while it ran is gone (the service restarted since).", *lines]
@@ -538,11 +603,15 @@ def _session_zip(vm: GroundControl, record: dict[str, Any]) -> bytes:
             path = vm.sessions.audio_path(sid, kind)
             if path is not None:
                 z.write(path, name)
+        for frame in record.get("frames") or []:
+            path = vm.sessions.frame_path(sid, frame.get("n"))
+            if path is not None:
+                z.write(path, f"frames/look-{int(frame['n']):04d}-{frame.get('reason', 'look')}.jpg")
     return buf.getvalue()
 
 
 async def session_download(request: web.Request) -> web.Response:
-    """One zip with the session's audio, its record and the log from while it ran."""
+    """One zip with the session's audio or frames, its record and the log from while it ran."""
     vm = request.app[VM]
     record = vm.sessions.get(request.match_info["sid"])
     if record is None:
@@ -611,7 +680,9 @@ async def vision_ws(request: web.Request) -> web.WebSocketResponse:
     Each frame is a ``frame`` message and then its JPEG as one binary message.
     The kiosk waits for a frame's result before it sends the next one. A frame
     that arrives while another waits takes its place: the one it replaces is
-    answered ``dropped``."""
+    answered ``dropped``. ``outcome`` messages say what the kiosk did with the
+    results, for the vision session they belong to (see
+    ground_control.vision_sessions)."""
     vm = request.app[VM]
     ws, start = await _kiosk_start(request)
     if start is None:
@@ -634,6 +705,33 @@ async def vision_ws(request: web.Request) -> web.WebSocketResponse:
     waiting: dict[str, Any] | None = None
     wake = asyncio.Event()
     looks = 0
+    loop = asyncio.get_running_loop()
+    saving: set[asyncio.Future] = set()
+
+    def save(record: dict[str, Any], frames: list[tuple[int, bytes]]) -> None:
+        job = loop.run_in_executor(vm.pool, lambda: vm.sessions.save(record, frames=frames))
+        saving.add(job)
+        job.add_done_callback(saved)
+
+    def saved(job: asyncio.Future) -> None:
+        saving.discard(job)
+        if not job.cancelled() and job.exception() is not None:
+            _LOG.error("could not save a vision session from %s: %s", who, job.exception())
+
+    tracker = VisionTracker(device_id, kiosk.name if kiosk else start.get("device_name"), vision.model.key,
+                            vision.on_gpu, keep_frames=lambda: vm.sessions.keep_frames, save=save,
+                            publish=vm.hub.publish)
+
+    def flush() -> None:
+        counts = tracker.take_counts()
+        if any(counts.values()):
+            loop.run_in_executor(vm.pool, vm.sessions.add_looks, device_id, counts)
+
+    async def ticker() -> None:
+        while True:
+            await asyncio.sleep(1.0)
+            tracker.tick()
+            flush()
 
     async def worker() -> None:
         nonlocal waiting, looks
@@ -646,11 +744,13 @@ async def vision_ws(request: web.Request) -> web.WebSocketResponse:
             try:
                 look = await vm.run(vision.look, job["jpeg"], job["rotation"], job["want"])
             except ValueError as err:
+                tracker.lost("failed")
                 if not ws.closed:
                     await ws.send_json({"type": "error", "id": job["id"], "code": "bad_frame", "message": str(err)})
                 continue
             except Exception:  # noqa: BLE001 - the kiosk hears it and the next frame tries again
                 _LOG.exception("vision look for %s failed", who)
+                tracker.lost("failed")
                 if not ws.closed:
                     await ws.send_json({"type": "error", "id": job["id"], "code": "look_failed"})
                 continue
@@ -663,8 +763,12 @@ async def vision_ws(request: web.Request) -> web.WebSocketResponse:
             _LOG.debug("vision %s frame %s: %s", who, job["id"], result)
             if not ws.closed:
                 await ws.send_json(result)
+            tracker.look(job["id"], job["want"], look.faces, look.hand if "hands" in job["want"] else None,
+                         look.ms, job["jpeg"], rotation=job["rotation"], encode_ms=job.get("encode_ms"),
+                         rtt_ms=job.get("rtt_ms"))
 
     task = asyncio.create_task(worker())
+    ticking = asyncio.create_task(ticker())
     header: dict[str, Any] | None = None
     try:
         async for msg in ws:
@@ -673,18 +777,27 @@ async def vision_ws(request: web.Request) -> web.WebSocketResponse:
                     data = json.loads(msg.data)
                 except ValueError:
                     continue
-                if not isinstance(data, dict) or data.get("type") != "frame":
+                if not isinstance(data, dict):
+                    continue
+                if data.get("type") == "outcome":
+                    tracker.outcome(data)
+                    continue
+                if data.get("type") != "frame":
                     continue
                 frame_want = _vision_want(data.get("want"), want)
                 if frame_want is None or not set(frame_want) <= set(want):
                     await ws.send_json({"type": "error", "id": data.get("id"), "code": "bad_want"})
                     continue
-                header = {"id": data.get("id"), "want": frame_want, "rotation": data.get("rotation", 0)}
+                rotation = data.get("rotation", 0)
+                header = {"id": data.get("id"), "want": frame_want,
+                          "rotation": rotation if rotation in (0, 90, 180, 270) else 0,
+                          "encode_ms": _ms(data.get("encode_ms")), "rtt_ms": _ms(data.get("rtt_ms"))}
             elif msg.type == WSMsgType.BINARY:
                 if header is None:
                     continue  # a JPEG with no frame message before it
                 header["jpeg"] = msg.data
                 if waiting is not None and not ws.closed:
+                    tracker.lost("dropped")
                     await ws.send_json({"type": "dropped", "id": waiting["id"]})
                 waiting, header = header, None
                 wake.set()
@@ -692,8 +805,19 @@ async def vision_ws(request: web.Request) -> web.WebSocketResponse:
                 break
     finally:
         task.cancel()
+        ticking.cancel()
+        tracker.tick()
+        tracker.close("closed")
+        flush()
         _LOG.info("vision from %s ended after %d looks", who, looks)
     return ws
+
+
+def _ms(value: Any) -> float | None:
+    """A time in milliseconds from a kiosk, or None when it isn't one."""
+    if isinstance(value, (int, float)) and not isinstance(value, bool) and 0 <= value < 60000:
+        return float(value)
+    return None
 
 
 async def enroll_ws(request: web.Request) -> web.WebSocketResponse:
@@ -1178,8 +1302,13 @@ def build_app(vm: GroundControl, token_check: TokenCheck | None = None, mdns: bo
     r.add_post("/api/people/{id}/enroll", people_enroll)
     r.add_delete("/api/people/{id}/enrollments/{eid}", enrollment_delete)
     r.add_get("/api/sessions", sessions_list)
+    r.add_get("/api/sessions/counts", sessions_counts)
     r.add_get("/api/sessions/{sid}", session_get)
     r.add_get("/api/sessions/{sid}/audio/{kind}", session_audio)
+    r.add_get("/api/sessions/{sid}/frames/{n}", session_frame)
+    r.add_get("/api/frames", frames_stats)
+    r.add_delete("/api/frames", frames_delete)
+    r.add_get("/api/vision/looks", vision_looks)
     r.add_get("/api/sessions/{sid}/download", session_download)
     r.add_post("/api/sessions/{sid}/enroll", session_enroll)
     r.add_delete("/api/sessions/{sid}", session_delete)

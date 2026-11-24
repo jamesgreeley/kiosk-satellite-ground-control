@@ -189,7 +189,7 @@ The GPU needs to be from the GTX 10 series or newer, with an NVIDIA driver from 
 1. **Open Ground Control.** As a Home Assistant app it's in the sidebar. As a container, open port 10900 and select **Log in with Home Assistant**.
 2. **Connect your kiosks.** Kiosks on the same network find Ground Control on their own. For a kiosk on another network, enter the address from **Settings > General > Kiosks** in Kiosk Satellite. Approve each new kiosk on the Kiosks page. Ground Control only accepts kiosks running Kiosk Satellite.
 3. **Enroll people.** Add each person on the People page, then enroll their voice on a kiosk of every kind they talk to.
-4. **Turn on what you want.** In Kiosk Satellite, under **Voice Satellite > Ground Control Voice Match**, choose who each kiosk answers and turn on **Enable Trimming** and **Enable Isolation**. Turn on Isolation in Ground Control's settings too.
+4. **Turn on what you want.** In Kiosk Satellite, under **Settings > Ground Control > Voice Match**, choose who each kiosk answers and turn on **Enable Trimming** and **Enable Isolation**. Turn on Isolation in Ground Control's settings too.
 
 ## Documentation
 

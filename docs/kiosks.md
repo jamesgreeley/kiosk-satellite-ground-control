@@ -31,13 +31,15 @@ Every kiosk that finds Ground Control on its own then gets that address. A kiosk
 
 | Section | What it shows |
 | --- | --- |
-| Voice Match | The Voice Match features the kiosk has on, as the kiosk last said: Recognition with who it answers, Trimming, Isolation, the Speaker sensor, Show who is talking and Allow enrollment here. Each is set on the kiosk, in Kiosk Satellite under **Voice Satellite > Ground Control Voice Match**. |
+| Voice Match | The Voice Match features the kiosk has on, as the kiosk last said: Recognition with who it answers, Trimming, Isolation, the Speaker sensor, Show who is talking and Allow enrollment here. Each is set on the kiosk, in Kiosk Satellite under **Settings > Ground Control > Voice Match**. |
+| Vision Match | Each of the last 7 days: the kiosk's looks, the empty looks that found no face or hand and the vision sessions. |
 | Who is talking | The voice scores of the current command over the last 10 seconds, against the recognition and other voice thresholds, and the person recognized. |
-| Events | What happened on the kiosk as it happens: a session starting, someone recognized or rejected, another voice, the end of speech and enrollments. |
+| What it sees | Each look of the current vision session over the last 10 seconds: a face looking at the kiosk or turned away, the hand and its finger count and Ground Control's time. |
+| Events | What happened on the kiosk as it happens: a session starting, someone recognized or rejected, another voice, the end of speech, enrollments, vision sessions starting and ending, the screensaver dismissed and each finger gesture. |
 | Recent sessions | The kiosk's latest sessions. Each opens on the [Sessions](sessions.md) page. |
 
 ### Chosen People Ground Control Doesn't Have
 
 A kiosk set to answer chosen people sends the people it chose. When some of them aren't in this Ground Control, such as after moving to another Ground Control or forgetting a person, every command from them is rejected. The kiosk's page shows **Choose again** on the Recognition row, the Overview lists them as not on this Ground Control and the log names the kiosk. In Kiosk Satellite, the **People** setting names them in red.
 
-To fix it, choose the people again in Kiosk Satellite, under **Settings > Voice Satellite > Ground Control Voice Match > People**.
+To fix it, choose the people again in Kiosk Satellite, under **Settings > Ground Control > Voice Match > People**.

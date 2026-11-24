@@ -13,7 +13,7 @@ Without Voice Match, a TV in the background can keep the assistant listening for
 
 ## On the Kiosks
 
-Each kiosk turns the features on for itself in Kiosk Satellite, under **Settings > Voice Satellite > Ground Control Voice Match**:
+Each kiosk turns the features on for itself in Kiosk Satellite, under **Settings > Ground Control > Voice Match**:
 
 | Kiosk setting | What it does |
 | --- | --- |

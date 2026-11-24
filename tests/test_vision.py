@@ -98,6 +98,7 @@ class FakeVision:
     def __init__(self, delay: float = 0.0) -> None:
         self.model = VISION_MODELS["light"]
         self.max_looks = {"face": 12.5, "hands": 10.0}
+        self.on_gpu = False
         self.delay = delay
 
     def look(self, data, rotation=0, want=("face", "hands")):
@@ -196,3 +197,35 @@ async def test_settings_offer_accurate_only_with_cuda(client):
     assert s["vision_model"] == "light" and list(s["vision_models"]) == ["light"]
     r = await client.patch("/api/settings", json={"vision_model": "accurate"}, headers=GOOD)
     assert r.status == 400
+
+
+async def test_a_look_with_a_face_saves_a_vision_session_when_the_socket_closes(client):
+    use(client, FakeVision())
+    ws = await open_vision(client)
+    await receive(ws, "ready")
+    await ws.send_json({"type": "frame", "id": 1, "encode_ms": 9.5})
+    await ws.send_bytes(jpeg(halves()))
+    await receive(ws, "result")
+    await ws.send_json({"type": "outcome", "what": "screensaver_dismissed"})
+    await ws.send_json({"type": "frame", "id": 2, "rtt_ms": 41})
+    await ws.send_bytes(jpeg(halves()))
+    await receive(ws, "result")
+    await ws.close()
+    store = client.app[VM].sessions
+    for _ in range(50):
+        if store.count(kind="vision"):
+            break
+        await asyncio.sleep(0.05)
+    r = await (await client.get("/api/sessions?kind=vision", headers=GOOD)).json()
+    assert r["total"] == 1
+    row = r["sessions"][0]
+    assert row["kind"] == "vision" and row["summary"] == ["Screensaver dismissed"] and row["looks"] == 2
+    record = await (await client.get(f"/api/sessions/{row['id']}", headers=GOOD)).json()
+    assert record["looks"][0]["enc"] == 9.5 and record["looks"][0]["rtt"] == 41.0
+    assert record["stats"]["end"] == "closed"
+    assert [f["reason"] for f in record["frames"]] == ["first", "last"]
+    assert record["frames"][0]["faces"][0][4] is True
+    frame = await client.get(f"/api/sessions/{row['id']}/frames/0", headers=GOOD)
+    assert frame.status == 200 and (await frame.read())[:2] == b"\xff\xd8"
+    counts = store.looks(device_id="k1")["k1"][0]
+    assert counts["looks"] == 2 and counts["sessions"] == 1 and counts["empty"] == 0

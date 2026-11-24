@@ -3,6 +3,7 @@ import { shell } from "../app.js";
 import { loudness } from "../loudness.js";
 import { analyze, draw } from "../spectrogram.js";
 import { answersLabel, ask, chip, clock, h, icon, inform, modeLabel, outcome, outcomeChip, secs, section, toast } from "../ui.js";
+import { renderVision } from "./vision_session.js";
 
 const BARS = 104;
 
@@ -280,6 +281,7 @@ function wakeChips(wake) {
 
 export async function render({ id }) {
   const [record, { people }] = await Promise.all([api(`api/sessions/${id}`), api("api/people")]);
+  if (record.kind === "vision") return renderVision(record);
   const stats = record.stats || {};
   const speaker = stats.speaker || {};
   const person = people.find((p) => p.id === speaker.id);

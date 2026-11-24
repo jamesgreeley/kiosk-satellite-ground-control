@@ -3,13 +3,13 @@ import { shell } from "../app.js";
 import { ago, chip, disc, h, icon, kioskAnswers, kioskChip, outcome, pageHead, section } from "../ui.js";
 
 export async function render() {
-  const [status, { sessions }, { kiosks }, { people }] = await Promise.all([
-    api("api/status"), api("api/sessions?limit=500"), api("api/kiosks"), api("api/people"),
+  const [status, { sessions }, latest, counts, { kiosks }, { people }, settings] = await Promise.all([
+    api("api/status"), api("api/sessions?kind=voice&limit=500"), api("api/sessions?limit=12"),
+    api("api/sessions/counts"), api("api/kiosks"), api("api/people"), api("api/settings"),
   ]);
   const byId = Object.fromEntries(people.map((p) => [p.id, p]));
-  const day = Date.now() / 1000 - 86400;
-  const recent = sessions.filter((s) => s.started >= day);
-  const count = (end) => recent.filter((s) => s.end === end).length;
+  const voice = counts.voice || {};
+  const vision = counts.vision || {};
   const last = (id) => sessions.find((s) => s.device_id === id);
   const answers = (k) => {
     const label = kioskAnswers(k, last(k.device_id), people);
@@ -34,16 +34,24 @@ export async function render() {
   const trimChip = !approved.length ? null
     : trimming === approved.length ? chip("On", "c-ok")
     : trimming ? chip(`${trimming} of ${approved.length} kiosks`, "c-info") : chip("Off");
-  const feature = (ico, title, desc, status) => h("a", { class: "row nowrap", href: "#/settings/voice-match" },
+  const feature = (ico, title, desc, status, area = "voice-match") => h("a", { class: "row nowrap", href: `#/settings/${area}` },
     h("span", { class: "ico" }, icon(ico, 24)),
     h("div", { class: "grow" }, h("div", { class: "rt" }, title), h("div", { class: "rd" }, desc)),
     status);
 
-  const sessionRows = sessions.length
-    ? sessions.slice(0, 12).map((s) => {
+  const sessionRows = latest.sessions.length
+    ? latest.sessions.map((s) => {
+        const where = s.device_name ? ` in the ${s.device_name}` : "";
+        if (s.kind === "vision") {
+          return h("a", { class: "row", href: `#/sessions/${s.id}` },
+            h("span", { class: "disc vis" }, icon("eye", 20)),
+            h("div", { class: "grow" },
+              h("div", { class: "rt" }, `Vision Match${where}`),
+              h("div", { class: "rd" }, `${[...(s.summary || []), `${s.duration_s ?? 0} s`].join(". ")}.`)),
+            h("span", { class: "time" }, ago(s.started)));
+        }
         const person = s.speaker?.id ? byId[s.speaker.id] || s.speaker : null;
         const who = person?.name || "Unknown voice";
-        const where = s.device_name ? ` in the ${s.device_name}` : "";
         return h("a", { class: "row", href: `#/sessions/${s.id}` },
           disc(person),
           h("div", { class: "grow" },
@@ -74,15 +82,16 @@ export async function render() {
               h("div", { class: "rd" }, "Approve it on its kiosk page to let it use Ground Control.")),
             chip("Review", "c-warn")))) : null,
         h("div", { class: "card stats" },
-          h("div", { class: "stat" }, h("div", { class: "statnum" }, recent.length), h("div", { class: "lbl" }, "Commands in the last 24 hours")),
-          h("div", { class: "stat" }, h("div", { class: "statnum" }, count("other_voice")), h("div", { class: "lbl" }, "Ended early when another voice started")),
-          h("div", { class: "stat" }, h("div", { class: "statnum" }, count("rejected")), h("div", { class: "lbl" }, "Rejected, not a voice the kiosk answers"))),
+          h("div", { class: "stat" }, h("div", { class: "statnum" }, voice.total ?? 0), h("div", { class: "lbl" }, "Commands in the last 24 hours")),
+          h("div", { class: "stat" }, h("div", { class: "statnum" }, voice.other_voice ?? 0), h("div", { class: "lbl" }, "Ended early when another voice started")),
+          h("div", { class: "stat" }, h("div", { class: "statnum" }, voice.rejected ?? 0), h("div", { class: "lbl" }, "Rejected, not a voice the kiosk answers")),
+          h("div", { class: "stat" }, h("div", { class: "statnum" }, vision.total ?? 0), h("div", { class: "lbl" }, "Vision sessions in the last 24 hours"))),
         h("div", { class: "cols" },
           h("section", {},
             section("Kiosks"),
             h("div", { class: "card" }, kioskRows,
               kiosks.length ? h("div", { class: "hint", style: { paddingTop: "14px" } }, icon("info", 18),
-                "Who a kiosk answers is set on the kiosk, in Kiosk Satellite under Voice Satellite, Ground Control Voice Match, Answer.") : null),
+                "Who a kiosk answers is set on the kiosk, in Kiosk Satellite under Ground Control, Voice Match, Answer.") : null),
             section("Service"),
             h("div", { class: "card" },
               h("div", { class: "row" },
@@ -102,9 +111,12 @@ export async function render() {
                 status.isolation ? chip(status.isolation_on_gpu ? "On, GPU" : "On, CPU", "c-ok") : chip("Off"))),
             section("Vision Match"),
             h("div", { class: "card" },
-              h("div", { class: "row nowrap" },
-                h("span", { class: "ico" }, icon("eye", 24)),
-                h("div", { class: "grow" }, h("div", { class: "rt" }, "Coming soon"))))),
+              feature("eye", "Face Detection and Hand Gestures",
+                `Faces looking at the kiosk and raised fingers. ${settings.vision_model === "accurate" ? "Accurate" : "Light"} model.`,
+                settings.vision_error ? chip("Can't run", "c-err")
+                  : settings.vision_loaded ? chip(settings.vision_on_gpu ? "On, GPU" : "On, CPU", "c-ok") : chip("Not loaded yet"),
+                "vision-match"),
+              feature("person", "Face Recognition", "Who is looking at the kiosk.", chip("Coming soon"), "vision-match"))),
           h("section", {},
             section("Recent sessions", null, h("a", { class: "txtlink", href: "#/sessions" }, "All sessions")),
             h("div", { class: "card" }, sessionRows)))),

@@ -26,7 +26,7 @@ The sentence to read fills as it is spoken and moves on when it is full or after
 
 What was recorded is kept when the enrollment is stopped early with at least 10 seconds of speech. The wake word doesn't listen during an enrollment, so reading the text never starts a voice command.
 
-Only kiosks with **Allow enrollment here** on, under **Settings > Voice Satellite > Ground Control Voice Match** in Kiosk Satellite, are offered. A kiosk busy with a voice command or an alarm can't start an enrollment until it is done.
+Only kiosks with **Allow enrollment here** on, under **Settings > Ground Control > Voice Match** in Kiosk Satellite, are offered. A kiosk busy with a voice command or an alarm can't start an enrollment until it is done.
 
 ### Enrollments
 

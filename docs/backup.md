@@ -11,7 +11,8 @@ Everything Ground Control keeps is in one data folder. Back it up, or copy it to
 | `profiles/` | The voiceprints, one file per speaker model. |
 | `kiosks.json` | Every kiosk and whether it is approved. |
 | `settings.json` | The settings changed in the app, such as the speaker model, the thresholds and Isolation. |
-| `sessions/` | Saved sessions and their audio. Optional to keep: they expire after a few days anyway. |
+| `sessions.db` | Saved sessions and each kiosk's look counts. Optional to keep: sessions expire after a few days anyway. |
+| `sessions/` | The audio and frames of saved sessions. Optional to keep, with `sessions.db`. |
 
 Where the folder is:
 
@@ -50,7 +51,7 @@ The steps are the same whatever the old and new installations are:
 
 1. **Install Ground Control on the new machine** and start it once, so its data folder exists. Use the same version as the old one, or newer.
 2. **Stop both.** Ground Control writes to its data folder while it runs, so copy it only while stopped.
-3. **Copy the old data folder's contents into the new one,** replacing what is there. Leave out `sessions/` if you don't need the old sessions.
+3. **Copy the old data folder's contents into the new one,** replacing what is there. Leave out `sessions.db` and `sessions/` if you don't need the old sessions.
 4. **Start the new installation.** Keep the old one stopped, or uninstall it, so kiosks don't find two.
 5. **Point the kiosks at the new machine.** Kiosks that find Ground Control on their own switch to it by themselves. A kiosk with the address entered under **Settings > Ground Control** in Kiosk Satellite needs the new address.
 

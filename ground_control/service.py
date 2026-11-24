@@ -60,6 +60,7 @@ class GroundControl:
         self.learn = bool(saved.get("learn", cfg.learn))
         self.sessions.keep_days = int(saved.get("keep_days", cfg.keep_days))
         self.sessions.keep_audio = bool(saved.get("keep_audio", cfg.keep_audio))
+        self.sessions.keep_frames = bool(saved.get("keep_frames", True))
         self.isolate = bool(saved.get("isolator", False))
         self._isolator = None
         self._isolator_lock = threading.Lock()
@@ -114,7 +115,7 @@ class GroundControl:
                 "threshold": m.threshold, "other_threshold": m.other_threshold,
                 "default_threshold": base.threshold, "default_other_threshold": base.other_threshold,
                 "learn": self.learn, "keep_days": self.sessions.keep_days,
-                "keep_audio": self.sessions.keep_audio, "cuda": self.cfg.cuda, "on_gpu": self.active.on_gpu,
+                "keep_audio": self.sessions.keep_audio, "keep_frames": self.sessions.keep_frames, "cuda": self.cfg.cuda, "on_gpu": self.active.on_gpu,
                 "threads": self.cfg.threads, "port": self.cfg.port,
                 "isolator": self.isolate, "isolator_available": self._isolator_files() != [],
                 "isolator_model": ISOLATOR_MODEL,
@@ -153,6 +154,8 @@ class GroundControl:
             self.sessions.keep_days = out["keep_days"] = days
         if "keep_audio" in values:
             self.sessions.keep_audio = out["keep_audio"] = bool(values["keep_audio"])
+        if "keep_frames" in values:
+            self.sessions.keep_frames = out["keep_frames"] = bool(values["keep_frames"])
         if "isolator" in values:
             on = bool(values["isolator"])
             if on and not self._isolator_files():
@@ -379,3 +382,5 @@ class GroundControl:
         self.pool.shutdown(wait=False, cancel_futures=True)
         if self._vision is not None:
             self._vision.close()
+        # After any write that is under way, so sessions.db is whole on its own.
+        self.sessions.close()
