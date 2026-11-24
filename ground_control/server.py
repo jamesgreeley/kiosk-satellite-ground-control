@@ -1181,10 +1181,11 @@ async def kiosk_enroll(request: web.Request) -> web.Response:
     if kiosk is None or kiosk.access != "approved":
         raise web.HTTPConflict(text="that kiosk isn't approved")
     face = body.get("kind") == "face"
-    if kiosk.connected and not kiosk.enroll:
+    features = kiosk.features or {}
+    if face and not (features.get("vision_match") and features.get("face_recognition")):
+        raise web.HTTPConflict(text="Face Recognition is off on that kiosk")
+    if not face and kiosk.connected and not kiosk.enroll:
         raise web.HTTPConflict(text="Allow enrollment here is off on that kiosk")
-    if face and not (kiosk.features or {}).get("vision_match"):
-        raise web.HTTPConflict(text="Vision Match is off on that kiosk")
     message = {"type": "enroll_face", "person_id": person.id, "name": person.name, "color": person.color} if face \
         else {"type": "enroll", "person_id": person.id, "name": person.name, "color": person.color,
               "target_s": float(body.get("target_s", 45.0))}

@@ -46,10 +46,10 @@ Face Recognition tells who is looking at a kiosk, from the faces enrolled here. 
 
 ### Enrolling a Face
 
-A face is enrolled through a kiosk's own camera, in a guided capture of about half a minute. Start it on the kiosk, or in the person's **Vision Match** section here: pick the kiosk and choose **Enroll face**. Only kiosks with Vision Match on are offered. The kiosk then shows the steps:
+A face is enrolled through a kiosk's own camera, in a guided capture of about half a minute. Start it on the kiosk, or in the person's **Vision Match** section here: pick the kiosk and choose **Enroll face**. Only kiosks with Face Recognition on are offered. The kiosk then shows the steps:
 
 1. Look at the screen.
-2. Turn a little to one side.
+2. Turn your head a little to one side.
 3. Now a little to the other side.
 4. Take a step back.
 

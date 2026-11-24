@@ -13,7 +13,7 @@ const THINGS = [
 const TARGET_S = 45;
 
 // Face Recognition's guided capture, as Ground Control reports it.
-const FACE_STEPS = { look: "Look at the screen", side_a: "Turn a little to one side", side_b: "Now a little to the other side",
+const FACE_STEPS = { look: "Look at the screen", side_a: "Turn your head a little to one side", side_b: "Now a little to the other side",
   far: "Take a step back" };
 const FACE_HINTS = { ok: "", no_face: "No face in view.", several_faces: "Only one person in view, please.",
   closer: "Come a little closer.", farther: "Step back a little more.", look_at_screen: "Look at the screen.",
@@ -51,10 +51,11 @@ function faceEnrollmentRows(p) {
 
 /** Start the guided capture on a kiosk and follow it live. */
 function faceEnroll(p, kiosks) {
-  const ready = kiosks.filter((k) => k.connected && k.access === "approved" && k.features?.vision_match);
+  const ready = kiosks.filter((k) => k.connected && k.access === "approved" && k.features?.vision_match
+    && k.features?.face_recognition);
   const status = h("div", { class: "rd" }, ready.length
     ? `${p.name} stands in front of the kiosk and follows the steps on its screen.`
-    : "Needs a connected kiosk with Vision Match on.");
+    : "Needs a connected kiosk with Face Recognition on.");
   const sel = h("select", { class: "fld", "aria-label": "Kiosk" }, ready.map((k) => h("option", { value: k.device_id }, k.name)));
   const go = h("button", { class: "btn out sm", disabled: !ready.length }, "Enroll face");
   let events = null;
