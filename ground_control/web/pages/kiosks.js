@@ -189,20 +189,23 @@ async function detail(kiosk, people, status, onKiosk) {
   const strip = h("div", { class: "vlanes", style: { marginTop: "4px" } });
   const drawSeen = () => {
     const lk = seen[seen.length - 1];
-    const face = lk?.face ? (lk.face.frontal ? "Looking at the kiosk" : "Face turned away") : "No face";
-    const hand = lk?.hand ? (lk.hand.fingers != null ? fingers(lk.hand.fingers) : "Hand") : null;
+    // Face and hand looks are paced apart: each says what its own last look found.
+    const faceLook = seen.findLast((x) => (x.want || "f").includes("f"));
+    const handLook = seen.findLast((x) => (x.want || "h").includes("h"));
+    const face = !faceLook ? null : faceLook.face ? (faceLook.face.frontal ? "Looking at the kiosk" : "Face turned away") : "No face";
+    const hand = handLook?.hand ? (handLook.hand.fingers != null ? fingers(handLook.hand.fingers) : "Hand") : null;
     const ms = lk ? Object.values(lk.ms || {}).reduce((a, b) => a + b, 0) : null;
     seeBox.replaceChildren(...[h("span", { class: "disc vis" }, icon("eye", 20)),
-      h("span", { class: "big" }, lk ? [face, hand].filter(Boolean).join(", ") : "Nobody in front of it"),
+      h("span", { class: "big" }, lk ? [face, hand].filter(Boolean).join(", ") || "No face" : "Nobody in front of it"),
       ms != null ? h("span", { class: "val" }, `${ms.toFixed(0)} ms`) : null].filter(Boolean));
     const end = Date.now() / 1000;
     const mark = (lk2, m) => h("span", { class: `vm ${m.cls}`, style: { left: `${100 - ((end - lk2.at) / WINDOW_S) * 100}%` } }, m.text ?? null);
     const recentLooks = seen.filter((x) => x.at > end - WINDOW_S);
     strip.replaceChildren(
       h("div", { class: "vlane" }, h("span", { class: "vll" }, "Face"), h("div", { class: "vlt" },
-        recentLooks.map((x) => mark(x, { cls: x.face ? (x.face.frontal ? "on" : "away") : "none" })))),
+        recentLooks.filter((x) => (x.want || "f").includes("f")).map((x) => mark(x, { cls: x.face ? (x.face.frontal ? "on" : "away") : "none" })))),
       h("div", { class: "vlane" }, h("span", { class: "vll" }, "Hand"), h("div", { class: "vlt" },
-        recentLooks.filter((x) => x.hand !== undefined).map((x) => mark(x, x.hand ? { cls: "hand", text: x.hand.fingers ?? "" } : { cls: "none" })))));
+        recentLooks.filter((x) => (x.want || "h").includes("h")).map((x) => mark(x, x.hand ? { cls: "hand", text: x.hand.fingers ?? "" } : { cls: "none" })))));
   };
   drawSeen();
   const seeTimer = setInterval(() => { if (seen.length) drawSeen(); }, 1000);

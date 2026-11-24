@@ -154,7 +154,7 @@ class VisionTracker:
                  "hand": [*hand["box"], hand.get("fingers")] if hand and hand.get("box") else None}
         self._frame(s, len(s.looks) - 1, t, jpeg, rotation, boxes, reasons)
         self._publish({"type": "vision_look", "device_id": self.device_id, "session": s.id, "t": t,
-                       "face": face, "hand": hand_out, "ms": entry["ms"]})
+                       "want": entry["want"], "face": face, "hand": hand_out, "ms": entry["ms"]})
 
     def _start(self, now: float, continues: str | None = None) -> VisionSession:
         s = VisionSession(self.device_id, self.device_name, self.model, self.on_gpu, started=now,
