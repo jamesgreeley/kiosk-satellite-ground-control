@@ -63,6 +63,55 @@ ALIGNER_SHA256 = "894258d611a9c4a5175434838eecee364194fab51b2f0836b4e20b95bb89e7
 """The Wake Word Aligner: the phonemes heard in audio, to find where the wake word ends."""
 
 
+@dataclass(frozen=True)
+class VisionModel:
+    """Vision Match's face and hand models, chosen together as Light or Accurate."""
+    key: str
+    label: str
+    face_file: str
+    face_sha256: str
+    face_threshold: float
+    """A face at or above this score counts. SCRFD 10G's default 0.5 saw faces
+    in an empty room on the test set, 0.6 doesn't."""
+    hand_file: str
+    hand_sha256: str
+    hand_threshold: float
+    """A hand at or above this score counts."""
+    gpu_only: bool
+    """Too slow for 4 looks a second on any CPU measured: offered only with CUDA."""
+
+
+VISION_MODELS: dict[str, VisionModel] = {
+    "light": VisionModel(
+        key="light",
+        label="Light",
+        face_file="scrfd_2.5g.onnx",
+        face_sha256="041f73f47371333d1d17a6fee6c8ab4e6aecabefe398ff32cca4e2d5eaee0af9",
+        face_threshold=0.5,
+        hand_file="yolov10n_gestures.onnx",
+        hand_sha256="748b2f34f8bb45ea078c52ebc2c1344b1f1a6709e3b6104759c6f9a383b3d9f4",
+        hand_threshold=0.4,
+        gpu_only=False,
+    ),
+    "accurate": VisionModel(
+        key="accurate",
+        label="Accurate",
+        face_file="scrfd_10g.onnx",
+        face_sha256="5838f7fe053675b1c7a08b633df49e7af5495cee0493c7dcf6697200b85b5b91",
+        face_threshold=0.6,
+        hand_file="yolov10x_gestures.onnx",
+        hand_sha256="cab82c898c5ddf7a20c5120d5b190de669df71e47431f98266118be7aa1f85f0",
+        hand_threshold=0.4,
+        gpu_only=True,
+    ),
+}
+
+
+def default_vision_key(cuda: bool) -> str:
+    """Accurate on an NVIDIA GPU, Light everywhere else."""
+    return "accurate" if cuda else "light"
+
+
 def apple_silicon(cpuinfo: Path = Path("/proc/cpuinfo")) -> bool:
     """An Apple M-series chip, also from inside Docker's VM on a Mac: Linux
     shows Apple's CPU implementer code, 0x61."""

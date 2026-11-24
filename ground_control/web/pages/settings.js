@@ -16,7 +16,7 @@ const TEMPLATE = [
 
 const AREAS = [
   ["voice-match", "Voice Match", "mark", "Recognition, Trimming, Wake Word Aligner and Isolation"],
-  ["vision-match", "Vision Match", "eye", "Coming soon"],
+  ["vision-match", "Vision Match", "eye", "Face Detection, Hand Gestures and Face Recognition"],
   ["general", "General", "tune", "Engine, sessions, agents and kiosks"],
 ];
 
@@ -157,12 +157,52 @@ export async function render({ area } = {}) {
 
   // ── Vision Match ─────────────────────────────────────────────────────────
 
-  const visionMatch = () => [
-    h("div", { class: "card" },
-      h("div", { class: "soon" },
-        h("span", { class: "soonicon" }, icon("eye", 32)),
-        h("div", { class: "rt" }, "Coming soon"))),
-  ];
+  const visionMatch = () => {
+    const option = (key, label, desc) => {
+      const offered = key in s.vision_models;
+      const b = h("button", { class: "opt", role: "radio", "aria-checked": String(s.vision_model === key), disabled: !offered },
+        h("span", { class: "radio" }),
+        h("span", { class: "grow" },
+          h("span", { class: "rt", style: { display: "block" } }, label),
+          h("span", { class: "rd", style: { display: "block" } }, offered ? desc : `${desc} Not available in this install.`)));
+      b.addEventListener("click", async () => {
+        if (s.vision_model === key || !offered) return;
+        b.setAttribute("aria-busy", "true");
+        try {
+          await api("api/settings", { method: "PATCH", json: { vision_model: key } });
+          toast(`Now using ${label}`);
+          location.reload();
+        } catch (err) {
+          toast(err.message);
+          b.removeAttribute("aria-busy");
+        }
+      });
+      return b;
+    };
+    const where = !s.vision_loaded ? h("span", { class: "val" }, "Loads with the first look")
+      : chip(s.vision_on_gpu ? "NVIDIA GPU (CUDA)" : "CPU", s.vision_on_gpu ? "c-ok" : "");
+    const looks = s.vision_max_looks
+      ? h("span", { class: "val" }, `${s.vision_max_looks.face} face, ${s.vision_max_looks.hands} hand`)
+      : h("span", { class: "val" }, "Measured when they load");
+    return [
+      section("Models", "Face Detection and Hand Gestures, for the kiosks that have Vision Match on."),
+      h("div", { class: "card" },
+        h("div", { role: "radiogroup", "aria-label": "Vision model" },
+          row("Vision model", "Both find faces and whether they look at the kiosk equally well. They differ in reading raised fingers.", null),
+          option("accurate", "Accurate", "Gets the finger count right more often, also in dim light at 3 m. Needs an NVIDIA GPU."),
+          option("light", "Light", "Runs on any CPU. Each kiosk is told how many looks a second this machine keeps up with.")),
+        row("Runs on", "Set by the CUDA option, like the speaker model.", where),
+        row("Looks a second", "For one kiosk, measured on this machine when the models load. Kiosks look at most 2 times a second for faces and 4 for hands.", looks),
+        s.vision_error ? hint(s.vision_error)
+          : hint("Each kiosk turns Vision Match on in Kiosk Satellite, under Kiosk Satellite, Vision Match.")),
+
+      section("Face Recognition", "Who is looking at the kiosk."),
+      h("div", { class: "card" },
+        h("div", { class: "soon" },
+          h("span", { class: "soonicon" }, icon("eye", 32)),
+          h("div", { class: "rt" }, "Coming soon"))),
+    ];
+  };
 
   // ── General ──────────────────────────────────────────────────────────────
 

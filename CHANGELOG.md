@@ -2,6 +2,11 @@
 
 All notable changes to Kiosk Satellite Ground Control are documented here.
 
+## Unreleased
+
+### Added
+- **Vision Match: Face Detection and Hand Gestures.** Ground Control can now look at a kiosk's camera frames: it finds faces and whether they look at the kiosk, and reads the fingers a raised hand shows. Kiosks with Vision Match on send their frames over a new socket, `/api/vision`, instead of running these models on the device. **Settings > Vision Match** chooses the models: Light (SCRFD 2.5G and YOLOv10n trained on HaGRIDv2 gestures) runs on any CPU, Accurate (SCRFD 10G and YOLOv10x) needs an NVIDIA GPU and is the default there. On kiosk frames at 1 to 3 m, Light got the finger count right in 91% of frames and Accurate in 96%, against 28% for the models Kiosk Satellite runs on the device. Both told a head turned away from the screen apart from one looking at it in 90% of frames, against 18% on the device. The models load with the first kiosk that asks, and Ground Control measures how many looks a second it keeps up with and tells each kiosk. The CPU image and the Home Assistant app include Light only. Needs a Kiosk Satellite release with Vision Match, coming next.
+
 ## v2026.11.14 - 2026-11-23
 
 ### Changed

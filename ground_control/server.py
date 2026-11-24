@@ -44,7 +44,7 @@ SUGGESTIONS = web.AppKey("suggestions", Suggestions)
 LOGIN = web.AppKey("login", HomeAssistantLogin)
 UPDATES = web.AppKey("updates", UpdateCheck)
 CLIENTS = web.AppKey("clients", ClientCheck)
-SOCKETS = ("/api/session", "/api/enroll", "/api/kiosk", "/api/events")
+SOCKETS = ("/api/session", "/api/enroll", "/api/kiosk", "/api/vision", "/api/events")
 MIN_PARTIAL_ENROLL_S = 10.0
 WEB = Path(__file__).resolve().parent / "web"
 INGRESS_PROXY = "172.30.32.2"
@@ -591,6 +591,111 @@ def _passage(value: Any) -> list[str] | None:
     return [v.strip() for v in value]
 
 
+# ── vision ────────────────────────────────────────────────────────────────
+
+VISION_WANTS = ("face", "hands")
+
+
+def _vision_want(value: Any, default: tuple[str, ...]) -> tuple[str, ...] | None:
+    """The looks a message asks for, or None when it asks for something unknown."""
+    if value is None:
+        return default
+    if not isinstance(value, list) or not value or not all(v in VISION_WANTS for v in value):
+        return None
+    return tuple(dict.fromkeys(value))
+
+
+async def vision_ws(request: web.Request) -> web.WebSocketResponse:
+    """Vision Match: a kiosk's camera frames in, the faces and hands in them out.
+
+    Each frame is a ``frame`` message and then its JPEG as one binary message.
+    The kiosk waits for a frame's result before it sends the next one. A frame
+    that arrives while another waits takes its place: the one it replaces is
+    answered ``dropped``."""
+    vm = request.app[VM]
+    ws, start = await _kiosk_start(request)
+    if start is None:
+        return ws
+    want = _vision_want(start.get("want"), VISION_WANTS)
+    if want is None:
+        await ws.close(code=4400, message=b"bad want")
+        return ws
+    vision = await vm.run(vm.vision)
+    if vision is None:
+        await _refuse(request, ws, "vision_unavailable", vm.settings().get("vision_error") or "no vision models",
+                      close_code=4503)
+        return ws
+    device_id = start.get("device_id")
+    kiosk = vm.hub.seen(device_id, start.get("device_name"))
+    who = kiosk.name if kiosk else device_id or "an unknown kiosk"
+    _LOG.info("vision from %s: %s", who, " and ".join(want))
+    await ws.send_json({"type": "ready", "model": vision.model.key, "want": list(want),
+                        "max_looks": vision.max_looks})
+    waiting: dict[str, Any] | None = None
+    wake = asyncio.Event()
+    looks = 0
+
+    async def worker() -> None:
+        nonlocal waiting, looks
+        while True:
+            await wake.wait()
+            wake.clear()
+            job, waiting = waiting, None
+            if job is None:
+                continue
+            try:
+                look = await vm.run(vision.look, job["jpeg"], job["rotation"], job["want"])
+            except ValueError as err:
+                if not ws.closed:
+                    await ws.send_json({"type": "error", "id": job["id"], "code": "bad_frame", "message": str(err)})
+                continue
+            except Exception:  # noqa: BLE001 - the kiosk hears it and the next frame tries again
+                _LOG.exception("vision look for %s failed", who)
+                if not ws.closed:
+                    await ws.send_json({"type": "error", "id": job["id"], "code": "look_failed"})
+                continue
+            looks += 1
+            result: dict[str, Any] = {"type": "result", "id": job["id"], "ms": look.ms}
+            if look.faces is not None:
+                result["faces"] = look.faces
+            if "hands" in job["want"]:
+                result["hand"] = look.hand
+            _LOG.debug("vision %s frame %s: %s", who, job["id"], result)
+            if not ws.closed:
+                await ws.send_json(result)
+
+    task = asyncio.create_task(worker())
+    header: dict[str, Any] | None = None
+    try:
+        async for msg in ws:
+            if msg.type == WSMsgType.TEXT:
+                try:
+                    data = json.loads(msg.data)
+                except ValueError:
+                    continue
+                if not isinstance(data, dict) or data.get("type") != "frame":
+                    continue
+                frame_want = _vision_want(data.get("want"), want)
+                if frame_want is None or not set(frame_want) <= set(want):
+                    await ws.send_json({"type": "error", "id": data.get("id"), "code": "bad_want"})
+                    continue
+                header = {"id": data.get("id"), "want": frame_want, "rotation": data.get("rotation", 0)}
+            elif msg.type == WSMsgType.BINARY:
+                if header is None:
+                    continue  # a JPEG with no frame message before it
+                header["jpeg"] = msg.data
+                if waiting is not None and not ws.closed:
+                    await ws.send_json({"type": "dropped", "id": waiting["id"]})
+                waiting, header = header, None
+                wake.set()
+            elif msg.type == WSMsgType.ERROR:
+                break
+    finally:
+        task.cancel()
+        _LOG.info("vision from %s ended after %d looks", who, looks)
+    return ws
+
+
 async def enroll_ws(request: web.Request) -> web.WebSocketResponse:
     vm = request.app[VM]
     ws, start = await _kiosk_start(request)
@@ -1062,6 +1167,7 @@ def build_app(vm: GroundControl, token_check: TokenCheck | None = None, mdns: bo
     r.add_get("/api/session", session_ws)
     r.add_get("/api/enroll", enroll_ws)
     r.add_get("/api/kiosk", kiosk_ws)
+    r.add_get("/api/vision", vision_ws)
     r.add_get("/api/events", events_ws)
     r.add_get("/api/people", people_list)
     r.add_get("/api/people/{id}/picture", person_picture)

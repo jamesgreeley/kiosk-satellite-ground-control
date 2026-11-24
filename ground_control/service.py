@@ -18,8 +18,8 @@ import numpy as np
 from .config import Config
 from .engine import Embedder, malloc_trim
 from .models import (ALIGNER_FILE, ALIGNER_SHA256, ISOLATOR_CPU_FILE, ISOLATOR_CPU_SHA256, ISOLATOR_FILE,
-                     ISOLATOR_MODEL, ISOLATOR_SHA256, SPEAKER_MODELS, VAD_FILE, VAD_SHA256, SpeakerModel,
-                     verified_path)
+                     ISOLATOR_MODEL, ISOLATOR_SHA256, SPEAKER_MODELS, VAD_FILE, VAD_SHA256, VISION_MODELS, SpeakerModel,
+                     default_vision_key, verified_path)
 from .hub import Hub
 from .people import People
 from .session import Session, SessionConfig
@@ -72,6 +72,14 @@ class GroundControl:
         self._aligner = None
         self._aligner_failed = False
         self._aligner_lock = threading.Lock()
+        choices = self.vision_choices()
+        chosen_vision, default_vision = saved.get("vision_model"), default_vision_key(cfg.cuda)
+        self.vision_model = (chosen_vision if chosen_vision in choices else default_vision if default_vision in choices
+                             else choices[0] if choices else default_vision)
+        """Vision Match's models: Light or Accurate. Accurate only with CUDA."""
+        self._vision = None
+        self._vision_error: str | None = None
+        self._vision_lock = threading.Lock()
         self.active = self._load(self.status.model)
         if self.people.needs_rebuild(self.status.model):
             _LOG.info("building voiceprints for %s", self.status.model)
@@ -112,7 +120,13 @@ class GroundControl:
                 "isolator_model": ISOLATOR_MODEL,
                 "isolator_on_gpu": self._isolator.on_gpu if self._isolator is not None else None,
                 "aligner": self.align, "aligner_missing": self._aligner_missing(),
-                "short_answers": self.short_answers}
+                "short_answers": self.short_answers,
+                "vision_model": self.vision_model,
+                "vision_models": {k: VISION_MODELS[k].label for k in self.vision_choices()},
+                "vision_loaded": self._vision is not None,
+                "vision_on_gpu": self._vision.on_gpu if self._vision is not None else None,
+                "vision_max_looks": self._vision.max_looks if self._vision is not None else None,
+                "vision_error": self._vision_error}
 
     def update_settings(self, values: dict[str, object]) -> None:
         """Thresholds (for the active model), learning and session keeping. Checked, then saved."""
@@ -150,6 +164,13 @@ class GroundControl:
             self.align = out["aligner"] = bool(values["aligner"])
         if "short_answers" in values:
             self.short_answers = out["short_answers"] = bool(values["short_answers"])
+        if "vision_model" in values:
+            key = values["vision_model"]
+            if key not in self.vision_choices():
+                raise ValueError("vision_model must be one of " + ", ".join(self.vision_choices()))
+            if key != self.vision_model:
+                self.vision_model = out["vision_model"] = key
+                self._switch_vision()
         self._save(**out)
 
     def _aligner_missing(self) -> str | None:
@@ -186,6 +207,46 @@ class GroundControl:
                     return None
                 _LOG.info("Wake Word Aligner %s loaded", self._aligner.version)
             return self._aligner
+
+    def vision_choices(self) -> list[str]:
+        """The Vision Match model sets this install can run: their files are
+        here, and Accurate needs CUDA."""
+        return [k for k, m in VISION_MODELS.items()
+                if (self.cfg.cuda or not m.gpu_only)
+                and all((self.cfg.models_dir / f).is_file() for f in (m.face_file, m.hand_file))]
+
+    def vision(self):
+        """Vision Match's models, loaded with the first look a kiosk asks for.
+        None when they can't run here (the reason is in ``settings()``)."""
+        with self._vision_lock:
+            if self._vision is None and self._vision_error is None:
+                from .vision import Vision
+
+                if self.vision_model not in self.vision_choices():
+                    self._vision_error = "Vision Match's models are not in this install"
+                    _LOG.warning("Vision Match can't run: its models are not in this install")
+                    return None
+                m = VISION_MODELS[self.vision_model]
+                try:
+                    self._vision = Vision(self.cfg.models_dir, m, threads=self.cfg.threads, use_cuda=self.cfg.cuda)
+                except Exception as err:  # noqa: BLE001 - reported on the status page
+                    self._vision_error = f"Vision Match's {m.label} models failed to load: {err}"
+                    self.status.errors.append(self._vision_error)
+                    _LOG.exception("Vision Match's %s models failed to load", m.label)
+                    return None
+                looks = self._vision.max_looks
+                _LOG.info("Vision Match %s models loaded on %s: %s face and %s hand looks a second", m.label,
+                          "the GPU" if self._vision.on_gpu else "the CPU", looks["face"], looks["hands"])
+            return self._vision
+
+    def _switch_vision(self) -> None:
+        """Drop the loaded models. The next look loads the chosen ones."""
+        with self._vision_lock:
+            old, self._vision, self._vision_error = self._vision, None, None
+        if old is not None:
+            old.close()
+            malloc_trim()
+            self.vision()
 
     def _isolator_files(self) -> list[tuple[str, str, bool]]:
         """The isolation models in this image, in the order to try them: the
@@ -316,3 +377,5 @@ class GroundControl:
 
     def close(self) -> None:
         self.pool.shutdown(wait=False, cancel_futures=True)
+        if self._vision is not None:
+            self._vision.close()
