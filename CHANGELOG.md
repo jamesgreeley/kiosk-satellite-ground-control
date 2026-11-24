@@ -7,6 +7,9 @@ All notable changes to Kiosk Satellite Ground Control are documented here.
 ### Changed
 - **Limits of a short answer in the docs.** The Voice Match page now says what a short answer can't do: it is accepted without a name, a short reply from someone the kiosk doesn't answer can get through now and then, the right person's reply can still be dropped with a TV on and less than 0.2 seconds of speech is never accepted. It also suggests a reply of two seconds or more for a question where it matters who answers. See [Limits of a Short Answer](docs/voice-match.md#limits-of-a-short-answer).
 
+### Fixed
+- **Not starting on an older x86 CPU.** On a CPU without SSE4.2, or in a virtual machine with a CPU type like `kvm64` that hides it, Ground Control stopped at startup with "NumPy was built with baseline optimizations: (X86_V2) but your machine doesn't support: (X86_V2)". NumPy 2.4 and later need those instructions, so the images now come with NumPy 2.3.
+
 ## v2026.11.13 - 2026-11-23
 
 ### Added
