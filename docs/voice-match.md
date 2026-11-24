@@ -45,6 +45,18 @@ When Home Assistant asks a question (`assist_satellite.ask_question`, `assist_sa
 
 A reply that reaches the **Threshold** this way is recognized by name, as any command is. A reply of a second or more often does, where its speech alone would not. Under the **Threshold**, a short answer is taken without a name: the Speaker sensor only says who is speaking at the **Threshold**. An answer from someone the kiosk doesn't answer is still dropped, though a very short one can get through now and then. With a TV on, turn on Isolation, which keeps the TV out of the answer.
 
+#### Limits of a Short Answer
+
+A second of speech or less is not enough to recognize a voice reliably. A short answer is a looser check than recognition, with these limits:
+
+- **It doesn't say who answered.** Under the **Threshold** the reply is accepted without a name and the kiosk's Speaker sensor stays empty. An automation that needs to know who answered can read the Speaker sensor after the reply: it names someone only when the voice reached the **Threshold**.
+- **Someone else's reply can get through.** In our tests, a short reply from a voice the kiosk doesn't answer was accepted about 1 time in 50 on a kiosk that answers one person and up to 1 time in 5 on a kiosk that answers four people with similar voices. Don't count on a one word reply to keep someone out. For a question where that matters, like unlocking a door, ask for a reply of two seconds or more, such as "yes, unlock the door". That one is recognized like any command.
+- **The right person's reply can still be dropped.** A quiet or mumbled "yes" can score under the line. With a TV or other people talking over the reply, about half of the short replies in our tests were dropped. Isolation cleans up what the assistant hears, but the reply is accepted or dropped before Isolation runs.
+- **Less than 0.2 seconds of speech is never accepted.**
+- **It can't be added to a person.** Adding a session's voice to a person needs at least a second of speech.
+
+These numbers are from the Accurate speaker model. The Light model follows the same rule with its own thresholds.
+
 Which turns can be a short answer depends on what the kiosk says about how the turn started:
 
 | Turn | Short answer |

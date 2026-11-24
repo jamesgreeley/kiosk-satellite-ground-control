@@ -2,6 +2,11 @@
 
 All notable changes to Kiosk Satellite Ground Control are documented here.
 
+## Unreleased
+
+### Changed
+- **Limits of a short answer in the docs.** The Voice Match page now says what a short answer can't do: it is accepted without a name, a short reply from someone the kiosk doesn't answer can get through now and then, the right person's reply can still be dropped with a TV on and less than 0.2 seconds of speech is never accepted. It also suggests a reply of two seconds or more for a question where it matters who answers. See [Limits of a Short Answer](docs/voice-match.md#limits-of-a-short-answer).
+
 ## v2026.11.13 - 2026-11-23
 
 ### Added
