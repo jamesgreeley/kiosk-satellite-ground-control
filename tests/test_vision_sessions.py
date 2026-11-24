@@ -50,21 +50,22 @@ def test_steps_frames_and_the_summary():
     t.look(4, ("face", "hands"), [FACE], hand(3), MS, b"3", now=1.5)
     t.outcome({"what": "gesture", "fingers": 3, "action": "Refresh the dashboard"}, now=1.6)
     t.look(5, ("face", "hands"), [FACE], hand(2), MS, b"4", now=2.0)
-    t.look(6, ("face", "hands"), [], None, MS, b"5", now=2.5)
+    t.look(6, ("face", "hands"), [FACE], hand(2), MS, b"5", now=2.2)
+    t.look(7, ("face", "hands"), [], None, MS, b"6", now=2.5)
     t.close("closed", 3.0)
     record, frames = saved[0]
     assert [e["type"] for e in record["events"]] == ["face", "facing", "hand", "fingers", "gesture",
                                                       "fingers", "end"]
     assert [f["reason"] for f in record["frames"]] == ["first", "facing", "reading", "gesture", "reading", "last"]
-    assert [jpeg for _, jpeg in frames] == [b"0", b"1", b"2", b"3", b"4", b"5"]
+    assert [jpeg for _, jpeg in frames] == [b"0", b"1", b"2", b"3", b"4", b"6"]
     assert record["summary"] == ["3 fingers → Refresh the dashboard"]
-    assert record["stats"]["readings"] == {"3": 2, "2": 1}
+    assert record["stats"]["readings"] == {"3": 2, "2": 2}
 
 
 def test_frames_stay_under_the_cap_and_off_when_not_kept():
     t, saved = tracker()
     for i in range(30):
-        t.look(i, ("hands",), None, hand(i % 6), MS, b"x", now=i * 0.5)
+        t.look(i, ("hands",), None, hand((i // 2) % 6), MS, b"x", now=i * 0.5)
     t.close("closed", 20.0)
     assert len(saved[0][1]) == MAX_FRAMES
     t, saved = tracker(keep=False)
@@ -131,3 +132,16 @@ def test_a_kiosks_vision_match_features_are_kept():
     assert out == {"vision_match": True, "face_detection": True, "hand_gestures": False,
                    "dismiss_on_face": True, "postpone_on_face": False, "finger_gestures": 3}
     assert "finger_gestures" not in _features({"finger_gestures": True})
+
+
+def test_a_reading_on_one_look_is_a_hand_moving():
+    # A closing fist blurs into "5 fingers" for one look, then reads as a fist.
+    t, saved = tracker()
+    t.look(1, ("hands",), None, hand(5), MS, b"blur", now=0.0)
+    for i in range(4):
+        t.look(2 + i, ("hands",), None, hand(0), MS, b"fist", now=0.3 * (i + 1))
+    t.close("closed", 2.0)
+    record, frames = saved[0]
+    readings = [(e["t"], e["fingers"]) for e in record["events"] if e["type"] == "fingers"]
+    assert readings == [(0.3, 0)]
+    assert [f["reason"] for f in record["frames"]] == ["first", "reading", "last"]

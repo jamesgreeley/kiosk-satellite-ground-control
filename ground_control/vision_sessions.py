@@ -70,6 +70,8 @@ class VisionSession:
     _face_seen: bool = False
     _hand_seen: bool = False
     _reading: int | None = None
+    _pending: tuple[int, str, float, _Frame | None] | None = None
+    """A new finger reading seen on one hand look: (fingers, gesture, t, its frame)."""
 
     def t(self, now: float) -> float:
         return round(now - self.started, 2)
@@ -149,10 +151,11 @@ class VisionTracker:
         s.looks.append(entry)
         if found:
             s.last_found = now
-        reasons = self._steps(s, t, face, hand_out)
         boxes = {"faces": [[*f["box"], bool(f.get("frontal"))] for f in faces or []],
                  "hand": [*hand["box"], hand.get("fingers")] if hand and hand.get("box") else None}
-        self._frame(s, len(s.looks) - 1, t, jpeg, rotation, boxes, reasons)
+        frame = _Frame(len(s.looks) - 1, "look", t, jpeg, rotation, boxes) if self._keep_frames() else None
+        reasons = self._steps(s, t, face, hand_out, "h" in entry["want"], frame)
+        self._frame(s, frame, reasons)
         self._publish({"type": "vision_look", "device_id": self.device_id, "session": s.id, "t": t,
                        "want": entry["want"], "face": face, "hand": hand_out, "ms": entry["ms"]})
 
@@ -164,9 +167,16 @@ class VisionTracker:
         self._publish({"type": "vision_start", "device_id": self.device_id, "session": s.id})
         return s
 
-    def _steps(self, s: VisionSession, t: float, face: dict | None, hand: dict | None) -> list[str]:
+    def _steps(self, s: VisionSession, t: float, face: dict | None, hand: dict | None, hand_look: bool,
+               frame: _Frame | None) -> list[str]:
         """The moments worth a step, and a frame: the first face, the first
-        face looking at the kiosk, the first hand and each new finger reading."""
+        face looking at the kiosk, the first hand and each new finger reading.
+
+        A new reading counts once the next hand look reads the same, and its
+        step and frame are the first of the two. A hand moving between two
+        shapes is blurred and reads as anything for one look (a closing fist
+        as 5 fingers), and the kiosk never acts on one look either: its
+        gesture needs the count held."""
         reasons = []
         if face and not s._face_seen:
             s._face_seen = True
@@ -177,20 +187,31 @@ class VisionTracker:
             reasons.append("facing")
         if hand and not s._hand_seen:
             s._hand_seen = True
-            s.events.append({"type": "hand", "t": t, "gesture": hand["gesture"], "fingers": hand["fingers"]})
+            s.events.append({"type": "hand", "t": t})
+        if not hand_look:
+            return reasons
         fingers = hand["fingers"] if hand else None
-        if fingers is not None and fingers != s._reading:
-            s.events.append({"type": "fingers", "t": t, "fingers": fingers, "gesture": hand["gesture"]})
-            reasons.append("reading")
-        if fingers is not None:
-            s._reading = fingers
+        pending = s._pending
+        if fingers is None or fingers == s._reading:
+            s._pending = None
+        elif pending is not None and pending[0] == fingers:
+            n, gesture, first_t, first_frame = pending
+            s.events.append({"type": "fingers", "t": first_t, "fingers": n, "gesture": gesture})
+            s._reading, s._pending = n, None
+            if first_frame is not None and len(s.frames) < MAX_FRAMES - 1 \
+                    and all(f.n != first_frame.n for f in s.frames):
+                first_frame.reason = "reading"
+                s.frames.append(first_frame)
+        else:
+            s._pending = (fingers, hand["gesture"], t, frame)
         return reasons
 
-    def _frame(self, s: VisionSession, n: int, t: float, jpeg: bytes, rotation: int, boxes: dict[str, Any],
-               reasons: list[str]) -> None:
-        if not self._keep_frames():
+    def _frame(self, s: VisionSession, frame: _Frame | None, reasons: list[str]) -> None:
+        if frame is None:
             return
-        frame = _Frame(n, reasons[0] if reasons else "look", t, jpeg, rotation, boxes)
+        n = frame.n
+        if reasons:
+            frame.reason = reasons[0]
         if n == 0:
             frame.reason = "first"
             s.frames.append(frame)
@@ -257,7 +278,7 @@ class VisionTracker:
         if s.last is not None and all(f.n != s.last.n for f in frames):
             s.last.reason = "last"
             frames.append(s.last)
-        record = self._record(s, end_t, frames)
+        record = self._record(s, end_t, sorted(frames, key=lambda f: f.n))
         self._save(record, [(f.n, f.jpeg) for f in frames])
         self._publish({"type": "vision_end", "device_id": self.device_id, "session": s.id, "reason": reason})
         return s.id

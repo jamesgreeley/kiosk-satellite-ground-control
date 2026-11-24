@@ -69,11 +69,16 @@ function timeline(record, total) {
   const gc = (lk) => Object.values(lk.ms || {}).reduce((a, b) => a + b, 0);
   const top = Math.max(1, ...looks.map((lk) => Math.max(gc(lk), lk.rtt || 0)));
   const outcomes = (record.events || []).filter((e) => OUTCOMES.includes(e.type));
+  // A reading the hand look before or after it agrees with. One on its own is
+  // most likely a hand moving between two shapes.
+  const handLooks = looks.filter((lk) => lk.want.includes("h"));
+  const held = new Set(handLooks.filter((lk, i) => lk.hand && [handLooks[i - 1], handLooks[i + 1]]
+    .some((o) => o?.hand && o.hand.fingers === lk.hand.fingers)));
   return h("div", { class: "card tl" },
     h("div", { class: "legend" },
       h("span", {}, h("i", { class: "swb", style: { background: "var(--primary)" } }), "Face looking at the kiosk"),
       h("span", {}, h("i", { class: "swb", style: { background: "var(--other)" } }), "Face turned away"),
-      h("span", {}, h("i", { class: "swb", style: { background: "var(--warn)" } }), "Hand, with its finger count"),
+      h("span", {}, h("i", { class: "swb", style: { background: "var(--warn)" } }), "Hand and finger count, faded on a single look"),
       h("span", {}, h("i", { class: "swb", style: { background: "var(--primary)", opacity: 0.5 } }), "Ground Control's time, and the round trip outlined")),
     h("div", { class: "vlanes" },
       outcomes.map((e) => h("div", { class: "mk vguide", style: { left: `calc(84px + (100% - 84px) * ${e.t / total})` } })),
@@ -82,7 +87,8 @@ function timeline(record, total) {
         ? { cls: lk.face.frontal ? "on" : "away", title: `${lk.t} s: ${lk.face.count} face${lk.face.count === 1 ? "" : "s"}, ${lk.face.frontal ? "looking at the kiosk" : "turned away"}` }
         : lk.want.includes("f") ? { cls: "none", title: `${lk.t} s: no face` } : null)),
       lane("Hand", looks, total, (lk) => (lk.hand
-        ? { cls: "hand", text: lk.hand.fingers ?? "", title: `${lk.t} s: ${lk.hand.gesture}${lk.hand.fingers != null ? `, ${fingers(lk.hand.fingers)}` : ""}` }
+        ? { cls: `hand ${held.has(lk) ? "" : "brief"}`, text: lk.hand.fingers ?? "",
+          title: `${lk.t} s: ${lk.hand.gesture}${lk.hand.fingers != null ? `, ${fingers(lk.hand.fingers)}` : ""}${held.has(lk) ? "" : ", on this look only"}` }
         : lk.want.includes("h") ? { cls: "none", title: `${lk.t} s: no hand` } : null)),
       lane("Time", looks, total, (lk) => ({
         cls: "lat", title: `${lk.t} s: Ground Control ${ms(gc(lk))}${lk.rtt ? `, round trip ${ms(lk.rtt)}` : ""}`,
@@ -94,7 +100,8 @@ function timeline(record, total) {
 function steps(record) {
   const out = [];
   const events = record.events || [];
-  const handAt = new Set(events.filter((e) => e.type === "hand").map((e) => e.t));
+  // Sessions saved before readings needed two looks carry the reading on the hand step.
+  const handAt = new Set(events.filter((e) => e.type === "hand" && e.gesture).map((e) => e.t));
   for (const e of events) {
     // A first face already looking at the kiosk, or a first hand already
     // with a count, is one step.
@@ -102,8 +109,10 @@ function steps(record) {
     if (e.type === "fingers" && handAt.has(e.t)) continue;
     if (e.type === "face") out.push(["Face seen", e.frontal ? "Looking at the kiosk." : "Turned away from the kiosk.", e.t]);
     if (e.type === "facing") out.push(["Looking at the kiosk", `The face took ${Math.round(e.width * 100)}% of the frame's width.`, e.t]);
-    if (e.type === "hand") out.push(["Hand seen", `Read as ${e.gesture}${e.fingers != null ? `, ${fingers(e.fingers)}` : ""}.`, e.t]);
-    if (e.type === "fingers") out.push([`${fingers(e.fingers)} read`, `Read as ${e.gesture}.`, e.t]);
+    if (e.type === "hand") {
+      out.push(["Hand seen", e.gesture ? `Read as ${e.gesture}${e.fingers != null ? `, ${fingers(e.fingers)}` : ""}.` : "A hand came up in front of the kiosk.", e.t]);
+    }
+    if (e.type === "fingers") out.push([`${fingers(e.fingers)} read`, `Read as ${e.gesture} on two looks in a row.`, e.t]);
     if (e.type === "screensaver_dismissed") out.push(["Screensaver dismissed", "The kiosk woke the screen for the face looking at it.", e.t]);
     if (e.type === "screensaver_postponed") out.push(["Screensaver postponed", "Someone was still in front of the kiosk.", e.t]);
     if (e.type === "gesture") out.push([`${fingers(e.fingers ?? 0)} gesture`, e.action ? `${e.action}.` : "The kiosk ran the gesture's action.", e.t]);
