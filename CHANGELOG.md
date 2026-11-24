@@ -2,7 +2,7 @@
 
 All notable changes to Kiosk Satellite Ground Control are documented here.
 
-## Unreleased
+## v2026.11.13 - 2026-11-23
 
 ### Added
 - **Take short answers.** A new setting under **Settings > Voice Match > Recognition**, on by default. Off, a short reply to a question from Home Assistant is dropped on a kiosk that answers chosen people, as before this version.
