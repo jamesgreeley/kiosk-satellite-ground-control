@@ -190,13 +190,10 @@ This table shows how much GPU memory the CUDA image uses with every vision model
 
 | | amd64 image (CUDA 12) | arm64 image (CUDA 13) |
 |---|---|---|
-| Kept, Vision Match only | 0.7 GB | 0.7 GB |
-| Kept, with Voice Match | 1.1 GB | 1.2 GB |
-| Most during a command, with Voice Match | 1.2 GB | 1.3 GB |
-| Kept, with Voice Match and Isolation | 1.3 GB | 1.4 GB |
-| Most during a command, with Voice Match and Isolation | 2.8 GB | 2.9 GB |
+| Kept | 0.7 GB | 0.7 GB |
+| Most during a look | 0.7 GB | 0.7 GB |
 
-The vision models load when the first kiosk asks for a look. Ground Control then keeps their memory for as long as it runs. A look adds nothing to it. Voice Match uses the Accurate speaker model in these numbers.
+The vision models load when the first kiosk asks for a look. Ground Control then keeps their memory for as long as it runs. A look adds nothing to it. Vision Match shares the CUDA runtime with Voice Match, so together they need about 0.5 GB more than Voice Match's numbers above.
 
 #### How It Is Measured
 
