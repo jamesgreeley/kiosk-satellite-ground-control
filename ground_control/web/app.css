@@ -88,7 +88,7 @@ main > .ptitle + .sec, .phead + .sec, main > .chips + .sec { margin-top: 8px; }
 /* Cards and rows */
 .card { background: var(--surface); border-radius: 24px; overflow: hidden; padding: 8px 0; }
 .row { display: flex; align-items: center; gap: 12px; padding: 13px 20px; position: relative; min-height: 56px; text-decoration: none; color: inherit; flex-wrap: wrap; }
-.row + .row::before, .row + .opt::before, .opt + .row::before, .opt + .opt::before { content: ""; position: absolute; top: 0; left: 20px; right: 20px; height: 1px; background: var(--border); }
+.row + .row::before { content: ""; position: absolute; top: 0; left: 20px; right: 20px; height: 1px; background: var(--border); }
 a.row:hover, button.row:hover { background: var(--s2); }
 button.row { width: 100%; border: 0; background: transparent; font: inherit; text-align: left; cursor: pointer; }
 .row.add .rt, .row.add .ico { color: var(--primary); }
@@ -240,10 +240,6 @@ select.fld { appearance: none; -webkit-appearance: none; padding: 0 44px 0 14px;
 .btn.out.danger { border-color: var(--error); }
 
 /* Radio options */
-.opt { display: flex; align-items: flex-start; gap: 14px; padding: 14px 20px; position: relative; cursor: pointer; width: 100%; border: 0; background: transparent; color: inherit; text-align: left; font-size: inherit; }
-.radio { width: 20px; height: 20px; flex: none; border-radius: 50%; border: 2px solid var(--outline); margin-top: 2px; position: relative; }
-.opt[aria-checked="true"] .radio { border-color: var(--primary); }
-.opt[aria-checked="true"] .radio::after { content: ""; position: absolute; inset: 3px; border-radius: 50%; background: var(--primary); }
 .track { height: 4px; border-radius: 2px; background: var(--s2); overflow: hidden; margin: 10px 20px 16px; }
 .track span { display: block; height: 100%; background: var(--fill); border-radius: 2px; }
 

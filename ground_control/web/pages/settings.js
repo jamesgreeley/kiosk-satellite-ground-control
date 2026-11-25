@@ -42,6 +42,30 @@ function row(title, desc, control, id) {
 
 const hint = (text) => h("div", { class: "hint" }, icon("info", 18), text);
 
+/** A Light or Accurate choice, the same for the speaker model and each vision
+ * model. ``offered`` lists the keys this install can use. */
+function modelSeg(name, current, offered, onPick) {
+  const seg = h("div", { class: "seg", role: "radiogroup", "aria-label": name });
+  for (const [key, label] of [["light", "Light"], ["accurate", "Accurate"]]) {
+    const on = current === key;
+    const b = h("button", { class: on ? "on" : "", role: "radio", "aria-checked": String(on), disabled: !offered.includes(key) }, label);
+    b.addEventListener("click", async () => {
+      if (on || !offered.includes(key)) return;
+      b.setAttribute("aria-busy", "true");
+      try {
+        await onPick(key, label);
+      } catch (err) {
+        toast(err.message);
+        b.removeAttribute("aria-busy");
+      }
+    });
+    seg.append(b);
+  }
+  return seg;
+}
+
+const defaultText = (key) => ` The default here is ${key === "accurate" ? "Accurate" : "Light"}.`;
+
 const size = (bytes) => (bytes >= 1e9 ? `${(bytes / 1e9).toFixed(1)} GB` : bytes >= 1e6 ? `${(bytes / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1e3))} KB`);
 
 function areas(current) {
@@ -73,32 +97,24 @@ export async function render({ area } = {}) {
     const progress = h("div", { class: "row", role: "status", style: { display: s.rebuilding ? "" : "none" } },
       h("div", { class: "grow" }, h("div", { class: "rt" }, "Updating voiceprints"),
         h("div", { class: "rd" }, "Kiosks keep using the current model until this finishes.")));
-    const option = (key, label, desc) => {
-      const b = h("button", { class: "opt", role: "radio", "aria-checked": String(s.model === key) },
-        h("span", { class: "radio" }),
-        h("span", { class: "grow" },
-          h("span", { class: "rt", style: { display: "block" } }, label, key === "accurate" ? h("span", { class: "chip c-info", style: { marginLeft: "8px", height: "22px" } }, "Recommended") : null),
-          h("span", { class: "rd", style: { display: "block" } }, desc)));
-      b.addEventListener("click", async () => {
-        if (s.model === key) return;
-        const r = await api("api/settings", { method: "PATCH", json: { model: key } });
-        progress.style.display = r.rebuilding ? "" : "none";
-        document.querySelectorAll(".opt").forEach((o) => o.setAttribute("aria-checked", "false"));
-        b.setAttribute("aria-checked", "true");
-        clearInterval(poll);
-        poll = setInterval(async () => {
-          const now = await api("api/settings");
-          if (!now.rebuilding) {
-            clearInterval(poll);
-            s.model = now.model;
-            progress.style.display = "none";
-            toast(`Now using ${now.models[now.model]}`);
-            location.reload();
-          }
-        }, 1000);
-      });
-      return b;
-    };
+    const speaker = modelSeg("Speaker model", s.model, Object.keys(s.models), async (key, label) => {
+      const r = await api("api/settings", { method: "PATCH", json: { model: key } });
+      if (!r.rebuilding) {
+        toast(`Now using ${label}`);
+        location.reload();
+        return;
+      }
+      progress.style.display = "";
+      clearInterval(poll);
+      poll = setInterval(async () => {
+        const now = await api("api/settings");
+        if (!now.rebuilding) {
+          clearInterval(poll);
+          toast(`Now using ${now.models[now.model]}`);
+          location.reload();
+        }
+      }, 1000);
+    });
 
     const usable = s.isolator_available && s.model === s.isolator_model;
     const where = h("span", {});
@@ -126,11 +142,8 @@ export async function render({ area } = {}) {
     return [
       section("Recognition", "Settings for matching voices to the voiceprints of the people enrolled."),
       h("div", { class: "card" },
-        h("div", { role: "radiogroup", "aria-label": "Speaker model" },
-          row("Speaker model", "Voiceprints are rebuilt from the enrollment audio when this changes. Nobody has to record again.", null),
-          option("accurate", "Accurate", "Fewest mix-ups between people and with other voices. Best on an x86 CPU or a GPU."),
-          option("light", "Light", "Uses about a third of the CPU and suits a Raspberry Pi or Home Assistant Green. When another voice cuts in, the turn ends about a second later."),
-          progress),
+        row("Speaker model", `Accurate makes the fewest mix-ups between people and with other voices. Light uses about a third of the CPU and suits a Raspberry Pi or Home Assistant Green. With Light, the turn ends about a second later when another voice cuts in. Voiceprints are rebuilt from the enrollment audio when this changes, so nobody has to record again.${defaultText(s.default_model)}`, speaker),
+        progress,
         row("Threshold", `How close a voice has to be to count as someone enrolled. Higher means fewer mix-ups and more unknown voices. Each model has its own threshold. The default is ${s.default_threshold}.`,
           number("thr", s.threshold, "threshold"), "thr"),
         row("Learn from commands", "Adds confident commands to the speaker's voiceprint to keep up with colds and room changes.",
@@ -161,33 +174,17 @@ export async function render({ area } = {}) {
 
   const visionMatch = () => {
     const names = { face: "Face Detection", hands: "Hand Gestures", recognition: "Face Recognition" };
-    const pick = (feature) => {
-      const offered = s.vision_choices[feature] || {};
-      const seg = h("div", { class: "seg", role: "radiogroup", "aria-label": `${names[feature]} model` });
-      for (const [key, label] of [["light", "Light"], ["accurate", "Accurate"]]) {
-        const on = s.vision_models[feature] === key;
-        const b = h("button", { class: on ? "on" : "", role: "radio", "aria-checked": String(on), disabled: !(key in offered) }, label);
-        b.addEventListener("click", async () => {
-          if (on || !(key in offered)) return;
-          b.setAttribute("aria-busy", "true");
-          try {
-            await api("api/settings", { method: "PATCH", json: { vision_models: { [feature]: key } } });
-            toast(`${names[feature]} now uses ${label}`);
-            location.reload();
-          } catch (err) {
-            toast(err.message);
-            b.removeAttribute("aria-busy");
-          }
-        });
-        seg.append(b);
-      }
-      return seg;
-    };
+    const pick = (feature) => modelSeg(`${names[feature]} model`, s.vision_models[feature],
+      Object.keys(s.vision_choices[feature] || {}), async (key, label) => {
+        await api("api/settings", { method: "PATCH", json: { vision_models: { [feature]: key } } });
+        toast(`${names[feature]} now uses ${label}`);
+        location.reload();
+      });
     const measured = (feature, what) => {
       const ms = s.vision_ms && s.vision_ms[feature];
       return ms == null ? "" : ` On this machine it takes ${ms < 10 ? ms : Math.round(ms)} ms ${what}.`;
     };
-    const byDefault = (feature) => ` The default here is ${s.vision_defaults[feature] === "accurate" ? "Accurate" : "Light"}.`;
+    const byDefault = (feature) => defaultText(s.vision_defaults[feature]);
     const where = !s.vision_loaded ? h("span", { class: "val" }, "Loads with the first look")
       : chip(s.vision_on_gpu ? "NVIDIA GPU (CUDA)" : "CPU", s.vision_on_gpu ? "c-ok" : "");
     const looks = s.vision_max_looks

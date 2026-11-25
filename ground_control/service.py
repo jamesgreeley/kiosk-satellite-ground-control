@@ -119,7 +119,7 @@ class GroundControl:
 
     def settings(self) -> dict[str, object]:
         m, base = self.model, SPEAKER_MODELS[self.status.model]
-        return {"model": self.status.model, "rebuilding": self.status.rebuilding,
+        return {"model": self.status.model, "default_model": self.cfg.model, "rebuilding": self.status.rebuilding,
                 "models": {k: v.label for k, v in SPEAKER_MODELS.items()},
                 "threshold": m.threshold, "other_threshold": m.other_threshold,
                 "default_threshold": base.threshold, "default_other_threshold": base.other_threshold,
