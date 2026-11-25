@@ -22,7 +22,7 @@ Turn the features on for each kiosk in Kiosk Satellite under **Settings > Ground
 | Confirm voices with faces | Accepts a voice under the **Threshold** as the person recognized at the kiosk. Needs Voice Match. See [Confirmed by the Face](voice-match.md#confirmed-by-the-face). |
 | Enable Hand Gestures | Runs Hand Gestures on Ground Control. With it off, Hand Gestures runs on the device. |
 
-**Dismiss on face** and **Postpone on face** under **Settings > Screensaver > Face Detection** work as they do without Ground Control. So do **Show fingers** gestures under **Settings > Gestures**. The kiosk's page on the [Kiosks](kiosks.md) page shows which features each kiosk has on. See [Vision Match](https://github.com/jxlarrea/kiosk-satellite/blob/main/docs/ground-control.md#vision-match) in the Kiosk Satellite docs for every kiosk setting.
+**Dismiss on face** and **Postpone on face** under **Settings > Screensaver > Face Detection** work as they do without Ground Control. So do **Show fingers** gestures under **Settings > Gestures**. The kiosk's page on the [Kiosks](kiosks.md) page shows which features each kiosk has on. See [Vision Match](https://github.com/jxlarrea/kiosk-satellite/blob/main/docs/vision-match.md) in the Kiosk Satellite docs for every kiosk setting.
 
 ## Looks
 
@@ -70,7 +70,7 @@ Ground Control keeps only small pictures of each enrolled face, lined up and 112
 
 - **Sensors:** the kiosk's **Face** sensor shows the person at the kiosk. Its **People in view** sensor lists everyone recognized with the person at the kiosk first.
 - **Face event:** the kiosk fires `esphome.kiosk_satellite_face` when someone recognized arrives at the kiosk and when they leave. See [Face](https://github.com/jxlarrea/kiosk-satellite/blob/main/docs/events.md#face) in the Kiosk Satellite docs.
-- **Recognition cards:** cards on the kiosk screen show who was recognized and what happened because of it, like the kiosk PIN skipped or Lockdown Mode turned off. See [Recognition Cards](https://github.com/jxlarrea/kiosk-satellite/blob/main/docs/ground-control.md#recognition-cards).
+- **Recognition cards:** cards on the kiosk screen show who was recognized and what happened because of it, like the kiosk PIN skipped or Lockdown Mode turned off. See [Recognition Cards](https://github.com/jxlarrea/kiosk-satellite/blob/main/docs/vision-match.md#recognition-cards).
 - **Settings that act on faces:** Kiosk Satellite can let only chosen people dismiss the screensaver (**Detect faces**), skip the kiosk PIN (**Skip the PIN for**) or turn Lockdown Mode off (**Disable Lockdown Mode for**).
 - **Voices:** with **Confirm voices with faces** on, a voice close to the voiceprint of the person at the kiosk is accepted for them. See [Confirmed by the Face](voice-match.md#confirmed-by-the-face).
 
