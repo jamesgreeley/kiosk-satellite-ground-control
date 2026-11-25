@@ -273,9 +273,13 @@ GONE_S = 3.0
 RECHECK_S = 2.0
 """Once someone is named, their face is checked again this often, not on every look."""
 UNKNOWN_RECHECK_S = 1.0
-"""A face nobody enrolled matches, after the two looks a name needs, is
-checked again this often. A guest standing at the kiosk then costs one face
+"""A face nobody enrolled matches, once it has been in view for ``NEW_FACE_S``,
+is checked again this often. A guest standing at the kiosk then costs one face
 recognized a second instead of one on every look."""
+NEW_FACE_S = 2.0
+"""A face not named yet is checked on every look for this long after its first
+one. Someone walking up to the kiosk is often named by their third or fourth
+look, when the first ones caught them from too far or still turning."""
 MAX_FACES = 3
 """Faces looking at the kiosk recognized in one look, the largest first."""
 SWITCH_AFTER = 2
@@ -298,6 +302,7 @@ class _Track:
     id: int
     box: list[float]
     last_seen: float
+    first_seen: float = 0.0
     recent: list[tuple[float, np.ndarray]] = field(default_factory=list)
     match: Match | None = None
     last_check: float = float("-inf")
@@ -344,7 +349,7 @@ class Recognizer:
             return True
         if m.person_id:
             return now - t.last_check >= RECHECK_S
-        return m.looks < 2 or now - t.last_check >= UNKNOWN_RECHECK_S
+        return m.looks < 2 or now - t.first_seen <= NEW_FACE_S or now - t.last_check >= UNKNOWN_RECHECK_S
 
     @property
     def people(self) -> list[Match]:
@@ -400,7 +405,7 @@ class Recognizer:
                 best, dist = t, d
         if best is not None or not create:
             return best
-        track = _Track(self._next_id, box, now)
+        track = _Track(self._next_id, box, now, first_seen=now)
         self._next_id += 1
         self._tracks.append(track)
         return track

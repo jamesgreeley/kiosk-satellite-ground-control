@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 
 from ground_control.faces import (
-    GONE_S, MARGIN, RECHECK_S, SURE_ABOVE, UNKNOWN_RECHECK_S, TEMPLATE, FaceEnrollment, Faces, Recognizer, STEPS, align, similarity,
+    GONE_S, MARGIN, NEW_FACE_S, RECHECK_S, SURE_ABOVE, UNKNOWN_RECHECK_S, TEMPLATE, FaceEnrollment, Faces, Recognizer, STEPS, align, similarity,
 )
 from ground_control.vision import FACE_3D
 
@@ -89,16 +89,31 @@ def test_a_named_face_is_rechecked_and_forgotten_when_gone():
     assert r.tick(1.0 + GONE_S + 0.1) and r.current is None and r.people == []
 
 
-def test_an_unknown_face_is_rechecked_once_a_second_after_two_looks():
+def test_an_unknown_face_is_checked_on_every_look_at_first_and_then_once_a_second():
     ids, prints = ["ana"], unit(0)[None]
     r = Recognizer(threshold=0.4)
     r.add([(BOX, unit(3))], ids, prints, 0.0)
-    # The second look a name needs comes right away.
+    # The second look a name needs comes right away, and so do the ones
+    # after it while the face is new.
     assert r.wants(0.1)
     r.add([(BOX, unit(3))], ids, prints, 0.2)
     assert not r.people
-    assert not r.wants(0.2 + UNKNOWN_RECHECK_S / 2)
-    assert r.wants(0.2 + UNKNOWN_RECHECK_S + 0.01)
+    assert r.wants(0.4) and r.wants(NEW_FACE_S)
+    last = NEW_FACE_S + 0.1
+    r.add([(BOX, unit(3))], ids, prints, last)
+    assert not r.wants(last + UNKNOWN_RECHECK_S / 2)
+    assert r.wants(last + UNKNOWN_RECHECK_S + 0.01)
+
+
+def test_someone_walking_up_is_named_by_a_later_look_without_waiting_a_second():
+    ids, prints = ["ana"], unit(0)[None]
+    r = Recognizer(threshold=0.4)
+    # Two looks from too far score under the Threshold, the next ones don't.
+    r.add([(BOX, _toward(0, 0.2))], ids, prints, 0.0)
+    r.add([(BOX, _toward(0, 0.3))], ids, prints, 0.2)
+    assert r.current is None or r.current.person_id is None
+    assert r.wants(0.4)
+    assert r.add([(BOX, _toward(0, 0.7))], ids, prints, 0.4).person_id == "ana"
 
 
 def _toward(i: int, score: float) -> np.ndarray:

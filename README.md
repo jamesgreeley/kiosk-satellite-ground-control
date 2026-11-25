@@ -207,7 +207,7 @@ The vision models load when the first kiosk asks for a look. Each model hands th
 Each test sends 64 frames from an Echo Show 5's camera through Ground Control's own code just like a kiosk does. They are 640x480 JPEGs, the size Kiosk Satellite sends, and each one has a face looking at the camera and a raised hand. Each row is timed in a run of its own after half a minute of looks, so the machine is at the speed it keeps up.
 
 - **Face Detection** is a look for faces alone. **Hand Gestures** is a look for hands alone. Both include reading the JPEG.
-- **Face Recognition** is the time to recognize one face once it is found. Once someone is recognized, their face is checked again only every 2 seconds. A face nobody enrolled is checked again once a second.
+- **Face Recognition** is the time to recognize one face once it is found. Once someone is recognized, their face is checked again only every 2 seconds. A face not named yet is checked on every look for its first 2 seconds and once a second after that.
 - **All features** is one look with Face Detection, Face Recognition and Hand Gestures. That is the longest a look takes. Hand Gestures runs at the same time as the other two in that look, so it takes less than the three rows added up.
 - **Looks a second** is how many of those looks Ground Control keeps up with. A kiosk sends one frame at a time and only after something moves, so several kiosks can share them. Since Face Recognition runs on at most one look a second, the looks between get closer to the time of Face Detection and Hand Gestures alone.
 - On a Pi 4, Face Detection dismisses the screensaver about a second after a face looks at the kiosk. Hand Gestures feel slow there because a gesture needs more than one look.
@@ -216,7 +216,7 @@ Each feature has its own model under **Settings > Vision Match**:
 
 - **Face Detection:** both models found every face looking at the kiosk on the test set and let the same turned heads through. Accurate takes about 3 times as long, so Light is the default on a CPU.
 - **Hand Gestures:** Accurate gets the finger count right more often at 3 m and in dim light, 96% of frames compared to 68%. It runs on every look, so Light is the default on a CPU.
-- **Face Recognition:** Accurate recognizes small faces in dim light more often, 93% compared to 71%. It runs at most once a second, so Accurate is the default on x86 CPUs and Apple M-series chips. A Raspberry Pi and other ARM CPUs use Light.
+- **Face Recognition:** Accurate recognizes small faces in dim light more often, 93% compared to 71%. After a face's first 2 seconds in view it runs at most once a second, so Accurate is the default on x86 CPUs and Apple M-series chips. A Raspberry Pi and other ARM CPUs use Light.
 
 On an NVIDIA GPU every feature uses Accurate. Changing the Face Recognition model doesn't require enrolling any faces again.
 

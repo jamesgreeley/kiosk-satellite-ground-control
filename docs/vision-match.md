@@ -31,7 +31,7 @@ A look is one camera frame and what Ground Control finds in it:
 
 - **A frame is sent only after something moves.** The kiosk waits for each frame's result before it sends the next one.
 - **Each frame is a 640x480 JPEG.** Ground Control reads it and runs the models each feature needs.
-- **Looks are paced to the machine.** When the models load, Ground Control measures how many face looks and hand looks a second it keeps up with for one kiosk and sends that rate to each kiosk. Kiosks look at most 2 times a second for faces and 4 times a second for hands.
+- **Looks are paced to the machine.** When the models load, Ground Control measures how many face looks and hand looks a second it keeps up with for one kiosk and sends that rate to each kiosk. Kiosks look at most 2 times a second for faces and 4 times a second for hands. With Face Recognition, a kiosk looks up to 5 times a second for the first 2 seconds a face is in view without a name.
 - **A look for faces and hands runs both at the same time.** It takes about as long as the slower of the two and not their sum.
 
 With Face Recognition on, the kiosk also looks for faces whenever the screen is on. It still looks only after something moves.
@@ -61,7 +61,7 @@ On kiosk frames from 1 to 3 m, the finger count was right in 91% of frames with 
 Face Recognition compares each face looking at the kiosk with the faces enrolled on the People page. Enroll each person's face once with a guided capture of about half a minute through a kiosk's camera. See [Face](people.md#face) for the capture.
 
 - **A face is named after two looks in a row above the Threshold** or after one very close match. The best match also has to be clearly ahead of the next person.
-- **A recognized face is checked again every 2 seconds.** A face nobody enrolled is checked again once a second, so a guest standing at the kiosk costs little.
+- **A recognized face is checked again every 2 seconds.** A face not named yet is checked on every look for its first 2 seconds and once a second after that, so a guest standing at the kiosk costs little.
 - **Up to three faces are recognized at once.** The person at the kiosk is the one with the highest score. Someone else becomes the person at the kiosk only after scoring higher two checks in a row or when the person at the kiosk leaves. This keeps it from flipping between two people side by side.
 - **Nobody counts as in front of the kiosk** once no face has looked at it for 3 seconds.
 
@@ -97,7 +97,7 @@ Both hand models are trained on HaGRIDv2 gestures. What each choice changes:
 
 - **Face Detection:** both models found every face looking at the kiosk on the test set and let the same turned heads through. Accurate takes about 3 times as long, so Light is the default on a CPU.
 - **Hand Gestures:** Accurate gets the finger count right more often at 3 m and in dim light, 96% of frames compared to 68%. The hand model runs on every hand look and Accurate is slow on a CPU: 1.8 s a look on an Intel N100, 352 ms on an i9-13900H and 256 ms on a MacBook Pro M5. Light is the default on a CPU.
-- **Face Recognition:** Accurate recognizes small faces in dim light more often, 93% compared to 71%. A face is checked at most once a second, so Accurate is the default on x86 CPUs and Apple M-series chips. It takes 173 ms a face on an Intel N100. A Raspberry Pi and other ARM CPUs use Light.
+- **Face Recognition:** Accurate recognizes small faces in dim light more often, 93% compared to 71%. After its first 2 seconds in view a face is checked at most once a second, so Accurate is the default on x86 CPUs and Apple M-series chips. It takes 173 ms a face on an Intel N100. A Raspberry Pi and other ARM CPUs use Light.
 
 Each model's row shows its time on this machine once the models load. Changing the Face Recognition model rebuilds everyone's face from the kept pictures, so nobody has to enroll again. Each Face Recognition model has its own **Threshold**.
 
