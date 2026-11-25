@@ -21,6 +21,7 @@ Turn the features on for each kiosk in Kiosk Satellite under **Settings > Ground
 | Enable Face Recognition | Fills the kiosk's **Face** and **People in view** sensors in Home Assistant. Needs Face Detection on Ground Control. |
 | Confirm voices with faces | Accepts a voice under the **Threshold** as the person recognized at the kiosk. Needs Voice Match. See [Confirmed by the Face](voice-match.md#confirmed-by-the-face). |
 | Enable Hand Gestures | Runs Hand Gestures on Ground Control. With it off, Hand Gestures runs on the device. |
+| Presence sensors | Adds the **Presence** and **Looking at the kiosk** binary sensors to Home Assistant. Off by default. See [Looks](#looks). |
 
 **Dismiss on face** and **Postpone on face** under **Settings > Screensaver > Face Detection** work as they do without Ground Control. So do **Show fingers** gestures under **Settings > Gestures**. The kiosk's page on the [Kiosks](kiosks.md) page shows which features each kiosk has on. See [Vision Match](https://github.com/jxlarrea/kiosk-satellite/blob/main/docs/vision-match.md) in the Kiosk Satellite docs for every kiosk setting.
 
@@ -36,6 +37,8 @@ A look is one camera frame and what Ground Control finds in it:
 With Face Recognition on, the kiosk also looks for faces whenever the screen is on. It still looks only after something moves.
 
 When Ground Control doesn't answer, the kiosk waits to look until it answers again. The models on the device run only for a feature turned off in Kiosk Satellite.
+
+With **Presence sensors** on in Kiosk Satellite, the kiosk's **Presence** and **Looking at the kiosk** binary sensors in Home Assistant follow these looks. Presence is on while a face or a raised hand was seen in the last 30 seconds. Looking at the kiosk is on while a face looks at the screen. The kiosk then looks for faces after motion even with the screen off. See [Presence Sensors](https://github.com/jxlarrea/kiosk-satellite/blob/main/docs/vision-match.md#presence-sensors) in the Kiosk Satellite docs.
 
 Each stretch of time someone is in front of a kiosk is saved as a vision session with what the camera saw, what the kiosk did and how long each look took. See [Vision Sessions](sessions.md#vision-sessions).
 
@@ -71,7 +74,7 @@ Ground Control keeps only small pictures of each enrolled face, lined up and 112
 - **Sensors:** the kiosk's **Face** sensor shows the person at the kiosk. Its **People in view** sensor lists everyone recognized with the person at the kiosk first.
 - **Face event:** the kiosk fires `esphome.kiosk_satellite_face` when someone recognized arrives at the kiosk and when they leave. See [Face](https://github.com/jxlarrea/kiosk-satellite/blob/main/docs/events.md#face) in the Kiosk Satellite docs.
 - **Recognition cards:** cards on the kiosk screen show who was recognized and what happened because of it, like the kiosk PIN skipped or Lockdown Mode turned off. See [Recognition Cards](https://github.com/jxlarrea/kiosk-satellite/blob/main/docs/vision-match.md#recognition-cards).
-- **Settings that act on faces:** Kiosk Satellite can let only chosen people dismiss the screensaver (**Detect faces**), skip the kiosk PIN (**Skip the PIN for**) or turn Lockdown Mode off (**Disable Lockdown Mode for**).
+- **Settings that act on faces:** Kiosk Satellite can let only chosen people dismiss the screensaver (**Detect faces**), skip the kiosk PIN (**Skip the PIN for**), turn Lockdown Mode off (**Disable Lockdown Mode for**) or run Show fingers gestures (**Finger gestures for**).
 - **Voices:** with **Confirm voices with faces** on, a voice close to the voiceprint of the person at the kiosk is accepted for them. See [Confirmed by the Face](voice-match.md#confirmed-by-the-face).
 
 A vision session shows who was recognized. It also shows when the kiosk skipped its PIN or turned Lockdown Mode off or on because of who was recognized.
