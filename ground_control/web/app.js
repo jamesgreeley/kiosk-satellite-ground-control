@@ -86,7 +86,7 @@ async function signInPage() {
     ? [h("div", { class: "row" },
         h("div", { class: "grow" },
           h("div", { class: "rt" }, "Log in with your Home Assistant account"),
-          h("div", { class: "rd" }, `Home Assistant at ${info.ha_url} asks for your user name and password, then sends you back here.`)),
+          h("div", { class: "rd" }, `Sign in with your Home Assistant user name and password at ${info.ha_url}. You come back here afterwards.`)),
         h("button", { class: "btn fill", onclick: logIn }, "Log in with Home Assistant"))]
     : [h("div", { class: "empty" }, "Open Ground Control from the Home Assistant sidebar.")];
   return [

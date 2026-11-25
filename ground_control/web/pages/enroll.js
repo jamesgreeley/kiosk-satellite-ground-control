@@ -154,9 +154,9 @@ export async function render({ id, device }) {
       h("div", { class: "card" }, passage),
       section("While reading"),
       h("div", { class: "card tips" },
-        h("div", { class: "tip" }, icon("walk", 24), h("div", {}, h("div", { class: "rt" }, "Walk slowly"), h("div", { class: "rd" }, "Close to the kiosk, then across the room."))),
+        h("div", { class: "tip" }, icon("walk", 24), h("div", {}, h("div", { class: "rt" }, "Walk slowly"), h("div", { class: "rd" }, "Start close to the kiosk and move across the room."))),
         h("div", { class: "tip" }, icon("turn", 24), h("div", {}, h("div", { class: "rt" }, "Turn around"), h("div", { class: "rd" }, "Face away from the kiosk now and then."))),
-        h("div", { class: "tip" }, icon("mic", 24), h("div", {}, h("div", { class: "rt" }, "Talk normally"), h("div", { class: "rd" }, "The voice you use for commands, not a reading voice.")))),
+        h("div", { class: "tip" }, icon("mic", 24), h("div", {}, h("div", { class: "rt" }, "Talk normally"), h("div", { class: "rd" }, "Use your normal command voice instead of a reading voice.")))),
       h("div", { class: "foot" },
         h("button", { class: "btn txt", onclick: () => { stop(); location.hash = `#/people/${person.id}`; } }, "Cancel")));
   }
@@ -170,9 +170,9 @@ export async function render({ id, device }) {
     main.replaceChildren(stepper(2),
       h("div", { class: "card" },
         h("div", { class: "row" }, h("div", { class: "grow" }, h("div", { class: "rt" }, `${person.name} is enrolled on the ${kiosk.name}`),
-          h("div", { class: "rd" }, `${e.added_s} s of speech added, ${e.speech_s} s in all.`))),
+          h("div", { class: "rd" }, `${e.added_s} s of speech added for a total of ${e.speech_s} s.`))),
         e.dropped_s ? h("div", { class: "hint" }, icon("info", 18), `${e.dropped_s} s that sounded like someone else was left out.`) : null,
-        next ? h("div", { class: "hint" }, icon("info", 18), `Next, enroll on the ${kioskLabel(next)}: no ${next.model} has ${person.name}'s voice yet.`) : null),
+        next ? h("div", { class: "hint" }, icon("info", 18), `Next, enroll on the ${kioskLabel(next)}. ${person.name}'s voice isn't enrolled on any ${next.model} yet.`) : null),
       h("div", { class: "foot" },
         next ? h("a", { class: "btn out", href: `#/enroll/${person.id}/${encodeURIComponent(next.device_id)}` }, "Enroll next") : null,
         h("a", { class: "btn fill", href: `#/people/${person.id}` }, "Done")));

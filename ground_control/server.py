@@ -715,7 +715,7 @@ async def vision_ws(request: web.Request) -> web.WebSocketResponse:
     kiosk = vm.hub.seen(device_id, start.get("device_name"))
     who = kiosk.name if kiosk else device_id or "an unknown kiosk"
     recognize = start.get("recognize") is True and "face" in want
-    _LOG.info("vision from %s: %s%s", who, " and ".join(want), ", with Face Recognition" if recognize else "")
+    _LOG.info("vision from %s: %s%s", who, " and ".join(want), " with Face Recognition" if recognize else "")
     await ws.send_json({"type": "ready", "model": vision.model.key, "want": list(want),
                         "max_looks": vision.max_looks, "recognize": recognize})
     waiting: dict[str, Any] | None = None
@@ -773,7 +773,7 @@ async def vision_ws(request: web.Request) -> web.WebSocketResponse:
             if person and person["id"]:
                 others = [p["name"] for p in people if p["id"] != person["id"]]
                 _LOG.info("%s is at %s (%.2f)%s", person["name"], who, person["score"],
-                          f", also in view: {', '.join(others)}" if others else "")
+                          f" with {', '.join(others)} also in view" if others else "")
         return person, people
 
     def flush() -> None:
@@ -1175,7 +1175,7 @@ async def kiosk_access(request: web.Request) -> web.Response:
     device_id = request.match_info["device_id"]
     k = vm.hub.set_access(device_id, access) if access in ("approved", "declined", "pending") else None
     if k is None:
-        raise web.HTTPBadRequest(text="access must be approved, declined or pending, for a known kiosk")
+        raise web.HTTPBadRequest(text="access must be approved, declined or pending and the kiosk must be known")
     _LOG.info("kiosk %s %s", k.name, {"approved": "approved", "declined": "declined", "pending": "waiting for approval"}[access])
     if k.connected:
         await _send_access(request, device_id)
@@ -1260,7 +1260,7 @@ async def people_forget(request: web.Request) -> web.Response:
     name = vm.people.get(pid).name
     vm.people.forget(pid)
     vm.faces.forget(pid)
-    _LOG.info("forgot %s, their voice and their face", name)
+    _LOG.info("forgot %s with their voice and face", name)
     return web.Response(status=204)
 
 
@@ -1286,7 +1286,7 @@ async def enrollment_delete(request: web.Request) -> web.Response:
         await vm.run(vm.people.delete_enrollment, pid, request.match_info["eid"], vm.enroll_models())
     except KeyError as err:
         raise web.HTTPNotFound(text="no such enrollment") from err
-    _LOG.info("deleted an enrollment of %s, their voice was rebuilt", vm.people.get(pid).name)
+    _LOG.info("deleted an enrollment of %s and rebuilt their voice", vm.people.get(pid).name)
     return web.json_response(_person(vm, vm.people.get(pid)))
 
 
@@ -1297,7 +1297,7 @@ async def face_enrollment_delete(request: web.Request) -> web.Response:
         await vm.run(vm.faces.delete_enrollment, pid, request.match_info["eid"], vm.face_embedders())
     except KeyError as err:
         raise web.HTTPNotFound(text="no such face enrollment") from err
-    _LOG.info("deleted a face enrollment of %s, their face was rebuilt", vm.people.get(pid).name)
+    _LOG.info("deleted a face enrollment of %s and rebuilt their face", vm.people.get(pid).name)
     return web.json_response(_person(vm, vm.people.get(pid)))
 
 

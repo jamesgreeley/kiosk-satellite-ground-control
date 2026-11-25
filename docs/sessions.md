@@ -11,7 +11,7 @@ Sessions are the place to see why a command or a gesture went the way it did.
 
 ## The Sessions List
 
-Each row shows when the session started, the kiosk, who it was, its type, the outcome and its length. The newest are first. A vision session shows how many looks it took and, as its outcome, what the kiosk did, such as a gesture and the action it ran, or else what was seen.
+Each row shows when the session started, the kiosk, who it was, its type, the outcome and its length. The newest are first. For a vision session, the row shows how many looks it took. Its outcome is what the kiosk did, such as a gesture and the action it ran. If the kiosk did nothing, the outcome is what was seen.
 
 - **Type** shows only Voice Match or only Vision Match sessions.
 - **Search** finds kiosks and people by name.
@@ -31,49 +31,49 @@ The top of the page shows the speaker, the outcome, the mode, who the kiosk answ
 
 ### Use This Voice
 
-Pick a person and choose **Add**. Only the user's speech is added, without the voices left out. When another voice talked, only the speech before it is added. This needs the session's audio, so it isn't available when **Keep audio** was off.
+Pick a person and choose **Add**. Only the user's speech is added. The other voices that were left out are not. When another voice talked, only the speech before it is added. This needs the session's audio, so it isn't available when **Keep audio** was off.
 
 ## Vision Sessions
 
-A vision session starts with the first look that finds a face or a hand. It ends 10 seconds after the last look that found one, or when the kiosk's camera stops. A stretch longer than 30 minutes goes on in a new session. Looks that find nothing, like a pet walking by or a light changing, open no session. They are counted on the [kiosk's page](kiosks.md#a-kiosks-page) instead, so the list doesn't fill up with empty stretches.
+A vision session starts with the first look that finds a face or a hand. It ends 10 seconds after the last look that found one or when the kiosk's camera stops. A stretch longer than 30 minutes continues in a new session. Looks that find nothing open no session. This covers things like a pet walking by or a light changing. These empty looks are counted on the [kiosk's page](kiosks.md#a-kiosks-page) instead, so the list doesn't fill up with empty stretches.
 
 The top of a vision session's page shows what the kiosk did, its length and the vision model.
 
 | Section | What it shows |
 | --- | --- |
-| Timeline | One lane each: **Kiosk** shows what the kiosk did, the screensaver dismissed or postponed and each finger gesture with its action. **Face** marks a face looking at the kiosk or turned away, **Hand** marks a hand with its finger count, faded when only one look read it, like a hand moving between two shapes, and **Time** shows how long Ground Control took and the round trip from the kiosk. |
-| Steps | Each step in order: a face seen, a face looking at the kiosk, the person Face Recognition named, a hand, each new finger reading, what the kiosk did and why the session ended. A finger reading counts once two hand looks in a row agree, since a hand blurred while it moves can read as any count for one look. |
-| Performance | The median, 95th percentile and slowest time for reading the frame, Face Detection, Hand Gestures and Ground Control's whole look. Also the kiosk's time to encode each frame and the round trip from the kiosk. For each finger gesture, the time from the first look that read its finger count to the kiosk running its action, the gesture's hold time included. It also counts the frames dropped for a newer one and the frames that couldn't be read. |
+| Timeline | It has four lanes. **Kiosk** shows what the kiosk did, such as the screensaver dismissed or postponed and each finger gesture with its action. **Face** marks a face looking at the kiosk or turned away. **Hand** marks a hand with its finger count. A count read by only one look is faded. This happens with a hand moving between two shapes. **Time** shows how long Ground Control took and the round trip from the kiosk. |
+| Steps | Each step in order: a face seen, a face looking at the kiosk, the person recognized by Face Recognition, a hand, each new finger reading, what the kiosk did and why the session ended. A finger reading counts once two hand looks in a row give the same count. A hand that is blurred while it moves can read as any count for one look. |
+| Performance | The median, 95th percentile and slowest time for reading the frame, Face Detection, Hand Gestures and Ground Control's whole look. It also shows the kiosk's time to encode each frame and the round trip from the kiosk. For each finger gesture, it shows the time from the first look that read its finger count to the kiosk running its action. This time includes the gesture's hold time. It also counts the frames dropped for a newer one and the frames that couldn't be read. |
 | Frames | Up to 8 frames with the faces and the hand drawn on them: the first look, the first face looking at the kiosk, each new finger reading, the frame each gesture or screensaver dismissal acted on and the last look. |
 
 ## Downloading a Session
 
-**Download** in the session's header saves the session as one zip, ready to attach to an issue:
+**Download** in the session's header saves the session as one zip you can attach to an issue:
 
-- `as-heard.wav`: the audio as the kiosk's microphone heard it.
+- `as-heard.wav`: the audio as recorded by the kiosk's microphone.
 - `sent-to-assistant.wav`: what was sent to the assistant.
 - `wake-word.wav`: the wake word.
 - `frames/`: a vision session's kept frames.
-- `session.json`: the session's record, with every event and score, or every look of a vision session.
+- `session.json`: the session's record with every event and score. For a vision session it has every look.
 - `ground-control.txt`: Ground Control's details and its log from while the session ran.
 
-Tokens never reach the zip. Without kept audio or frames, the zip has the record and the log only.
+Tokens are never included in the zip. If no audio or frames were kept, the zip has only the record and the log.
 
 ## Keeping Sessions
 
-Sessions are kept for 7 days by default, then deleted with their audio and frames. Change it under **Settings > General > Sessions**:
+Sessions are kept for 7 days by default and then deleted with their audio and frames. Change it under **Settings > General > Sessions**:
 
 | Setting | Default | What it does |
 | --- | --- | --- |
-| Keep sessions for | 7 days | Older sessions, their audio and their frames are deleted. 1, 7, 30 or 90 days, or any number from 1 to 90 in the app's options. |
-| Keep audio | on | Needed to replay a session or add it to a person. Off, sessions keep their record but no audio. |
+| Keep sessions for | 7 days | Older sessions, their audio and their frames are deleted. Choose 1, 7, 30 or 90 days or set any number from 1 to 90 in the app's options. |
+| Keep audio | on | Needed to replay a session or add it to a person. When off, sessions keep their record but no audio. |
 
 Frames are kept under **Settings > Vision Match > Frames**:
 
 | Setting | Default | What it does |
 | --- | --- | --- |
-| Keep frames | on | Up to 8 frames for each vision session. Off, vision sessions keep their record but no frames. |
-| Delete all frames | | Deletes every kept frame right away. The sessions stay, without their frames. |
+| Keep frames | on | Keeps up to 8 frames for each vision session. When off, vision sessions keep their record but no frames. |
+| Delete all frames | | Deletes every kept frame right away. The sessions stay but their frames are deleted. |
 
 Ground Control keeps up to 2,000 voice sessions and 3,000 vision sessions, so a busy week in front of the kiosks never pushes voice sessions out.
 

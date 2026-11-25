@@ -4,13 +4,13 @@ You need:
 
 - Kiosks running [Kiosk Satellite](https://github.com/jxlarrea/kiosk-satellite) with Voice Satellite's native runtime and wake word detection on.
 - Home Assistant, which Ground Control and the kiosks sign in to.
-- A machine for Ground Control: Home Assistant itself, or any computer or server on the same network. See [Choosing a Machine](installation.md#choosing-a-machine).
+- A machine for Ground Control: Home Assistant itself or any computer or server on the same network. See [Choosing a Machine](installation.md#choosing-a-machine).
 
 ## 1. Install Ground Control
 
 **As a Home Assistant app:** add `https://github.com/jxlarrea/kiosk-satellite-ground-control` under **Settings > Apps > App store > Repositories**, install **Kiosk Satellite Ground Control** and start it. Open **Ground Control** in the sidebar.
 
-**With Docker:** run [compose.yaml](../compose.yaml), or [compose.cuda.yaml](../compose.cuda.yaml) on a machine with an NVIDIA GPU, with `HA_URL` set to your Home Assistant. Open `http://THIS_MACHINE:10900` and choose **Log in with Home Assistant**.
+**With Docker:** set `HA_URL` to your Home Assistant in [compose.yaml](../compose.yaml) and run it. On a machine with an NVIDIA GPU, use [compose.cuda.yaml](../compose.cuda.yaml) instead. Open `http://THIS_MACHINE:10900` and choose **Log in with Home Assistant**.
 
 See [Installation](installation.md) for the options.
 
@@ -18,7 +18,7 @@ See [Installation](installation.md) for the options.
 
 On each kiosk, in Kiosk Satellite:
 
-1. Go to **Settings > Ground Control** and turn on **Enable Ground Control**. Kiosks on the same network find Ground Control on their own.
+1. Go to **Settings > Ground Control** and turn on **Enable Ground Control**. Ground Control is discovered automatically on the same network.
 2. The status row shows **Waiting for approval**.
 
 In Ground Control, open **Kiosks**, pick the kiosk and choose **Approve**. The kiosk's status row changes to **Connected**.
@@ -28,10 +28,10 @@ See [Kiosks](kiosks.md).
 ## 3. Enroll People
 
 1. In Ground Control, open **People**, choose **Add a person** and enter their name.
-2. On their page, choose **Enroll** on a device model they talk to, or pick a kiosk under **Enroll on a kiosk** and choose **Enroll voice**.
-3. They read the text on the kiosk aloud for about 45 seconds, walking slowly around the room.
+2. On their page, choose **Enroll** on a device model they talk to or pick a kiosk under **Enroll on a kiosk** and choose **Enroll voice**.
+3. They read the text on the kiosk aloud for about 45 seconds while walking slowly around the room.
 
-Enroll each person once on every device model they talk to, such as once on an Echo Show and once on an Echo Dot. See [People](people.md).
+Enroll each person once on every device model they talk to. For example, enroll them once on an Echo Show and once on an Echo Dot. See [People](people.md).
 
 ## 4. Turn On Voice Match
 
@@ -45,11 +45,11 @@ See [Voice Match](voice-match.md).
 
 ## 5. Try It
 
-Say the wake word and a command with a TV on. On the kiosk, the name of the person talking shows before the command. In Ground Control, the kiosk's page shows each voice check as it happens, and the session shows up on the **Sessions** page with what was sent to the assistant.
+Say the wake word and a command with a TV on. On the kiosk, the name of the person talking shows before the command. In Ground Control, the kiosk's page shows each voice check as it happens. The session also shows up on the **Sessions** page with what was sent to the assistant.
 
 If something doesn't work as expected, see [Logs and Issues](logs.md).
 
 ## Optional
 
 - **Personal commands:** set each person's to-do list, calendar and playlist on the People page, so "add milk to my list" goes on the list of the person talking. See [People](people.md#home-assistant-and-personal-commands).
-- **LLM conversation agents:** paste the template from **Settings > General > Conversation agents** into the agent's instructions, so the agent knows who is speaking. See [Settings](settings.md#conversation-agents).
+- **LLM conversation agents:** paste the template from **Settings > General > Conversation agents** into the agent's instructions so the speaker's name is passed to the agent. See [Settings](settings.md#conversation-agents).

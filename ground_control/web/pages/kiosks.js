@@ -57,20 +57,20 @@ function accessCard(kiosk) {
 function featureRows(kiosk, lastSession, people, status) {
   const f = kiosk.features || {};
   if (!Object.keys(f).length) {
-    return [h("div", { class: "empty" }, "Not known yet. The kiosk says which features it has on when it connects.")];
+    return [h("div", { class: "empty" }, "Not known yet. The kiosk's features show here once it connects.")];
   }
-  if (f.voice_match === false) return [row("Voice Match", "Off on the kiosk, under Enable Voice Match.", onOff(false))];
+  if (f.voice_match === false) return [row("Voice Match", "Enable Voice Match is off on the kiosk.", onOff(false))];
   const isolation = !f.trimming ? chip("Needs Trimming", "c-off")
     : f.isolation === false ? onOff(false)
     : status.isolation ? chip("On", "c-ok") : chip("Off in Ground Control", "c-off");
   return [
     missingPeople(f, people)
-      ? row("Recognition", `Answers: ${kioskAnswers(kiosk, lastSession, people)}. Choose them again in Kiosk Satellite, under Ground Control, Voice Match, People.`,
+      ? row("Recognition", `Answers: ${kioskAnswers(kiosk, lastSession, people)}. Choose them again in Kiosk Satellite under Ground Control > Voice Match > People.`,
             chip("Choose again", "c-warn"))
       : row("Recognition", `Answers: ${kioskAnswers(kiosk, lastSession, people) || "Anyone"}.`, onOff(true)),
     row("Trimming", "Other voices cut out between the user's words.", onOff(f.trimming)),
     row("Isolation", "Other voices removed under the user's words.", isolation),
-    row("Speaker sensor", "Who is talking, in Home Assistant.", onOff(f.speaker_sensor)),
+    row("Speaker sensor", "Shows who is talking in Home Assistant.", onOff(f.speaker_sensor)),
     row("Show who is talking", "The speaker's name on the voice overlay.", onOff(f.show_speaker)),
     row("Enrollment", "Allow enrollment here.", onOff(kiosk.enroll, "Allowed")),
   ];
@@ -80,19 +80,19 @@ function featureRows(kiosk, lastSession, people, status) {
 function visionRows(kiosk, status) {
   const f = kiosk.features || {};
   if (!("vision_match" in f)) {
-    return [h("div", { class: "empty" }, "Not known yet. A Kiosk Satellite version with Vision Match says which features it has on when it connects.")];
+    return [h("div", { class: "empty" }, "Not known yet. The features show here once the kiosk connects with a Kiosk Satellite version that has Vision Match.")];
   }
   const where = (on) => (!f.vision_match || !on ? chip("On the kiosk", "c-off") : chip("On Ground Control", "c-ok"));
   const n = f.finger_gestures ?? 0;
   return [
-    row("Vision Match", f.vision_match ? "Face Detection and Hand Gestures can run on Ground Control." : "Off on the kiosk, under Enable Vision Match. Its own models run everything.",
+    row("Vision Match", f.vision_match ? "Face Detection and Hand Gestures can run on Ground Control." : "Enable Vision Match is off on the kiosk, so everything runs on the kiosk's own models.",
       onOff(f.vision_match)),
-    row("Face Detection", "Where faces are found, for Dismiss on face and Postpone on face.", where(f.face_detection)),
-    row("Hand Gestures", "Where raised fingers are read, for Show fingers gestures.", where(f.hand_gestures)),
+    row("Face Detection", "Where faces are found for Dismiss on face and Postpone on face.", where(f.face_detection)),
+    row("Hand Gestures", "Where raised fingers are read for Show fingers gestures.", where(f.hand_gestures)),
     row("Dismiss on face", "A face looking at the kiosk dismisses the screensaver.", onOff(f.dismiss_on_face)),
     row("Postpone on face", "A face in front of the kiosk puts off the next screensaver.", onOff(f.postpone_on_face && f.dismiss_on_face)),
     row("Finger gestures", "Gestures set up with Show fingers.", n ? chip(`${n} set up`, "c-ok") : chip("None", "c-off")),
-    row("Face Recognition", "Who is looking at the kiosk, in its Face sensor.", f.vision_match && f.face_recognition ? chip("On Ground Control", "c-ok") : onOff(false)),
+    row("Face Recognition", "Shows who is looking at the kiosk in its Face sensor.", f.vision_match && f.face_recognition ? chip("On Ground Control", "c-ok") : onOff(false)),
   ];
 }
 
@@ -122,7 +122,7 @@ export async function render({ id }) {
           h("section", { class: "left", "aria-label": "Every kiosk" },
             h("div", { class: "card" }, list,
               kiosks.length ? h("div", { class: "hint", style: { paddingTop: "14px" } }, icon("info", 18),
-                "Each kiosk's settings are on the kiosk, in Kiosk Satellite under Ground Control.") : null)),
+                "Change each kiosk's settings in Kiosk Satellite on that kiosk under Ground Control.") : null)),
           out?.node)),
     ],
     cleanup: () => out?.cleanup(),
@@ -158,14 +158,14 @@ async function detail(kiosk, people, status, onKiosk) {
   drawNow(null);
   const points = [];
   let current = null;
-  const chartBox = h("div", { class: "chart", role: "img", "aria-label": "Voice scores, last 10 seconds" });
+  const chartBox = h("div", { class: "chart", role: "img", "aria-label": "Voice scores in the last 10 seconds" });
   const drawChart = () => {
     const end = points.length ? points[points.length - 1].t : 0;
     chartBox.replaceChildren(
       h("span", { class: "yl", style: { bottom: "100%" } }, "1.0"),
       h("span", { class: "yl", style: { bottom: "0%" } }, "0"),
-      h("div", { class: "thr", style: { bottom: `${status.threshold * 100}%` } }, h("span", { class: "thrlbl" }, `Recognized, ${status.threshold}`)),
-      h("div", { class: "thr", style: { bottom: `${status.other_threshold * 100}%` } }, h("span", { class: "thrlbl" }, `Other voice, ${status.other_threshold}`)),
+      h("div", { class: "thr", style: { bottom: `${status.threshold * 100}%` } }, h("span", { class: "thrlbl" }, `Recognized ${status.threshold}`)),
+      h("div", { class: "thr", style: { bottom: `${status.other_threshold * 100}%` } }, h("span", { class: "thrlbl" }, `Other voice ${status.other_threshold}`)),
       ...points.filter((p) => p.t > end - WINDOW_S).map((p) => h("span", {
         class: "pt", style: {
           left: `${100 - ((end - p.t) / WINDOW_S) * 100}%`, bottom: `${Math.max(0, Math.min(1, p.score)) * 100}%`,
@@ -292,10 +292,10 @@ async function detail(kiosk, people, status, onKiosk) {
   const drawFeatures = () => {
     features.replaceChildren(...featureRows(kiosk, last, people, status),
       h("div", { class: "hint", style: { paddingTop: "14px" } }, icon("info", 18),
-        "Set on the kiosk, in Kiosk Satellite under Ground Control, Voice Match."));
+        "Set in Kiosk Satellite on each kiosk under Ground Control > Voice Match."));
     visionFeatures.replaceChildren(...visionRows(kiosk, status),
       h("div", { class: "hint", style: { paddingTop: "14px" } }, icon("info", 18),
-        "Set on the kiosk, in Kiosk Satellite under Ground Control, Vision Match. Dismiss on face and Postpone on face are under Screensaver, Face Detection, and finger gestures under Gestures."));
+        "Set in Kiosk Satellite on each kiosk under Ground Control > Vision Match. Dismiss on face and Postpone on face are under Screensaver > Face Detection and finger gestures are under Gestures."));
   };
   drawFeatures();
 
@@ -320,10 +320,10 @@ async function detail(kiosk, people, status, onKiosk) {
     visionFeatures,
     section("Who is talking"),
     h("div", { class: "card" }, nowBox, h("div", { class: "tl", style: { paddingTop: "4px" } }, chartBox),
-      h("p", { class: "hint", style: { margin: 0 } }, "Each check of the current command. Colored passed, red means someone else.")),
-    section("What it sees"),
+      h("p", { class: "hint", style: { margin: 0 } }, "Each check of the current command. A colored dot passed and a red one means someone else.")),
+    section("Live vision"),
     h("div", { class: "card" }, seeBox, h("div", { class: "tl", style: { paddingTop: "4px" } }, strip),
-      h("p", { class: "hint", style: { margin: 0 } }, "Each look of the current vision session, for kiosks with Vision Match on.")),
+      h("p", { class: "hint", style: { margin: 0 } }, "Each look of the current vision session on a kiosk with Vision Match on.")),
     section("Looks", "Vision Match looks a day. An empty look found no face or hand and opened no session."),
     h("div", { class: "card" }, days.length
       ? days.map((d) => h("div", { class: "row" },

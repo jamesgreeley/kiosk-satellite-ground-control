@@ -273,12 +273,12 @@ export function listOf(names) {
 export function outcome(stats) {
   const name = stats?.speaker?.name;
   if (stats?.mode === "follow" && stats?.end === "other_voice") {
-    return `Other voices left out, ${stats.dropped_s ?? 0} s`;
+    return `${stats.dropped_s ?? 0} s of other voices left out`;
   }
   switch (stats?.end) {
     case "silence": return name ? `Ended when ${name} stopped talking` : "Ended when the speaker stopped talking";
     case "other_voice": return "Ended when another voice started";
-    case "rejected": return "Rejected, not a voice this kiosk answers";
+    case "rejected": return "Rejected because this kiosk doesn't answer this voice";
     case "max_length": return "Stopped at the 30 s limit";
     default: return "Ended by the kiosk";
   }

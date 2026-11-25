@@ -14,7 +14,7 @@ const THINGS = [
 // Face Recognition's guided capture, as Ground Control reports it.
 const FACE_STEPS = { look: "Look at the screen", side_a: "Turn your head a little to one side", side_b: "Now a little to the other side",
   far: "Take a step back" };
-const FACE_HINTS = { ok: "", no_face: "No face in view.", several_faces: "Only one person in view, please.",
+const FACE_HINTS = { ok: "", no_face: "No face in view.", several_faces: "Only one person should be in view.",
   closer: "Come a little closer.", farther: "Step back a little more.", look_at_screen: "Look at the screen.",
   turn_more: "Turn a little more.", turn_less: "Turn back a little.", other_side: "Now to the other side.",
   too_dark: "Too dark to see the face.", other_face: "That's a different face." };
@@ -74,7 +74,7 @@ function voiceCard(p, kiosks, kinds) {
   const bar = h("div", { class: "row" },
     h("div", { class: "grow" }, h("div", { class: "rt" }, "Enroll on a kiosk"),
       h("div", { class: "rd" }, ready.length
-        ? `${p.name} reads a few sentences aloud, about 45 seconds of speech.`
+        ? `${p.name} reads a few sentences aloud for about 45 seconds.`
         : "Needs a connected kiosk with Allow enrollment here on.")),
     ready.length ? sel : null,
     enroll);
@@ -96,7 +96,7 @@ function voiceCard(p, kiosks, kinds) {
   const rows = recordings.map((e) => {
     const where = e.device_name ? `${e.device_name}${e.model ? `, ${e.model}` : ""}` : "Uploaded file";
     const remove = async () => {
-      if (!await ask({ title: "Delete this recording?", text: `${where}, ${e.seconds} s. ${p.name}'s voice is rebuilt without it.`,
+      if (!await ask({ title: "Delete this recording?", text: `The recording from ${where} has ${e.seconds} s of speech. ${p.name}'s voice is rebuilt without it.`,
         ok: "Delete", danger: true })) return;
       try {
         await api(`api/people/${p.id}/enrollments/${e.id}`, { method: "DELETE" });
@@ -108,7 +108,7 @@ function voiceCard(p, kiosks, kinds) {
       deleteButton(`Delete the ${where} recording`, remove));
   });
 
-  return [section("Voice Match", `${p.name}'s voice, for the Speaker sensor and personal commands.`, status),
+  return [section("Voice Match", `${p.name}'s voice is used for the Speaker sensor and personal commands.`, status),
     h("div", { class: "card fcard" },
     bar,
     kinds.length ? h("div", { class: "fpart" },
@@ -186,7 +186,7 @@ function visionCard(p, kiosks, events) {
   const bar = h("div", { class: "row" },
     h("div", { class: "grow" }, h("div", { class: "rt" }, "Enroll on a kiosk"),
       h("div", { class: "rd" }, ready.length
-        ? `${p.name} follows four steps on the kiosk's screen, about half a minute.${p.has_face ? " Another capture in different light helps." : ""}`
+        ? `${p.name} follows four steps on the kiosk's screen. It takes about half a minute.${p.has_face ? " Another capture in different light helps." : ""}`
         : "Needs a connected kiosk with Face Recognition on.")),
     ready.length ? sel : null,
     go);
@@ -235,7 +235,7 @@ function visionCard(p, kiosks, events) {
   const rows = captures.map((e) => {
     const where = e.source?.device_name || "Unknown kiosk";
     const remove = async () => {
-      if (!await ask({ title: "Delete this capture?", text: `${where}, ${e.crops} pictures. ${p.name}'s face is rebuilt without them.`,
+      if (!await ask({ title: "Delete this capture?", text: `The capture from ${where} has ${e.crops} pictures. ${p.name}'s face is rebuilt without them.`,
         ok: "Delete", danger: true })) return;
       try {
         await api(`api/people/${p.id}/faces/${e.id}`, { method: "DELETE" });
@@ -247,7 +247,7 @@ function visionCard(p, kiosks, events) {
       deleteButton(`Delete the ${where} capture`, remove));
   });
 
-  return [section("Vision Match", `${p.name}'s face, for the Face sensor on kiosks with Face Recognition on.`, statusSlot),
+  return [section("Vision Match", `${p.name}'s face is used for the Face sensor on kiosks with Face Recognition on.`, statusSlot),
     h("div", { class: "card fcard" },
     bar,
     live.node,
@@ -346,7 +346,7 @@ function detail(p, kiosks, kinds, suggestions, events) {
       // A to-do list, calendar or person is a Home Assistant entity: half-typed text isn't saved.
       if (value && prefix && !new RegExp(`^${prefix.replace(".", "\\.")}[a-z0-9_]+$`).test(value)) {
         input.setAttribute("aria-invalid", "true");
-        toast(`Not saved. Pick one from the list, or enter an entity id like ${prefix}${p.name.toLowerCase().replace(/[^a-z0-9]+/g, "_")}.`);
+        toast(`Not saved. Pick one from the list or enter an entity id like ${prefix}${p.name.toLowerCase().replace(/[^a-z0-9]+/g, "_")}.`);
         return;
       }
       input.removeAttribute("aria-invalid");
@@ -379,7 +379,7 @@ function detail(p, kiosks, kinds, suggestions, events) {
     visionCard(p, kiosks, events),
     section(`What's ${p.name}'s`, `What "my" means when ${p.name} talks. "Add milk to my list" goes on this list on every kiosk.`),
     h("div", { class: "card" }, things,
-      h("div", { class: "hint" }, icon("info", 18), 'Kiosk Satellite uses these when this person says "my", with its personal commands and to-do blueprints. Without a list of their own, "my list" is the shared list.')),
+      h("div", { class: "hint" }, icon("info", 18), 'Kiosk Satellite\'s personal commands and to-do blueprints use these when this person says "my". Without a list of their own, "my list" is the shared list.')),
     h("div", { class: "card forget" },
       h("div", { class: "grow" }, h("div", { class: "rt" }, `Forget ${p.name}`),
         h("div", { class: "rd" }, `Deletes ${p.name}'s voice and face with every recording and face picture.`)),

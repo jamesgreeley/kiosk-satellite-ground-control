@@ -78,17 +78,17 @@ function timeline(record, total) {
     h("div", { class: "legend" },
       h("span", {}, h("i", { class: "swb", style: { background: "var(--primary)" } }), "Face looking at the kiosk"),
       h("span", {}, h("i", { class: "swb", style: { background: "var(--other)" } }), "Face turned away"),
-      h("span", {}, h("i", { class: "swb", style: { background: "var(--warn)" } }), "Hand and finger count, faded on a single look"),
-      h("span", {}, h("i", { class: "swb", style: { background: "var(--primary)", opacity: 0.5 } }), "Ground Control's time, and the round trip outlined")),
+      h("span", {}, h("i", { class: "swb", style: { background: "var(--warn)" } }), "Hand and finger count (faded when only one look saw it)"),
+      h("span", {}, h("i", { class: "swb", style: { background: "var(--primary)", opacity: 0.5 } }), "Ground Control's time with the round trip outlined")),
     h("div", { class: "vlanes" },
       outcomes.map((e) => h("div", { class: "mk vguide", style: { left: `calc(84px + (100% - 84px) * ${e.t / total})` } })),
       outcomes.length ? kioskLane(outcomes, total) : null,
       lane("Face", looks, total, (lk) => (lk.face
-        ? { cls: lk.face.frontal ? "on" : "away", title: `${lk.t} s: ${lk.face.count} face${lk.face.count === 1 ? "" : "s"}, ${lk.face.frontal ? "looking at the kiosk" : "turned away"}` }
+        ? { cls: lk.face.frontal ? "on" : "away", title: `${lk.t} s: ${lk.face.count} face${lk.face.count === 1 ? "" : "s"} ${lk.face.frontal ? "looking at the kiosk" : "turned away"}` }
         : lk.want.includes("f") ? { cls: "none", title: `${lk.t} s: no face` } : null)),
       lane("Hand", looks, total, (lk) => (lk.hand
         ? { cls: `hand ${held.has(lk) ? "" : "brief"}`, text: lk.hand.fingers ?? "",
-          title: `${lk.t} s: ${lk.hand.gesture}${lk.hand.fingers != null ? `, ${fingers(lk.hand.fingers)}` : ""}${held.has(lk) ? "" : ", on this look only"}` }
+          title: `${lk.t} s: ${lk.hand.gesture}${lk.hand.fingers != null ? `, ${fingers(lk.hand.fingers)}` : ""}${held.has(lk) ? "" : " (only on this look)"}` }
         : lk.want.includes("h") ? { cls: "none", title: `${lk.t} s: no hand` } : null)),
       lane("Time", looks, total, (lk) => ({
         cls: "lat", title: `${lk.t} s: Ground Control ${ms(gc(lk))}${lk.rtt ? `, round trip ${ms(lk.rtt)}` : ""}`,
@@ -116,7 +116,7 @@ function steps(record) {
     if (e.type === "screensaver_dismissed") out.push(["Screensaver dismissed", "The kiosk woke the screen for the face looking at it.", e.t]);
     if (e.type === "screensaver_postponed") out.push(["Screensaver postponed", "Someone was still in front of the kiosk.", e.t]);
     if (e.type === "gesture") out.push([`${fingers(e.fingers ?? 0)} gesture`, e.action ? `${e.action}.` : "The kiosk ran the gesture's action.", e.t]);
-    if (e.type === "recognized") out.push([`${e.name || "Someone"} recognized`, `Face Recognition, score ${e.score} against their face.${e.at_kiosk === false ? " In view, with someone else at the kiosk." : ""}`, e.t]);
+    if (e.type === "recognized") out.push([`${e.name || "Someone"} recognized`, `Score ${e.score} against their enrolled face.${e.at_kiosk === false ? " They were in view while someone else was at the kiosk." : ""}`, e.t]);
     if (e.type === "end") out.push(["End", `${ENDS[e.reason] || "Ended"}.`, e.t]);
   }
   return out.sort((a, b) => a[2] - b[2]).map(([title, desc, t]) => h("div", { class: "row" },
@@ -131,7 +131,7 @@ const TIMES = [
   ["hands", "Hand Gestures", "The hand model."],
   ["recognize", "Face Recognition", "Lining the face up and the model that tells who it is."],
   ["encode", "Kiosk encoding", "The kiosk turning the camera frame into a JPEG."],
-  ["round_trip", "Round trip", "From the kiosk sending a frame to its result coming back, network included."],
+  ["round_trip", "Round trip", "The time from the kiosk sending a frame until its result comes back over the network."],
 ];
 
 /** How long each gesture took: from the first look in a row that read its
@@ -166,7 +166,7 @@ function performance(record) {
       h("div", { class: "grow" }, h("div", { class: "rt" }, `Gesture, ${outcomeLabel(e)}`),
         h("div", { class: "rd" }, took === null
           ? "Ground Control didn't read this hand. The kiosk read it with its own model."
-          : "From the first look that read the finger count to the kiosk running the action, the gesture's hold time included.")),
+          : "The time from the first look that read the finger count until the action ran. It includes the gesture's hold time.")),
       took === null ? null : h("span", { class: "pvs" }, h("span", { class: "pv" }, h("b", {}, `${took.toFixed(2)} s`), h("small", {}, "to the action"))))),
     h("div", { class: "row" }, h("div", { class: "grow" }, h("div", { class: "rd" },
       `${stats.looks} looks: ${stats.face_looks} for faces and ${stats.hand_looks} for hands. ${lost.length ? `${lost.join(" and ")}.` : "No frames lost."}`))));
@@ -260,7 +260,7 @@ export async function renderVision(record) {
         frames.length
           ? h("div", { class: "card vfcard" }, h("div", { class: "vframes" }, frames.map((f) => frame(id, f, styles))),
             h("div", { class: "hint" }, icon("info", 18), "Faces looking at the kiosk are outlined in green, faces turned away in gray and the hand in amber with its finger count."))
-          : h("div", { class: "card" }, h("div", { class: "empty" }, "No frames were kept for this session. Keep frames is in Settings, Vision Match."))),
+          : h("div", { class: "card" }, h("div", { class: "empty" }, "No frames were kept for this session. Keep frames is in Settings > Vision Match."))),
     ],
   };
 }

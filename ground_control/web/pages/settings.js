@@ -124,35 +124,35 @@ export async function render({ area } = {}) {
       : "It works with any wake word and any wake word engine. It doesn't delay the command.";
 
     return [
-      section("Recognition", "Who is speaking, from the voiceprints of the people enrolled."),
+      section("Recognition", "Settings for matching voices to the voiceprints of the people enrolled."),
       h("div", { class: "card" },
         h("div", { role: "radiogroup", "aria-label": "Speaker model" },
           row("Speaker model", "Voiceprints are rebuilt from the enrollment audio when this changes. Nobody has to record again.", null),
           option("accurate", "Accurate", "Fewest mix-ups between people and with other voices. Best on an x86 CPU or a GPU."),
-          option("light", "Light", "About a third of the CPU, for a Raspberry Pi or Home Assistant Green. Another voice cutting in ends the turn about a second later."),
+          option("light", "Light", "Uses about a third of the CPU and suits a Raspberry Pi or Home Assistant Green. When another voice cuts in, the turn ends about a second later."),
           progress),
-        row("Threshold", `How close a voice has to be to count as someone enrolled. Higher means fewer mix-ups and more unknown voices. Each model has its own, ${s.default_threshold} by default.`,
+        row("Threshold", `How close a voice has to be to count as someone enrolled. Higher means fewer mix-ups and more unknown voices. Each model has its own threshold. The default is ${s.default_threshold}.`,
           number("thr", s.threshold, "threshold"), "thr"),
-        row("Learn from commands", "Confident commands fold into the speaker's voice, so it follows colds and room changes.",
+        row("Learn from commands", "Adds confident commands to the speaker's voiceprint to keep up with colds and room changes.",
           toggle(s.learn, "Learn from commands", (v) => save({ learn: v }))),
         row("Take short answers", "Accepts a short reply to a question from the assistant, like \"yes\" or \"no\", when the voice vaguely sounds like one of the people the kiosk accepts. A reply this short isn't enough to recognize who is speaking, so with this off it is ignored. Only applies to kiosks that answer chosen people.",
           toggle(s.short_answers, "Take short answers", (v) => save({ short_answers: v })))),
 
-      section("Trimming", "Other voices are cut out between the user's words, and long pauses are shortened."),
+      section("Trimming", "Other voices are cut out between the user's words and long pauses are shortened."),
       h("div", { class: "card" },
         row("Other voice threshold", `Two checks in a row under this score mean someone else is talking. ${s.default_other_threshold} by default.`,
           number("oth", s.other_threshold, "other_threshold"), "oth"),
-        hint("Each kiosk turns Trimming on or off in Kiosk Satellite, under Ground Control, Voice Match.")),
+        hint("Turn Trimming on or off for each kiosk in Kiosk Satellite under Ground Control > Voice Match.")),
 
-      section("Wake Word Aligner", "The end of the wake word is left out of the command, like the \"xa\" of \"Alexa\"."),
+      section("Wake Word Aligner", "The end of the wake word, such as the \"xa\" of \"Alexa\", is left out of the command."),
       h("div", { class: "card" },
         row("Use Wake Word Aligner", "For kiosks with Trimming and Talk right after the wake word on in Kiosk Satellite.", aligner),
         hint(alignerNote)),
 
-      section("Isolation", "Other voices talking over the user's words are removed too, using the user's voiceprint."),
+      section("Isolation", "Uses the user's voiceprint to also remove other voices talking over their words."),
       h("div", { class: "card" },
         row("Use Isolation", "For kiosks with Trimming and Isolation on in Kiosk Satellite.", isolation),
-        row("Runs on", "Set by the CUDA option, like the speaker model.", where),
+        row("Runs on", "Set by the CUDA option in the same way as the speaker model.", where),
         hint(isolationNote)),
     ];
   };
@@ -194,7 +194,7 @@ export async function render({ area } = {}) {
     };
     api("api/frames").then(showFrames).catch(() => { saved.textContent = ""; });
     removeAll.addEventListener("click", async () => {
-      if (!await ask({ title: "Delete all frames?", text: "Every frame kept with a vision session is deleted. The sessions stay, with their timeline, steps and times.", ok: "Delete", danger: true })) return;
+      if (!await ask({ title: "Delete all frames?", text: "Every frame kept with a vision session is deleted. The sessions keep their timeline, steps and times.", ok: "Delete", danger: true })) return;
       try {
         const gone = await api("api/frames", { method: "DELETE" });
         toast(`Deleted ${gone.frames} frame${gone.frames === 1 ? "" : "s"}`);
@@ -202,30 +202,30 @@ export async function render({ area } = {}) {
       } catch (err) { toast(err.message); }
     });
     return [
-      section("Models", "Face Detection and Hand Gestures, for the kiosks that have Vision Match on."),
+      section("Models", "Face Detection and Hand Gestures run here for kiosks with Vision Match on."),
       h("div", { class: "card" },
         h("div", { role: "radiogroup", "aria-label": "Vision model" },
           row("Vision model", "Both find faces and whether they look at the kiosk equally well. They differ in reading raised fingers.", null),
-          option("accurate", "Accurate", "Gets the finger count right more often, also in dim light at 3 m. Needs an NVIDIA GPU."),
+          option("accurate", "Accurate", "Reads the finger count right more often and works even in dim light at 3 m. Needs an NVIDIA GPU."),
           option("light", "Light", "Runs on any CPU. Each kiosk is told how many looks a second this machine keeps up with.")),
-        row("Runs on", "Set by the CUDA option, like the speaker model.", where),
+        row("Runs on", "Set by the CUDA option in the same way as the speaker model.", where),
         row("Looks a second", "For one kiosk, measured on this machine when the models load. Kiosks look at most 2 times a second for faces and 4 for hands.", looks),
         s.vision_error ? hint(s.vision_error)
-          : hint("Each kiosk turns Vision Match on in Kiosk Satellite, under Ground Control, Vision Match.")),
+          : hint("Turn Vision Match on for each kiosk in Kiosk Satellite under Ground Control > Vision Match.")),
 
-      section("Frames", "Camera frames kept with each vision session, for its page in Sessions."),
+      section("Frames", "Camera frames are kept with each vision session and shown on its page in Sessions."),
       h("div", { class: "card" },
-        row("Keep frames", `Up to 8 frames a session: the first look, a face looking at the kiosk, each new finger reading and the last look. They are deleted with the session, after ${s.keep_days} day${s.keep_days === 1 ? "" : "s"}.`,
+        row("Keep frames", `Up to 8 frames a session: the first look, a face looking at the kiosk, each new finger reading and the last look. They are deleted with the session after ${s.keep_days} day${s.keep_days === 1 ? "" : "s"}.`,
           toggle(s.keep_frames, "Keep frames", (v) => save({ keep_frames: v }))),
-        row("Delete all frames", "The sessions stay, without their frames.", h("span", { class: "cell" }, saved, removeAll))),
+        row("Delete all frames", "The sessions stay but their frames are deleted.", h("span", { class: "cell" }, saved, removeAll))),
 
-      section("Face Recognition", "Who is looking at the kiosk, from the faces enrolled on the People page."),
+      section("Face Recognition", "Settings for matching faces to the faces enrolled on the People page."),
       h("div", { class: "card" },
-        row("Threshold", `How close a face has to be to count as someone enrolled. Higher means fewer mix-ups and more unknown faces. Each vision model has its own, ${s.default_face_threshold} by default.`,
+        row("Threshold", `How close a face has to be to count as someone enrolled. Higher means fewer mix-ups and more unknown faces. Each vision model has its own threshold. The default is ${s.default_face_threshold}.`,
           number("fthr", s.face_threshold, "face_threshold"), "fthr"),
-        row("Faces enrolled", "People with a face, out of everyone on the People page.",
+        row("Faces enrolled", "How many people on the People page have a face enrolled.",
           h("a", { class: "val", href: "#/people" }, String(s.faces_enrolled))),
-        hint("A name needs a face looking at the kiosk on two looks in a row, or one very close match. Each kiosk turns Face Recognition on in Kiosk Satellite, under Ground Control, Vision Match.")),
+        hint("A name needs a face looking at the kiosk on two looks in a row or one very close match. Turn Face Recognition on for each kiosk in Kiosk Satellite under Ground Control > Vision Match.")),
     ];
   };
 
@@ -235,12 +235,12 @@ export async function render({ area } = {}) {
   const general = () => [
     section("Engine", "Where voices are checked."),
     h("div", { class: "card" },
-      row("Runs on", s.cuda && !s.on_gpu ? "CUDA is on, but no GPU is usable, so the CPU is used." : "Set by the CUDA option.",
+      row("Runs on", s.cuda && !s.on_gpu ? "CUDA is on but no GPU is usable, so the CPU is used." : "Set by the CUDA option.",
         chip(s.on_gpu ? "NVIDIA GPU (CUDA)" : "CPU", s.on_gpu ? "c-ok" : "")),
       row("Threads", "Threads per check. Set in the app's options.", h("span", { class: "val" }, String(s.threads))),
       hint("CUDA is available in the Docker image on a machine with an NVIDIA GPU.")),
 
-    section("Sessions", "Saved sessions, for the Sessions page."),
+    section("Sessions", "The sessions shown on the Sessions page."),
     h("div", { class: "card" },
       row("Keep sessions for", "Older sessions, their audio and their frames are deleted.",
         (() => {
@@ -257,9 +257,9 @@ export async function render({ area } = {}) {
       row("Speaker in the agent's instructions", "Paste at the end of the agent's instructions in Home Assistant.",
         h("button", { class: "ib", "aria-label": "Copy the template", onclick: () => copy(TEMPLATE) }, icon("copy"))),
       h("pre", { class: "code" }, TEMPLATE),
-      hint("The agent needs the Assist API, and each kiosk's Speaker sensor exposed to Assist.")),
+      hint("The agent needs the Assist API and each kiosk's Speaker sensor exposed to Assist.")),
 
-    section("Kiosks", "Kiosks on the same network find the service on their own. Each signs in with its Home Assistant token, so there is nothing else to enter."),
+    section("Kiosks", "Kiosks on the same network connect automatically with their Home Assistant token, so there is nothing to enter."),
     h("div", { class: "card" },
       row("Address", "For a kiosk on another network, enter this in Kiosk Satellite.",
         h("span", { class: "cell" }, h("span", { class: "val" }, host),
