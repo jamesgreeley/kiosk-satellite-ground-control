@@ -277,11 +277,12 @@ The GPU needs to be from the GTX 10 series or newer. The host needs an NVIDIA dr
 1. **Open Ground Control.** If you installed the Home Assistant app, it's in the sidebar. If you run the container, open port 10900 and select **Log in with Home Assistant**.
 2. **Connect your kiosks.** Ground Control is discovered automatically on the same network. For a kiosk on another network, enter the address from **Settings > General > Kiosks** in Kiosk Satellite. Approve each new kiosk on the Kiosks page. Ground Control only accepts kiosks running Kiosk Satellite.
 3. **Enroll people.** Add each person on the People page, then enroll their voice on a kiosk of every kind they talk to.
-4. **Turn on what you want.** In Kiosk Satellite, under **Settings > Ground Control > Voice Match**, choose who each kiosk answers and turn on **Enable Trimming** and **Enable Isolation**. Turn on Isolation in Ground Control's settings too.
+4. **Turn on Voice Match.** In Kiosk Satellite, under **Settings > Ground Control > Voice Match**, choose who each kiosk answers and turn on **Enable Trimming** and **Enable Isolation**. Turn on Isolation in Ground Control's settings too.
+5. **Turn on Vision Match.** On each kiosk with a camera, turn on **Enable Vision Match** in Kiosk Satellite under **Settings > Ground Control > Vision Match**. Face Detection, Face Recognition and Hand Gestures are on by default. Then enroll each person's face from their page on the People page.
 
 ## Documentation
 
-- [Getting started](docs/getting-started.md): the steps from installing Ground Control to recognizing who is talking at a kiosk.
+- [Getting started](docs/getting-started.md): the steps from installing Ground Control to recognizing who is talking to a kiosk and who is looking at it.
 - [Installation](docs/installation.md): the Home Assistant app, Docker on a CPU or an NVIDIA GPU, options and updating.
 - [Kiosks](docs/kiosks.md): connecting and approving kiosks, kiosks on another network and each kiosk's page.
 - [People](docs/people.md): adding people, enrollment and personal commands.

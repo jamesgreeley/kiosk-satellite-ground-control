@@ -4,6 +4,7 @@ You need:
 
 - Kiosks running [Kiosk Satellite](https://github.com/jxlarrea/kiosk-satellite) with Voice Satellite's native runtime and wake word detection on.
 - Home Assistant, which Ground Control and the kiosks sign in to.
+- For Vision Match, kiosks with a camera and **Enable camera** on under **Settings > Camera** in Kiosk Satellite.
 - A machine for Ground Control: Home Assistant itself or any computer or server on the same network. See [Choosing a Machine](installation.md#choosing-a-machine).
 
 ## 1. Install Ground Control
@@ -43,9 +44,23 @@ To have a kiosk answer only some people, set **Answer** to **Chosen people** and
 
 See [Voice Match](voice-match.md).
 
-## 5. Try It
+## 5. Turn On Vision Match
+
+On each kiosk with a camera, in Kiosk Satellite, go to **Settings > Ground Control > Vision Match** and turn on **Enable Vision Match**. **Enable Face Detection**, **Enable Face Recognition** and **Enable Hand Gestures** are on by default. Face Detection then dismisses or postpones the screensaver with **Dismiss on face** and **Postpone on face** under **Settings > Screensaver > Face Detection**. Hand Gestures run the **Show fingers** gestures under **Settings > Gestures**.
+
+To enroll a face:
+
+1. In Ground Control, open **People** and pick the person.
+2. In their **Vision Match** card, pick a kiosk under **Enroll on a kiosk** and choose **Enroll face**. You can also start it on the kiosk with **Enroll a face** under **Settings > Ground Control > Vision Match**.
+3. They follow the steps on the kiosk for about half a minute: look at the screen, turn a little to each side and take a step back.
+
+Face Recognition is a convenience and not a lock, since a photo of an enrolled person can be recognized as them. See [Vision Match](vision-match.md).
+
+## 6. Try It
 
 Say the wake word and a command with a TV on. On the kiosk, the name of the person talking shows before the command. In Ground Control, the kiosk's page shows each voice check as it happens. The session also shows up on the **Sessions** page with what was sent to the assistant.
+
+With Vision Match on, walk up to the kiosk and look at it. A card on the kiosk shows the person recognized and the kiosk's **Face** sensor in Home Assistant shows their name. The kiosk's page in Ground Control shows each look under **What it sees**. The vision session shows up on the **Sessions** page with the faces and hands seen and what the kiosk did.
 
 If something doesn't work as expected, see [Logs and Issues](logs.md).
 
