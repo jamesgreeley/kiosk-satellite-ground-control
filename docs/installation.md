@@ -16,7 +16,7 @@ Every Voice Match feature runs on the Ground Control machine instead of the kios
 
 See [Performance Benchmarks](../README.md#performance-benchmarks) for the measured times. Isolation is optional, so a small machine still runs Recognition, Trimming and the Wake Word Aligner.
 
-On amd64, the CUDA image works with NVIDIA GPUs from the GTX 10 series (Pascal) to the RTX 50 series (Blackwell). On arm64, it works with the GB10 and other Blackwell boards. It needs 1 GB of free GPU memory or 2.5 GB with Isolation.
+On amd64, the CUDA image works with NVIDIA GPUs from the GTX 10 series (Pascal) to the RTX 50 series (Blackwell). On arm64, it works with the GB10 and other Blackwell boards. It needs 1 GB of free GPU memory or 2.5 GB with Isolation. Vision Match needs about 0.5 GB more.
 
 ## Home Assistant App
 
@@ -105,7 +105,7 @@ Ground Control picks the Accurate speaker model automatically on an Apple chip. 
 
 The CUDA image needs:
 
-- An NVIDIA GPU with 1 GB of free memory or 2.5 GB with Isolation. On amd64, it can be any GPU from the GTX 10 series (Pascal) to the RTX 50 series (Blackwell). On arm64, it can be the GB10 or another Blackwell board.
+- An NVIDIA GPU with 1 GB of free memory or 2.5 GB with Isolation, and about 0.5 GB more for Vision Match. On amd64, it can be any GPU from the GTX 10 series (Pascal) to the RTX 50 series (Blackwell). On arm64, it can be the GB10 or another Blackwell board.
 - An NVIDIA driver from the 570 series or newer on amd64 or 580 or newer on arm64.
 - The [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) on the host.
 

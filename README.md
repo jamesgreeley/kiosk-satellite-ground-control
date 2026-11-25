@@ -25,7 +25,7 @@
 
 Ground Control is a companion service for [Kiosk Satellite](https://github.com/jxlarrea/kiosk-satellite). It runs on a computer or server in your home and handles the voice and vision processing that kiosks don't have the computing power for. Install it as a Home Assistant app or run it in Docker on a CPU or an NVIDIA GPU.
 
-Kiosk Satellite Ground Control currently has two components. **Voice Match** handles speaker voice recognition, trimming, wake word alignment and isolation. **Vision Match** handles facial recognition (coming soon).
+Kiosk Satellite Ground Control currently has two components. **Voice Match** handles speaker voice recognition, trimming, wake word alignment and isolation. **Vision Match** handles face detection, hand gestures and face recognition.
 
 <p align="center">
   <a href="assets/screenshots/people.png"><img src="assets/screenshots/people.png" alt="Ground Control People" width="650" /></a>
@@ -73,13 +73,35 @@ https://github.com/user-attachments/assets/4485f1fc-af2a-4d17-a7de-2b0b3ebe7f3f
 
 ## Vision Match
 
-Coming soon.
+Vision Match runs Kiosk Satellite's camera features on Ground Control. The camera and motion detection stay on the kiosk. When something moves, the kiosk sends a camera frame to Ground Control and gets back what is in it. A kiosk that is too slow for these models or can't run them, like an Echo Show 5 or an Android 7 tablet, gets the same features as a fast one. Turn it on for each kiosk in Kiosk Satellite under **Settings > Ground Control > Vision Match**.
+
+### Face Detection
+
+The faces looking at the kiosk are found on Ground Control, so a face can dismiss or postpone the screensaver. A face looking at the screen is told apart from a head turned away. On kiosk frames from 1 to 3 m, a head turned away passed as a face looking at the screen in 10% of frames. With the models on the kiosk it was 82%.
+
+### Hand Gestures
+
+For Show fingers gestures, the fingers held up on a raised hand are counted on Ground Control. On the same frames the finger count was right in 91 to 96% of frames, compared to 28% with the models on the kiosk. **Hand sensitivity** under **Settings > Vision Match** sets the smallest hand that counts, so a hand cut off at the edge of the frame doesn't trigger a gesture.
+
+### Face Recognition
+
+Enroll each person's face once on the People page with a guided capture of about half a minute through a kiosk's camera. After that, the kiosk's **Face** sensor in Home Assistant shows who is at the kiosk and its **People in view** sensor lists everyone recognized. With Kiosk Satellite's settings you can then:
+
+- Dismiss the screensaver only for the people you choose.
+- Skip the kiosk PIN or turn Lockdown Mode off for chosen people.
+- Accept a voice that is close to someone's voiceprint when their face is at the kiosk.
+
+Cards on the kiosk screen show who was recognized and what happened because of it. A Face event in Home Assistant fires when someone arrives at the kiosk and when they leave. Ground Control keeps only small pictures of each enrolled face.
+
+Face Recognition is a convenience for the people who live with the kiosk. It is not a lock, since a photo of an enrolled person can be recognized as them. See [Not a Lock](docs/people.md#not-a-lock).
 
 ## Performance Benchmarks
 
+### Voice Match
+
 These tables show how much latency each feature adds to a 5-second command.
 
-### CPU
+#### CPU
 
 | | Raspberry Pi 4 | Intel N100 | Intel N100 | i9-13900H | MacBook Pro M5 |
 |---|---|---|---|---|---|
@@ -92,7 +114,7 @@ These tables show how much latency each feature adds to a 5-second command.
 
 These numbers use the CPU image with Ground Control's default threads. That is 2 threads on the Pi and the N100 and 4 on the others. The MacBook Pro runs it in Docker Desktop.
 
-### NVIDIA GPU (CUDA)
+#### NVIDIA GPU (CUDA)
 
 | | RTX 3050 | RTX 4000 SFF Ada | GB10 |
 |---|---|---|---|
@@ -105,7 +127,7 @@ These numbers use the CPU image with Ground Control's default threads. That is 2
 
 These numbers use the CUDA image with CUDA 12 on the RTX 3050 and the RTX 4000 and CUDA 13 on the GB10. Isolation's time depends on the GPU's compute, so a GPU with about half the compute takes about twice as long. `KEEP_GPU_MEMORY` is on for the GB10. It keeps Isolation's GPU memory between commands (see [GPU Memory](docs/installation.md#gpu-memory)). Without it, Isolation takes 0.16 s there. The Wake Word Aligner runs on the machine's CPU even in the CUDA image.
 
-### GPU Memory
+#### GPU Memory
 
 This table shows how much GPU memory the CUDA image uses with the Accurate speaker model. It was measured on the RTX 4000 SFF Ada and the GB10.
 
@@ -118,7 +140,7 @@ This table shows how much GPU memory the CUDA image uses with the Accurate speak
 
 Ground Control keeps the first two amounts for as long as it runs. The memory a command adds is freed once the command is done. See [GPU Memory](docs/installation.md#gpu-memory).
 
-### How It Is Measured
+#### How It Is Measured
 
 Each test sends a 5 s command between stretches of TV through Ground Control's own code in real time just like a kiosk does.
 
@@ -132,7 +154,63 @@ Each test sends a 5 s command between stretches of TV through Ground Control's o
 
 The Accurate model makes the fewest mix-ups between people and with TV voices. The Light model uses about a third of the CPU. With Light, a TV voice cutting in ends the command about a second later. Ground Control picks Accurate on an NVIDIA GPU, an Apple M-series chip or an x86 CPU with more than 4 cores. It picks Light on other ARM CPUs and smaller x86 CPUs like the N100. You can change it under **Settings > Voice Match** without re-enrolling anyone.
 
-On amd64, the CUDA image works with NVIDIA GPUs from the GTX 10 series (Pascal) to the RTX 50 series (Blackwell). On arm64, it works with the GB10 and other Blackwell boards. It needs 1 GB of free GPU memory or 2.5 GB with Isolation.
+On amd64, the CUDA image works with NVIDIA GPUs from the GTX 10 series (Pascal) to the RTX 50 series (Blackwell). On arm64, it works with the GB10 and other Blackwell boards. It needs 1 GB of free GPU memory or 2.5 GB with Isolation. Vision Match needs about 0.5 GB more.
+
+### Vision Match
+
+These tables show how long Ground Control takes for one camera look.
+
+#### CPU
+
+| | Raspberry Pi 4 | Intel N100 | MacBook Pro M5 |
+|---|---|---|---|
+| Vision model | Light | Light | Light |
+| Face Detection | 386 ms | 81 ms | 18 ms |
+| Hand Gestures | 455 ms | 94 ms | 20 ms |
+| Face Recognition | 78 ms | 22 ms | 5 ms |
+| **All features** | **913 ms** | **194 ms** | **42 ms** |
+| Looks a second | 1.1 | 5.2 | 23.6 |
+
+These numbers use the CPU image with Ground Control's default threads. That is 2 threads on the Pi and the N100 and 4 on the MacBook Pro, which runs it in Docker Desktop. The CPU image has the Light vision model only.
+
+#### NVIDIA GPU (CUDA)
+
+| | RTX 4000 SFF Ada | GB10 |
+|---|---|---|
+| Vision model | Accurate | Accurate |
+| Face Detection | 6 ms | 9 ms |
+| Hand Gestures | 12 ms | 13 ms |
+| Face Recognition | 3 ms | 5 ms |
+| **All features** | **20 ms** | **24 ms** |
+| Looks a second | 49.5 | 41.5 |
+
+These numbers use the CUDA image with CUDA 12 on the RTX 4000 and CUDA 13 on the GB10. Reading the JPEG runs on the machine's CPU even in the CUDA image.
+
+#### GPU Memory
+
+This table shows how much GPU memory the CUDA image uses with the Accurate vision model. It was measured on the RTX 4000 SFF Ada and the GB10.
+
+| | amd64 image (CUDA 12) | arm64 image (CUDA 13) |
+|---|---|---|
+| Kept, Vision Match only | 0.7 GB | 0.7 GB |
+| Kept, with Voice Match | 1.1 GB | 1.2 GB |
+| Most during a command, with Voice Match | 1.2 GB | 1.3 GB |
+| Kept, with Voice Match and Isolation | 1.3 GB | 1.4 GB |
+| Most during a command, with Voice Match and Isolation | 2.8 GB | 2.9 GB |
+
+The vision models load when the first kiosk asks for a look. Ground Control then keeps their memory for as long as it runs. A look adds nothing to it. Voice Match uses the Accurate speaker model in these numbers.
+
+#### How It Is Measured
+
+Each test sends 64 frames from an Echo Show 5's camera through Ground Control's own code just like a kiosk does. They are 640x480 JPEGs, the size Kiosk Satellite sends, and each one has a face looking at the camera and a raised hand.
+
+- **Face Detection** is a look for faces alone. **Hand Gestures** is a look for hands alone. Both include reading the JPEG.
+- **Face Recognition** is the time to recognize one face once it is found. Once someone is recognized, their face is checked again only every 2 seconds.
+- **All features** is one look with Face Detection, Face Recognition and Hand Gestures. That is the longest a look takes.
+- **Looks a second** is how many of those looks Ground Control keeps up with. A kiosk sends one frame at a time and only after something moves, so several kiosks can share them.
+- On a Pi 4, Face Detection dismisses the screensaver about a second after a face looks at the kiosk. Hand Gestures feel slow there because a gesture needs more than one look.
+
+The Accurate model gets the finger count right more often and recognizes faces better in dim light. It needs an NVIDIA GPU. Ground Control picks Accurate when it has one and Light otherwise. You can change it under **Settings > Vision Match** without enrolling any faces again.
 
 ## Install
 
