@@ -259,6 +259,9 @@ async function detail(kiosk, people, status, onKiosk) {
         break;
       case "vision_outcome":
         if (e.what === "gesture") addLog(`${fingers(e.fingers ?? 0)} gesture`, e.action ? `${e.action}.` : "");
+        else if (e.what === "pin_skipped") addLog(`${e.mode === "lockdown" ? "Lockdown" : "Kiosk"} PIN skipped`, e.name ? `For ${e.name}.` : "");
+        else if (e.what === "lockdown_off") addLog("Lockdown off", e.name ? `${e.name} was recognized.` : "");
+        else if (e.what === "lockdown_on") addLog("Lockdown on", "Nobody chosen was recognized for 10 seconds.");
         else addLog(e.what === "screensaver_dismissed" ? "Screensaver dismissed" : "Screensaver postponed", "");
         break;
       case "vision_end":

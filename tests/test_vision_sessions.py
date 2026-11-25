@@ -145,3 +145,22 @@ def test_a_reading_on_one_look_is_a_hand_moving():
     readings = [(e["t"], e["fingers"]) for e in record["events"] if e["type"] == "fingers"]
     assert readings == [(0.3, 0)]
     assert [f["reason"] for f in record["frames"]] == ["first", "reading", "last"]
+
+
+def test_a_skipped_pin_and_lockdown_by_face_are_recorded():
+    t, saved = tracker()
+    t.look(1, ("face",), [FACE], None, MS, b"x", now=0.0)
+    t.outcome({"what": "pin_skipped", "mode": "lockdown", "name": "Ana"}, now=1.0)
+    t.outcome({"what": "lockdown_off", "name": "Ana"}, now=1.5)
+    t.outcome({"what": "pin_skipped", "mode": "other", "name": "Leo"}, now=2.0)
+    t.outcome({"what": "lockdown_on"}, now=3.0)
+    t.close("closed", 5.0)
+    record = saved[0][0]
+    events = [e for e in record["events"] if e["type"] in ("pin_skipped", "lockdown_off", "lockdown_on")]
+    assert events == [
+        {"type": "pin_skipped", "t": 1.0, "name": "Ana", "mode": "lockdown"},
+        {"type": "lockdown_off", "t": 1.5, "name": "Ana"},
+        {"type": "pin_skipped", "t": 2.0, "name": "Leo", "mode": "kiosk"},
+        {"type": "lockdown_on", "t": 3.0},
+    ]
+    assert record["summary"][:4] == ["Lockdown PIN skipped", "Lockdown off", "Kiosk PIN skipped", "Lockdown on"]

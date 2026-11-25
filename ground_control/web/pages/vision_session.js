@@ -16,10 +16,13 @@ const REASONS = {
 /** A face looking at the kiosk, on a frame: green, like a connected kiosk. */
 const FACING = "#4f9a55";
 
-const OUTCOMES = ["screensaver_dismissed", "screensaver_postponed", "gesture"];
+const OUTCOMES = ["screensaver_dismissed", "screensaver_postponed", "gesture", "pin_skipped", "lockdown_off", "lockdown_on"];
 
 function outcomeLabel(e) {
   if (e.type === "gesture") return `${fingers(e.fingers ?? 0)}${e.action ? ` → ${e.action}` : ""}`;
+  if (e.type === "pin_skipped") return `${e.mode === "lockdown" ? "Lockdown" : "Kiosk"} PIN skipped`;
+  if (e.type === "lockdown_off") return "Lockdown off";
+  if (e.type === "lockdown_on") return "Lockdown on";
   return e.type === "screensaver_dismissed" ? "Screensaver dismissed" : "Screensaver postponed";
 }
 
@@ -115,6 +118,12 @@ function steps(record) {
     if (e.type === "fingers") out.push([`${fingers(e.fingers)} read`, `Read as ${e.gesture} on two looks in a row.`, e.t]);
     if (e.type === "screensaver_dismissed") out.push(["Screensaver dismissed", "The kiosk woke the screen for the face looking at it.", e.t]);
     if (e.type === "screensaver_postponed") out.push(["Screensaver postponed", "Someone was still in front of the kiosk.", e.t]);
+    if (e.type === "pin_skipped") {
+      out.push([outcomeLabel(e), `${e.name || "A chosen person"} was recognized at the kiosk, so ${e.mode === "lockdown"
+        ? "Lockdown Mode was turned off" : "the menu opened"} after the exit gesture without the PIN.`, e.t]);
+    }
+    if (e.type === "lockdown_off") out.push(["Lockdown off", `${e.name || "A chosen person"} was recognized at the kiosk, so Lockdown Mode was turned off.`, e.t]);
+    if (e.type === "lockdown_on") out.push(["Lockdown on", "Nobody chosen was recognized for 10 seconds, so Lockdown Mode was turned on.", e.t]);
     if (e.type === "gesture") out.push([`${fingers(e.fingers ?? 0)} gesture`, e.action ? `${e.action}.` : "The kiosk ran the gesture's action.", e.t]);
     if (e.type === "recognized") out.push([`${e.name || "Someone"} recognized`, `Score ${e.score} against their enrolled face.${e.at_kiosk === false ? " They were in view while someone else was at the kiosk." : ""}`, e.t]);
     if (e.type === "end") out.push(["End", `${ENDS[e.reason] || "Ended"}.`, e.t]);

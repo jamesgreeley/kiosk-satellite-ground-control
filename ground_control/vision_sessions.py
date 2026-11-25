@@ -40,6 +40,12 @@ def _spread(values: list[float]) -> dict[str, float | None]:
     return {"p50": _pct(values, 0.5), "p95": _pct(values, 0.95), "max": round(max(values), 1) if values else None}
 
 
+OUTCOMES = ("screensaver_dismissed", "screensaver_postponed", "gesture", "pin_skipped", "lockdown_off", "lockdown_on")
+"""What a kiosk reports doing for a vision session: the screensaver dismissed
+or postponed, a finger gesture's action, the kiosk or lockdown PIN skipped
+for a recognized person and Lockdown Mode turned off or on by faces."""
+
+
 @dataclass
 class _Frame:
     n: int
@@ -231,7 +237,7 @@ class VisionTracker:
             return
         now = self._clock() if now is None else now
         what = message.get("what")
-        if what not in ("screensaver_dismissed", "screensaver_postponed", "gesture"):
+        if what not in OUTCOMES:
             return
         # Postponing repeats while someone stays: the first one says it.
         if what == "screensaver_postponed" and any(e["type"] == what for e in s.events):
@@ -242,6 +248,11 @@ class VisionTracker:
                 event["fingers"] = message["fingers"]
             if isinstance(message.get("action"), str):
                 event["action"] = message["action"][:120]
+        if what in ("pin_skipped", "lockdown_off"):
+            if isinstance(message.get("name"), str):
+                event["name"] = message["name"][:60]
+            if what == "pin_skipped":
+                event["mode"] = "lockdown" if message.get("mode") == "lockdown" else "kiosk"
         s.events.append(event)
         # The frame the kiosk acted on: the last look before the outcome.
         if what in ("gesture", "screensaver_dismissed") and s.last is not None and self._keep_frames() \
@@ -360,6 +371,12 @@ def summary(events: list[dict[str, Any]], stats: dict[str, Any]) -> list[str]:
             out.append("Screensaver dismissed")
         elif e["type"] == "screensaver_postponed" and "Screensaver postponed" not in out:
             out.append("Screensaver postponed")
+        elif e["type"] == "pin_skipped":
+            out.append(f"{'Lockdown' if e.get('mode') == 'lockdown' else 'Kiosk'} PIN skipped")
+        elif e["type"] == "lockdown_off":
+            out.append("Lockdown off")
+        elif e["type"] == "lockdown_on":
+            out.append("Lockdown on")
         elif e["type"] == "gesture":
             n = e.get("fingers")
             what = f"{n} finger{'s' if n != 1 else ''}" if n is not None else "Gesture"
