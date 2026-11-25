@@ -63,6 +63,8 @@ Only small pictures of the face, lined up and 112 pixels wide, are kept, so a ch
 
 A face looking at the kiosk is compared with every enrolled face. A name needs two looks in a row above the **Threshold** under **Settings > Vision Match > Face Recognition**, or one very close match, and the best match has to be clearly ahead of the next person. Once named, the face is checked again every 2 seconds. With no face looking at the kiosk for 3 seconds, nobody is in front of it.
 
+Up to three faces looking at the kiosk are recognized at once, each followed from look to look by where it is. The person at the kiosk is the one with the highest score. Someone else takes over only after they score higher two checks in a row, or when the person at the kiosk leaves, so two people side by side don't make it flip. The kiosk's **Face** sensor names the person at the kiosk and its **People in view** sensor everyone recognized. The kiosk's page and the vision sessions show the others in view too.
+
 ## Color
 
 **Color on the kiosk** is the person's color: the name before a command on the voice overlay, the listening arc on a device with a light ring and the person's marks in the Ground Control app.

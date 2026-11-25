@@ -102,6 +102,10 @@ async def test_kiosk_gets_people_and_enroll_commands(client):
     assert r.status == 200
     cmd = await next_of(kiosk, "enroll")
     assert cmd["person_id"] == leo["id"] and cmd["name"] == "Leo" and cmd["color"] == leo["color"]
+    # A face capture stopped from the app.
+    assert (await client.post("/api/kiosks/k1/enroll_stop", headers=GOOD)).status == 200
+    await next_of(kiosk, "enroll_face_stop")
+    assert (await client.post("/api/kiosks/nope/enroll_stop", headers=GOOD)).status == 409
 
     # A kiosk that can't start says why, and the web UI hears it.
     events = await client.ws_connect("/api/events")

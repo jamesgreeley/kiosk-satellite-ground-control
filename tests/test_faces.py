@@ -53,16 +53,20 @@ def test_enrollments_build_faceprints_and_deleting_one_rebuilds(tmp_path):
     assert faces.faceprints("light")[0] == [] and not faces.has_face("p1")
 
 
+BOX = [0.4, 0.2, 0.1, 0.15]
+LEFT, RIGHT = [0.1, 0.2, 0.1, 0.15], [0.7, 0.2, 0.1, 0.15]
+
+
 def test_a_name_needs_two_looks_unless_the_first_is_sure():
     ids, prints = ["ana", "leo"], np.stack([unit(0), unit(1)])
     near = (unit(0) * 0.45 + unit(2) * 0.89)
     near /= np.linalg.norm(near)
     r = Recognizer(threshold=0.4)
-    assert r.add(near, ids, prints, 0.0).person_id is None
-    assert r.add(near, ids, prints, 0.5).person_id == "ana"
+    assert r.add([(BOX, near)], ids, prints, 0.0).person_id is None
+    assert r.add([(BOX, near)], ids, prints, 0.5).person_id == "ana"
     sure = Recognizer(threshold=0.4)
     v = unit(0) * (0.4 + SURE_ABOVE + 0.05) + unit(2) * 0.6
-    assert sure.add(v / np.linalg.norm(v), ids, prints, 0.0).person_id == "ana"
+    assert sure.add([(BOX, v / np.linalg.norm(v))], ids, prints, 0.0).person_id == "ana"
 
 
 def test_two_people_too_close_to_tell_apart_stay_unknown():
@@ -70,19 +74,53 @@ def test_two_people_too_close_to_tell_apart_stay_unknown():
     v = unit(0) + unit(1) * (1 - MARGIN / 2)
     r = Recognizer(threshold=0.3)
     for t in range(3):
-        m = r.add(v / np.linalg.norm(v), ids, prints, t * 0.3)
+        m = r.add([(BOX, v / np.linalg.norm(v))], ids, prints, t * 0.3)
     assert m.person_id is None
 
 
 def test_a_named_face_is_rechecked_and_forgotten_when_gone():
     ids, prints = ["ana"], unit(0)[None]
     r = Recognizer(threshold=0.4)
-    r.add(unit(0), ids, prints, 0.0)
+    r.add([(BOX, unit(0))], ids, prints, 0.0)
     assert r.current.person_id == "ana"
     assert not r.wants(RECHECK_S / 2) and r.wants(RECHECK_S + 0.1)
-    r.seen(1.0)
+    r.seen([BOX], 1.0)
     assert not r.tick(1.0 + GONE_S - 0.1)
-    assert r.tick(1.0 + GONE_S + 0.1) and r.current is None
+    assert r.tick(1.0 + GONE_S + 0.1) and r.current is None and r.people == []
+
+
+def _toward(i: int, score: float) -> np.ndarray:
+    v = unit(i) * score + unit(7) * (1 - score ** 2) ** 0.5
+    return v / np.linalg.norm(v)
+
+
+def test_each_face_is_named_and_the_highest_score_is_at_the_kiosk():
+    ids, prints = ["ana", "leo"], np.stack([unit(0), unit(1)])
+    r = Recognizer(threshold=0.4)
+    r.add([(LEFT, _toward(0, 0.95)), (RIGHT, _toward(1, 0.7))], ids, prints, 0.0)
+    assert r.current.person_id == "ana"
+    assert [m.person_id for m in r.people] == ["ana", "leo"]
+
+
+def test_a_close_second_takes_over_only_after_two_checks_in_a_row():
+    ids, prints = ["ana", "leo"], np.stack([unit(0), unit(1)])
+    r = Recognizer(threshold=0.4)
+    r.add([(LEFT, _toward(0, 0.8)), (RIGHT, _toward(1, 0.6))], ids, prints, 0.0)
+    assert r.current.person_id == "ana"
+    # Leo steps closer and scores higher, one check is not enough.
+    r.add([(LEFT, _toward(0, 0.6)), (RIGHT, _toward(1, 0.95))], ids, prints, 2.1)
+    assert r.current.person_id == "ana"
+    r.add([(LEFT, _toward(0, 0.6)), (RIGHT, _toward(1, 0.95))], ids, prints, 4.2)
+    assert r.current.person_id == "leo"
+
+
+def test_when_the_person_at_the_kiosk_leaves_the_next_one_takes_over():
+    ids, prints = ["ana", "leo"], np.stack([unit(0), unit(1)])
+    r = Recognizer(threshold=0.4)
+    r.add([(LEFT, _toward(0, 0.9)), (RIGHT, _toward(1, 0.7))], ids, prints, 0.0)
+    r.seen([RIGHT], 2.0)
+    assert r.tick(GONE_S + 0.5)
+    assert r.current.person_id == "leo" and [m.person_id for m in r.people] == ["leo"]
 
 
 def _face(yaw_deg: float, width: float, cx: float = 0.5, flip: bool = False) -> dict:

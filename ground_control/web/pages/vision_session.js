@@ -116,7 +116,7 @@ function steps(record) {
     if (e.type === "screensaver_dismissed") out.push(["Screensaver dismissed", "The kiosk woke the screen for the face looking at it.", e.t]);
     if (e.type === "screensaver_postponed") out.push(["Screensaver postponed", "Someone was still in front of the kiosk.", e.t]);
     if (e.type === "gesture") out.push([`${fingers(e.fingers ?? 0)} gesture`, e.action ? `${e.action}.` : "The kiosk ran the gesture's action.", e.t]);
-    if (e.type === "recognized") out.push([`${e.name || "Someone"} recognized`, `Face Recognition, score ${e.score} against their face.`, e.t]);
+    if (e.type === "recognized") out.push([`${e.name || "Someone"} recognized`, `Face Recognition, score ${e.score} against their face.${e.at_kiosk === false ? " In view, with someone else at the kiosk." : ""}`, e.t]);
     if (e.type === "end") out.push(["End", `${ENDS[e.reason] || "Ended"}.`, e.t]);
   }
   return out.sort((a, b) => a[2] - b[2]).map(([title, desc, t]) => h("div", { class: "row" },

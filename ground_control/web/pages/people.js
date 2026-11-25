@@ -132,18 +132,21 @@ function faceThumbs(p) {
     }));
 }
 
-/** The capture's live progress: the kiosk, the step, how far and what to fix. */
-function captureView() {
+/** The capture's live progress: the kiosk, the step, how far and what to fix, and Stop. */
+function captureView(onStop) {
   const where = h("div", { class: "cwhere" });
   const step = h("div", { class: "cstep" });
   const segs = h("div", { class: "csegs", "aria-hidden": "true" });
   const have = h("span", {});
   const hint = h("span", { class: "chip c-warn", hidden: true });
+  const stop = h("button", { class: "btn out sm", onclick: async () => { stop.disabled = true; await onStop(); } }, "Stop");
   const node = h("div", { class: "capture", role: "status", "aria-live": "polite", hidden: true },
-    where, step, segs, h("div", { class: "cline" }, have, hint),
-    h("div", { class: "fnote" }, "To stop it early, use Stop on the kiosk. The pictures from a finished first step are kept."));
+    h("div", { class: "chead" }, h("div", { class: "grow" }, where, step), stop),
+    segs, h("div", { class: "cline" }, have, hint),
+    h("div", { class: "fnote" }, "Stop keeps the pictures from a finished first step."));
   const show = (e, kiosk) => {
     node.hidden = false;
+    stop.disabled = false;
     const steps = e.steps || 4;
     const i = Math.min(e.step_index ?? 0, steps - 1);
     where.textContent = `On ${kiosk}. Step ${i + 1} of ${steps}.`;
@@ -160,6 +163,7 @@ function captureView() {
   };
   const starting = (kiosk) => {
     node.hidden = false;
+    stop.disabled = false;
     where.textContent = `On ${kiosk}.`;
     step.textContent = "Waiting for the kiosk to start";
     segs.replaceChildren();
@@ -186,7 +190,12 @@ function visionCard(p, kiosks, events) {
         : "Needs a connected kiosk with Face Recognition on.")),
     ready.length ? sel : null,
     go);
-  const live = captureView();
+  let capturing = null;
+  const live = captureView(async () => {
+    try {
+      await api(`api/kiosks/${encodeURIComponent(capturing)}/enroll_stop`, { method: "POST" });
+    } catch (err) { toast(err.message); }
+  });
 
   const running = (on) => {
     bar.hidden = on;
@@ -198,6 +207,7 @@ function visionCard(p, kiosks, events) {
       await api(`api/kiosks/${encodeURIComponent(sel.value)}/enroll`, { method: "POST", json: { person_id: p.id, kind: "face" } });
     } catch (err) { toast(err.message); return; }
     running(true);
+    capturing = sel.value;
     live.starting(name(sel.value));
   });
   // A capture for this person, started here, on the kiosk or from another browser.
@@ -205,6 +215,7 @@ function visionCard(p, kiosks, events) {
     let e;
     try { e = JSON.parse(m.data); } catch { return; }
     if (e.person_id !== p.id || !e.type?.startsWith("face_enroll_")) return;
+    if (e.device_id) capturing = e.device_id;
     if (e.type === "face_enroll_start") {
       running(true);
       live.show({ step: "look", step_index: 0, steps: e.steps?.length || 4, have: 0, need: e.steps?.[0]?.need || 0, hint: "ok" },

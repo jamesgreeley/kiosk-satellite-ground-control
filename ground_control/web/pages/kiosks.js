@@ -187,6 +187,7 @@ async function detail(kiosk, people, status, onKiosk) {
   // What the camera sees, while a vision session goes on: the last 10 seconds of looks.
   const seen = [];
   let viewer = null;
+  let others = [];
   const seeBox = h("div", { class: "now" });
   const strip = h("div", { class: "vlanes", style: { marginTop: "4px" } });
   const drawSeen = () => {
@@ -199,6 +200,7 @@ async function detail(kiosk, people, status, onKiosk) {
     const ms = lk ? Object.values(lk.ms || {}).reduce((a, b) => a + b, 0) : null;
     seeBox.replaceChildren(...[viewer ? disc(byId[viewer.id] || viewer) : h("span", { class: "disc vis" }, icon("eye", 20)),
       viewer ? h("span", { class: "big" }, viewer.name) : null,
+      others.length ? h("span", { class: "val" }, `also ${others.map((p) => p.name).join(", ")}`) : null,
       h("span", { class: "big" }, lk ? [face, hand].filter(Boolean).join(", ") || "No face" : "Nobody in front of it"),
       ms != null ? h("span", { class: "val" }, `${ms.toFixed(0)} ms`) : null].filter(Boolean));
     const end = Date.now() / 1000;
@@ -244,8 +246,10 @@ async function detail(kiosk, people, status, onKiosk) {
       case "enroll_saved": addLog("Enrollment saved", `${e.added_s} s of speech added.`); break;
       case "vision_person":
         viewer = e.person?.id ? e.person : null;
+        others = (e.people || []).filter((p) => p.id !== viewer?.id);
         drawSeen();
-        if (viewer) addLog(`${viewer.name} recognized`, `Face Recognition, score ${viewer.score}.`);
+        if (viewer) addLog(`${viewer.name} recognized`, `Face Recognition, score ${viewer.score}.${others.length
+          ? ` Also in view: ${others.map((p) => p.name).join(", ")}.` : ""}`);
         break;
       case "vision_start": seen.length = 0; addLog("Vision session started", "A face or a hand in front of the kiosk."); break;
       case "vision_look":

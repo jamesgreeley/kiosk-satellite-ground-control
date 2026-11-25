@@ -223,8 +223,11 @@ select.fld { appearance: none; -webkit-appearance: none; padding: 0 44px 0 14px;
 /* A face capture as it runs. */
 .capture { margin: 8px 20px 16px; padding: 16px; border-radius: 16px; background: var(--soft); display: flex; flex-direction: column; gap: 10px; }
 .capture[hidden] { display: none; }
+.chead { display: flex; align-items: center; gap: 12px; }
+.chead .grow { flex: 1 1 0; }
+.chead .btn { background: var(--surface); }
 .cwhere { font-size: 13px; font-weight: 600; color: var(--primary); }
-.cstep { font-size: 17px; font-weight: 500; margin-top: -6px; }
+.cstep { font-size: 17px; font-weight: 500; margin-top: 2px; }
 .csegs { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 6px; }
 .csegs span { height: 6px; border-radius: 3px; background: var(--outline); opacity: .6; overflow: hidden; }
 .csegs i { display: block; height: 100%; background: var(--fill); transition: width .3s; }

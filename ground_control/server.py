@@ -146,7 +146,7 @@ def _features(value: Any) -> dict[str, Any] | None:
     out: dict[str, Any] = {k: value[k] is True for k in
                            ("voice_match", "trimming", "isolation", "speaker_sensor", "show_speaker",
                             "vision_match", "face_detection", "hand_gestures", "face_recognition",
-                            "dismiss_on_face", "postpone_on_face") if k in value}
+                            "dismiss_on_face", "postpone_on_face", "face_confirms_voice") if k in value}
     gestures = value.get("finger_gestures")
     if isinstance(gestures, int) and not isinstance(gestures, bool) and 0 <= gestures <= 100:
         out["finger_gestures"] = gestures
@@ -396,8 +396,13 @@ async def session_ws(request: web.Request) -> web.WebSocketResponse:
         # A short answer is only for a reply to something Home Assistant
         # asked. A kiosk that doesn't say how the turn started: None.
         asked = wake["interaction"] in ASKED if "interaction" in wake else None
+        device = start.get("device_id")
+        known = vm.hub.kiosks.get(device) if isinstance(device, str) else None
+        feats = (known.features or {}) if known else {}
+        face = (lambda: vm.at_kiosk.get(device)) if feats.get("face_confirms_voice") and feats.get("face_recognition") \
+            else None
         session = await vm.run(vm.new_follow, policy, anchor, people, speaker, isolation, wake if first else None,
-                               asked)
+                               asked, face)
     else:
         session = vm.new_session(mode=mode, policy=policy, people=people, learn=start.get("learn"))
     device_id = start.get("device_id")
@@ -755,17 +760,21 @@ async def vision_ws(request: web.Request) -> web.WebSocketResponse:
         return {"id": p.id, "name": p.name, "color": p.color, "score": match.score} if p \
             else {"id": None, "name": None, "score": match.score}
 
-    async def tell_person() -> dict[str, Any] | None:
-        """The person in front of the kiosk, said once when it changes."""
+    async def tell_person() -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
+        """The person at the kiosk and everyone named, said once when either changes."""
         person = person_of(rec.current)
-        key = (person or {}).get("id"), person is None
+        people = [p for p in (person_of(m) for m in rec.people) if p and p["id"]]
+        key = (person or {}).get("id"), person is None, tuple(p["id"] for p in people)
         if key != shown.get("key"):
             shown["key"] = key
-            tracker.person(person)
-            vm.hub.publish({"type": "vision_person", "device_id": device_id, "person": person})
+            vm.at_kiosk[device_id] = (person or {}).get("id")
+            tracker.person(person, people)
+            vm.hub.publish({"type": "vision_person", "device_id": device_id, "person": person, "people": people})
             if person and person["id"]:
-                _LOG.info("%s is in front of %s (%.2f)", person["name"], who, person["score"])
-        return person
+                others = [p["name"] for p in people if p["id"] != person["id"]]
+                _LOG.info("%s is at %s (%.2f)%s", person["name"], who, person["score"],
+                          f", also in view: {', '.join(others)}" if others else "")
+        return person, people
 
     def flush() -> None:
         counts = tracker.take_counts()
@@ -776,9 +785,9 @@ async def vision_ws(request: web.Request) -> web.WebSocketResponse:
         while True:
             await asyncio.sleep(1.0)
             if rec.tick(time.time()):
-                await tell_person()
+                person, people = await tell_person()
                 if not ws.closed:
-                    await ws.send_json({"type": "person", "person": None})
+                    await ws.send_json({"type": "person", "person": person, "people": people})
             tracker.tick()
             flush()
 
@@ -813,12 +822,13 @@ async def vision_ws(request: web.Request) -> web.WebSocketResponse:
             if "hands" in job["want"]:
                 result["hand"] = look.hand
             if recognize and look.faces is not None:
-                if any(f["frontal"] for f in look.faces):
-                    rec.seen(now)
-                if look.embedding is not None:
+                facing = sorted((f["box"] for f in look.faces if f["frontal"]), key=lambda b: -b[2])
+                if facing:
+                    rec.seen(facing, now)
+                if look.embeddings:
                     ids, m = faceprints()
-                    rec.add(look.embedding, ids, m, now)
-                result["person"] = await tell_person()
+                    rec.add(look.embeddings, ids, m, now)
+                result["person"], result["people"] = await tell_person()
             _LOG.debug("vision %s frame %s: %s", who, job["id"], result)
             if not ws.closed:
                 await ws.send_json(result)
@@ -867,6 +877,7 @@ async def vision_ws(request: web.Request) -> web.WebSocketResponse:
         ticking.cancel()
         if forget_prints in vm.faces.on_change:
             vm.faces.on_change.remove(forget_prints)
+        vm.at_kiosk.pop(device_id, None)
         tracker.tick()
         tracker.close("closed")
         flush()
@@ -1197,6 +1208,20 @@ async def kiosk_enroll(request: web.Request) -> web.Response:
     return web.json_response({"sent": True})
 
 
+async def kiosk_enroll_stop(request: web.Request) -> web.Response:
+    """Stop a face capture running on a kiosk. The kiosk keeps what it has
+    when the first step was done, as its own Stop does."""
+    vm = request.app[VM]
+    device_id = request.match_info["device_id"]
+    kiosk = vm.hub.kiosks.get(device_id)
+    if kiosk is None or kiosk.access != "approved":
+        raise web.HTTPConflict(text="that kiosk isn't approved")
+    if not await vm.hub.send(device_id, {"type": "enroll_face_stop"}):
+        raise web.HTTPConflict(text="that kiosk isn't connected")
+    _LOG.info("asked %s to stop its face capture", _kiosk_name(vm, device_id))
+    return web.json_response({"sent": True})
+
+
 # ── people ────────────────────────────────────────────────────────────────
 
 async def people_list(request: web.Request) -> web.Response:
@@ -1510,6 +1535,7 @@ def build_app(vm: GroundControl, token_check: TokenCheck | None = None, mdns: bo
     r.add_delete("/api/sessions/{sid}", session_delete)
     r.add_get("/api/kiosks", kiosks_list)
     r.add_post("/api/kiosks/{device_id}/enroll", kiosk_enroll)
+    r.add_post("/api/kiosks/{device_id}/enroll_stop", kiosk_enroll_stop)
     r.add_post("/api/kiosks/{device_id}/access", kiosk_access)
     r.add_get("/api/settings", settings_get)
     r.add_patch("/api/settings", settings_update)

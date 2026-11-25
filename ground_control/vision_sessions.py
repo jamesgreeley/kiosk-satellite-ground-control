@@ -253,17 +253,22 @@ class VisionTracker:
                 kept.reason = what
         self._publish({**event, "type": "vision_outcome", "what": what, "device_id": self.device_id, "session": s.id})
 
-    def person(self, person: dict[str, Any] | None, now: float | None = None) -> None:
-        """Face Recognition named someone in front of the kiosk, or nobody."""
+    def person(self, person: dict[str, Any] | None, people: list[dict[str, Any]] | None = None,
+               now: float | None = None) -> None:
+        """Face Recognition named the person at the kiosk, or nobody, and
+        everyone else in view. Each person new to the session, or back at
+        the kiosk after someone else, is a ``recognized`` event."""
         s = self.current
         if s is None:
             return
+        now = self._clock() if now is None else now
         pid = (person or {}).get("id")
-        if pid and pid != s._person:
-            now = self._clock() if now is None else now
-            s.events.append({"type": "recognized", "t": s.t(now), "person_id": pid, "name": person.get("name"),
-                             "score": person.get("score")})
-            s.people[pid] = person.get("name") or pid
+        for p in ([person] if pid else []) + [p for p in people or [] if p.get("id") and p["id"] != pid]:
+            first = p["id"] not in s.people
+            if first or (p["id"] == pid and pid != s._person):
+                s.events.append({"type": "recognized", "t": s.t(now), "person_id": p["id"], "name": p.get("name"),
+                                 "score": p.get("score"), "at_kiosk": p["id"] == pid})
+                s.people[p["id"]] = p.get("name") or p["id"]
         s._person = pid
 
     def lost(self, kind: str) -> None:

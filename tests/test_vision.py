@@ -124,7 +124,7 @@ class FakeVision:
         hand = {"box": [0.6, 0.3, 0.05, 0.1], "score": 0.88, "gesture": "three", "fingers": 3}
         self.recognized = getattr(self, "recognized", 0) + bool(recognize)
         return Look([face] if "face" in want else None, hand if "hands" in want else None, {"decode": 1.0},
-                    self.face_embedding if recognize else None)
+                    [(face["box"], self.face_embedding)] if recognize and "face" in want else None)
 
 
 @pytest.fixture
@@ -264,7 +264,16 @@ async def test_a_kiosk_with_face_recognition_hears_who_is_in_front_of_it(client)
     await ws.send_bytes(jpeg(halves()))
     result = await receive(ws, "result")
     assert result["person"]["name"] == "Ana" and result["person"]["score"] > 0.9
+    assert [p["name"] for p in result["people"]] == ["Ana"]
     assert fake.recognized == 1
+    # Who is at the kiosk, for Confirm voices with faces, until the socket closes.
+    assert vm.at_kiosk["k1"] == ana.id
+    await ws.close()
+    for _ in range(50):
+        if "k1" not in vm.at_kiosk:
+            break
+        await asyncio.sleep(0.02)
+    assert "k1" not in vm.at_kiosk
 
 
 async def test_without_asking_for_it_a_kiosk_gets_no_recognition(client):

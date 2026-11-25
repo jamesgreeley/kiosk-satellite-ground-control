@@ -170,6 +170,15 @@ class FollowConfig:
     it"), so this much silence goes in front."""
     fade_in_s: float = 0.015
     """The first of the audio after that silence fades in, so the cut doesn't click."""
+    face: Callable[[], str | None] | None = None
+    """Confirm voices with faces: who Face Recognition says is at the kiosk
+    right now, when the kiosk has it on. A voice under the recognition
+    threshold is taken for that person when they are also the closest
+    voiceprint and the score reaches ``face_line_share``."""
+    face_line_share: float = 1 / 7
+    """Where the line for a voice the face confirms sits, between the
+    other-voice line and the recognition threshold, as for a short answer
+    (``answer_line_share``): 0.32 with the Accurate model."""
 
 
 class Follow:
@@ -305,10 +314,11 @@ class Follow:
             best = int(np.argmax(scores))
             score = float(scores[best])
             self.timeline.append({"t": 0.0, "kind": "anchor", "score": round(score, 3), "id": self._ids[best]})
-            if score >= self.model.threshold:
+            by = self._named_by(scores, best, "wake_word")
+            if by:
                 self._ref, self._ref_kind = self._rows[best], "person"
                 self._identified = True
-                self._set_speaker(self._ids[best], score, "wake_word", self._pending_events, 0)
+                self._set_speaker(self._ids[best], score, by, self._pending_events, 0)
                 if not self._allowed(self._ids[best]):
                     self._reject(self._pending_events, 0, score)
             elif self._strict:
@@ -774,10 +784,11 @@ class Follow:
         score = float(scores[best])
         self.timeline.append({"t": round(at / SR, 3), "kind": "identify", "score": round(score, 3),
                               "id": self._ids[best], "turn": self.turns})
-        if score >= self.model.threshold:
+        by = self._named_by(scores, best)
+        if by:
             self._identified = True
             self._ref, self._ref_kind = self._rows[best], "person"
-            self._set_speaker(self._ids[best], score, "voice", events, at)
+            self._set_speaker(self._ids[best], score, by, events, at)
             if not self._allowed(self._ids[best]):
                 self._reject(events, at, score)
         elif speech_s >= self.cfg.reject_after_s:
@@ -818,10 +829,11 @@ class Follow:
         self.timeline.append({"t": round(at / SR, 3), "kind": "identify", "score": round(score, 3),
                               "id": self._ids[best], "turn": self.turns,
                               **({"wake_word": True} if heard_s < self.cfg.identify_after_s else {})})
-        if score >= self.model.threshold:
+        by = self._named_by(scores, best)
+        if by:
             self._identified = True
             self._ref, self._ref_kind = self._rows[best], "person"
-            self._set_speaker(self._ids[best], score, "voice", events, at)
+            self._set_speaker(self._ids[best], score, by, events, at)
             if not self._allowed(self._ids[best]):
                 self._reject(events, at, score)
         elif final:
@@ -883,9 +895,10 @@ class Follow:
                 self.timeline.append({"t": round(self._last_user_end / SR, 3), "kind": "identify",
                                       "score": round(score, 3), "id": self._ids[best], "turn": self.turns,
                                       **({"wake_word": True} if with_wake_word else {})})
-                if score >= self.model.threshold:
+                by = self._named_by(scores, best)
+                if by:
                     self._ref, self._ref_kind = self._rows[best], "person"
-                    self._set_speaker(self._ids[best], score, "voice", events, self._last_user_end)
+                    self._set_speaker(self._ids[best], score, by, events, self._last_user_end)
                     if not self._allowed(self._ids[best]):
                         self._reject(events, self._last_user_end, score)
                     return
@@ -946,7 +959,8 @@ class Follow:
         scores = self._rows @ self.embedder.embed(self._answer_audio())
         at = self._last_user_end
         best = int(np.argmax(scores))
-        named = float(scores[best]) >= self.model.threshold
+        by = self._named_by(scores, best)
+        named = by is not None
         allowed = [i for i, pid in enumerate(self._ids) if self._allowed(pid)]
         line = self.answer_line(speech_s) if self._strict and self._takes_answers and allowed else None
         if not named and line is not None:
@@ -959,7 +973,7 @@ class Follow:
         if named:
             self._identified = True
             self._ref, self._ref_kind = self._rows[best], "person"
-            self._set_speaker(self._ids[best], score, "voice", events, at)
+            self._set_speaker(self._ids[best], score, by, events, at)
             if not self._allowed(self._ids[best]):
                 self._reject(events, at, score)
             return True
@@ -969,6 +983,26 @@ class Follow:
         self._ref, self._ref_kind = self._rows[best], "person"
         self._set_speaker(None, score, "answer", events, at, line=line)
         return True
+
+    def _named_by(self, scores: np.ndarray, best: int, by: str = "voice") -> str | None:
+        """How the closest voiceprint, ``best``, names the speaker: ``by`` at
+        the recognition threshold, ``face`` under it when Face Recognition
+        says that same person is at the kiosk and the score reaches the face
+        line (``face_line_share``), None otherwise. A face only ever confirms
+        the closest voice, it never names one on its own."""
+        score = float(scores[best])
+        if score >= self.model.threshold:
+            return by
+        at_kiosk = self.cfg.face() if self.cfg.face is not None else None
+        if not at_kiosk or self._ids[best] != at_kiosk:
+            return None
+        m = self.model
+        line = m.other_threshold + self.cfg.face_line_share * (m.threshold - m.other_threshold)
+        if score < line:
+            return None
+        self.timeline.append({"t": round(self.n / SR, 3), "kind": "face", "id": at_kiosk, "score": round(score, 3),
+                              "line": round(line, 3), "turn": self.turns})
+        return "face"
 
     @property
     def _strict(self) -> bool:
@@ -985,7 +1019,8 @@ class Follow:
 
     def _set_speaker(self, person_id: str | None, score: float | None, by: str | None,
                      events: list[dict[str, Any]], at: int, line: float | None = None) -> None:
-        """``by``: ``wake_word``, ``voice`` or ``conversation`` for someone
+        """``by``: ``wake_word``, ``voice``, ``face`` (a voice under the
+        threshold the face at the kiosk confirmed) or ``conversation`` for someone
         recognized, ``answer`` for a short answer taken without a name
         (``line``: the score it needed), None for a voice nobody knows."""
         person = self.people.get(person_id) if person_id else None

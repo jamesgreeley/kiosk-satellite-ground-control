@@ -11,6 +11,7 @@ import json
 import logging
 import threading
 import time
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
 
@@ -50,6 +51,8 @@ class GroundControl:
         self.vad = VadModel(verified_path(cfg.models_dir, VAD_FILE, VAD_SHA256))
         self.people = People(cfg.data_dir, self.vad)
         self.faces = Faces(cfg.data_dir)
+        self.at_kiosk: dict[str, str | None] = {}
+        """Who Face Recognition says is at each kiosk now, by device id."""
         self.sessions = SessionStore(cfg.data_dir, keep_days=cfg.keep_days, keep_audio=cfg.keep_audio)
         self.hub = Hub(cfg.data_dir / "kiosks.json")
         if self.hub.new:
@@ -332,7 +335,8 @@ class GroundControl:
 
     def new_follow(self, policy: str = "anyone", anchor=None, people: tuple[str, ...] = (),
                    speaker: str | None = None, isolation: bool = True,
-                   wake: dict[str, object] | None = None, asked: bool | None = None) -> "Follow":
+                   wake: dict[str, object] | None = None, asked: bool | None = None,
+                   face: Callable[[], str | None] | None = None) -> "Follow":
         """``isolation``: the kiosk's own switch. Isolation runs when that and
         the service's setting are both on.
 
@@ -342,7 +346,10 @@ class GroundControl:
         reaches the assistant. A follow-up has no wake word of its own.
 
         ``asked``: the turn is a reply to something Home Assistant asked or a
-        follow-up, as the kiosk says. None when it doesn't say."""
+        follow-up, as the kiosk says. None when it doesn't say.
+
+        ``face``: who is at the kiosk, for a kiosk with Confirm voices with
+        faces on (``FollowConfig.face``)."""
         from .follow import Follow, FollowConfig
 
         find = None
@@ -355,7 +362,8 @@ class GroundControl:
                 def find(anchor_audio, head):
                     return aligner.find(anchor_audio, head, str(phrase), language if isinstance(language, str) else None)
 
-        cfg = FollowConfig(policy=policy, people=people, short_answers=asked if self.short_answers else False)
+        cfg = FollowConfig(policy=policy, people=people, short_answers=asked if self.short_answers else False,
+                           face=face)
         return Follow(cfg, self.model, self.active, self.vad, self.people,
                       anchor=anchor, speaker=speaker, isolator=self.isolator() if isolation else None,
                       wake_word_end=find)

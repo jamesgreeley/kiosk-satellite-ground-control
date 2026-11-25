@@ -781,3 +781,43 @@ def test_a_second_look_doesnt_let_a_guest_through_after_a_wake_word(tmp_path, sp
     assert of(events, "rejected") or s.released_from("user", f.released) <= 0.3
     assert not [e for e in of(events, "speaker") if e["name"]]
     assert not [t for t in f.timeline if t.get("answer")]
+
+
+# ── a voice the face at the kiosk confirms ───────────────────────────────
+
+def _close_voice(household, speakers, face):
+    """Ana's command, scored under a recognition threshold set out of reach
+    (as for a voice from across the room), with ``face`` at the kiosk."""
+    from dataclasses import replace
+
+    people, ana, leo = household
+    user = held_out(speakers[0])
+    s = Script().add("quiet", silence(0.5)).add("user", user[2 * SR:int(4.5 * SR)]).add("quiet", silence(1.5))
+    who = {"ana": ana.id, "leo": leo.id, None: None}[face]
+    return s, replace(ACCURATE, threshold=0.95), (lambda: who), people
+
+
+def test_a_close_voice_is_taken_for_the_person_the_face_says_is_at_the_kiosk(
+        household, speakers, voice, vad, embedder):
+    s, model, face, people = _close_voice(household, speakers, "ana")
+    f = Follow(FollowConfig(policy="enrolled", face=face), model, embedder, vad, people)
+    events = []
+    for c in chunks(s.audio):
+        events += f.feed(c)
+    events += f.finish()
+    speaker = of(events, "speaker")[-1]
+    assert speaker["name"] == "Ana" and speaker["by"] == "face" and speaker["score"] < model.threshold
+    assert [t for t in f.timeline if t["kind"] == "face"][0]["line"] < speaker["score"]
+    assert not of(events, "rejected")
+
+
+def test_a_face_never_names_a_voice_closer_to_someone_else(household, speakers, voice, vad, embedder):
+    for face in ("leo", None):
+        s, model, at_kiosk, people = _close_voice(household, speakers, face)
+        f = Follow(FollowConfig(policy="enrolled", face=at_kiosk), model, embedder, vad, people)
+        events = []
+        for c in chunks(s.audio):
+            events += f.feed(c)
+        events += f.finish()
+        assert not [e for e in of(events, "speaker") if e["by"] == "face" or e["name"]]
+        assert not [t for t in f.timeline if t["kind"] == "face"]

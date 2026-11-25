@@ -34,6 +34,15 @@ A short command is recognized from the speech of the wake word and the command t
 
 In a conversation, a follow-up carries on with the person recognized in its first turn, so a one word answer like "yes" goes through.
 
+### Confirmed by the Face
+
+With **Confirm voices with faces** on in Kiosk Satellite, under **Settings > Ground Control > Vision Match**, a voice under the **Threshold** is taken for the person [Face Recognition](people.md#face) sees at the kiosk, when two things hold:
+
+- That person's voiceprint is the closest to the voice. A face never names a voice on its own, and never one closer to someone else.
+- The score reaches a line a seventh of the way from the other-voice line to the **Threshold**, the same line a short answer starts at: 0.32 with the Accurate model.
+
+The session's page says the voice was taken this way, and the log shows it as `(face 0.41)` after the name. It is off by default on the kiosk: with it on, a guest talking while someone enrolled stands at the kiosk can now and then be taken for them.
+
 ### Short Answers
 
 When Home Assistant asks a question (`assist_satellite.ask_question`, `assist_satellite.start_conversation`), the reply comes with no wake word to help and "yes" is too short to recognize anyone. A kiosk that answers chosen people still takes a short reply when it sounds like one of them:

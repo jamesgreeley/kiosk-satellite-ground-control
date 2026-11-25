@@ -270,6 +270,12 @@ GONE_S = 3.0
 """With no face looking at the kiosk this long, nobody is in front of it."""
 RECHECK_S = 2.0
 """Once someone is named, their face is checked again this often, not on every look."""
+MAX_FACES = 3
+"""Faces looking at the kiosk recognized in one look, the largest first."""
+SWITCH_AFTER = 2
+"""Checks in a row another person has to score higher before they become the person at the kiosk."""
+SAME_FACE = 0.6
+"""A face in the next look is the same one when its center moved less than this many face widths."""
 
 
 @dataclass
@@ -280,54 +286,153 @@ class Match:
 
 
 @dataclass
+class _Track:
+    """One face followed from look to look."""
+
+    id: int
+    box: list[float]
+    last_seen: float
+    recent: list[tuple[float, np.ndarray]] = field(default_factory=list)
+    match: Match | None = None
+    last_check: float = float("-inf")
+
+
+def _center(box: list[float]) -> tuple[float, float]:
+    return box[0] + box[2] / 2, box[1] + box[3] / 2
+
+
+@dataclass
 class Recognizer:
     """Who is looking at one kiosk, from its face looks.
 
-    ``wants(now)`` says whether the next frontal face is worth an embedding,
-    ``add(embedding, now)`` takes one and returns the person named, if any.
-    ``seen(now)`` is called for every look that found a frontal face and
-    ``tick(now)`` ends a sighting after ``GONE_S``."""
+    Each face looking at the kiosk is followed from look to look by where it
+    is, up to ``MAX_FACES``, and named on its own. ``current`` is the person
+    at the kiosk: the named face with the highest score, kept until they are
+    gone for ``GONE_S`` or someone else scores higher ``SWITCH_AFTER`` checks
+    in a row, so two people side by side don't make it flip. ``people`` is
+    everyone named.
+
+    ``wants(now)`` says whether the next look's faces are worth embeddings,
+    ``add(faces, ids, prints, now)`` takes them as ``(box, embedding)`` pairs,
+    ``seen(boxes, now)`` is called for every look with faces looking at the
+    kiosk and ``tick(now)`` lets faces go after ``GONE_S``."""
 
     threshold: float
-    _recent: list[tuple[float, np.ndarray]] = field(default_factory=list)
     current: Match | None = None
-    _last_face: float = 0.0
-    _last_check: float = 0.0
+    _tracks: list[_Track] = field(default_factory=list)
+    _next_id: int = 0
+    _primary: int | None = None
+    _challenger: tuple[int | None, int] = (None, 0)
+
+    # ── what the socket asks ──
 
     def wants(self, now: float) -> bool:
-        if self.current is None or self.current.person_id is None:
+        if not self._tracks:
             return True
-        return now - self._last_check >= RECHECK_S
+        return any(t.match is None or t.match.person_id is None or now - t.last_check >= RECHECK_S
+                   for t in self._tracks)
 
-    def seen(self, now: float) -> None:
-        self._last_face = now
+    @property
+    def people(self) -> list[Match]:
+        """Everyone named, the highest score first, each person once."""
+        best: dict[str, Match] = {}
+        for t in self._tracks:
+            m = t.match
+            if m is not None and m.person_id and (m.person_id not in best or m.score > best[m.person_id].score):
+                best[m.person_id] = m
+        return sorted(best.values(), key=lambda m: -m.score)
 
-    def add(self, embedding: np.ndarray, ids: list[str], prints: np.ndarray, now: float) -> Match | None:
-        self._last_face = self._last_check = now
-        self._recent = [(t, e) for t, e in self._recent if now - t <= WINDOW_S][-(LOOKS - 1):] + [(now, embedding)]
+    def seen(self, boxes: list[list[float]], now: float) -> None:
+        for box in boxes[:MAX_FACES]:
+            track = self._track_for(box, now, create=False)
+            if track is not None:
+                track.box, track.last_seen = box, now
+
+    def add(self, faces: list[tuple[list[float], np.ndarray]], ids: list[str], prints: np.ndarray,
+            now: float) -> Match | None:
+        taken: set[int] = set()
+        for box, embedding in faces[:MAX_FACES]:
+            track = self._track_for(box, now, taken=taken)
+            taken.add(track.id)
+            track.box, track.last_seen, track.last_check = box, now, now
+            track.recent = [(t, e) for t, e in track.recent if now - t <= WINDOW_S][-(LOOKS - 1):] + [(now, embedding)]
+            track.match = self._name(track, ids, prints)
+        self._choose()
+        return self.current
+
+    def tick(self, now: float) -> bool:
+        """True when someone left and the people named changed."""
+        before = [t.id for t in self._tracks]
+        self._tracks = [t for t in self._tracks if now - t.last_seen <= GONE_S]
+        if [t.id for t in self._tracks] == before:
+            return False
+        if self._primary not in [t.id for t in self._tracks]:
+            self._primary = None
+        self._choose()
+        return True
+
+    # ── inside ──
+
+    def _track_for(self, box: list[float], now: float, create: bool = True,
+                   taken: set[int] | None = None) -> _Track | None:
+        cx, cy = _center(box)
+        best, dist = None, float("inf")
+        for t in self._tracks:
+            if taken and t.id in taken:
+                continue
+            tx, ty = _center(t.box)
+            d = ((cx - tx) ** 2 + (cy - ty) ** 2) ** 0.5 / max(box[2], t.box[2], 1e-6)
+            if d < SAME_FACE and d < dist:
+                best, dist = t, d
+        if best is not None or not create:
+            return best
+        track = _Track(self._next_id, box, now)
+        self._next_id += 1
+        self._tracks.append(track)
+        return track
+
+    def _name(self, track: _Track, ids: list[str], prints: np.ndarray) -> Match:
+        looks = len(track.recent)
         if not ids:
-            self.current = Match(None, 0.0, len(self._recent))
-            return self.current
-        mean = np.mean([e for _, e in self._recent], 0)
+            return Match(None, 0.0, looks)
+        mean = np.mean([e for _, e in track.recent], 0)
         mean /= max(float(np.linalg.norm(mean)), 1e-9)
         scores = prints @ mean
         order = np.argsort(scores)[::-1]
         best = float(scores[order[0]])
         second = float(scores[order[1]]) if len(order) > 1 else -1.0
-        enough = len(self._recent) >= 2 or best >= self.threshold + SURE_ABOVE
+        enough = looks >= 2 or best >= self.threshold + SURE_ABOVE
         if best >= self.threshold and best - second >= MARGIN and enough:
-            self.current = Match(ids[int(order[0])], round(best, 3), len(self._recent))
-        elif self.current is None or self.current.person_id is None or len(self._recent) >= 2:
-            self.current = Match(None, round(best, 3), len(self._recent))
-        return self.current
+            return Match(ids[int(order[0])], round(best, 3), looks)
+        if track.match is not None and track.match.person_id and looks < 2:
+            return track.match
+        return Match(None, round(best, 3), looks)
 
-    def tick(self, now: float) -> bool:
-        """True when the sighting just ended."""
-        if self.current is not None and now - self._last_face > GONE_S:
+    def _choose(self) -> None:
+        """The person at the kiosk: sticky, so a close second doesn't take over on one look."""
+        named = sorted((t for t in self._tracks if t.match and t.match.person_id), key=lambda t: -t.match.score)
+        primary = next((t for t in self._tracks if t.id == self._primary), None)
+        if primary is None or not (primary.match and primary.match.person_id):
+            top = named[0] if named else None
+            self._primary = top.id if top else None
+            self._challenger = (None, 0)
+        elif named and named[0].id != primary.id and named[0].match.score > primary.match.score:
+            cid, n = self._challenger
+            n = n + 1 if cid == named[0].id else 1
+            if n >= SWITCH_AFTER:
+                self._primary, self._challenger = named[0].id, (None, 0)
+            else:
+                self._challenger = (named[0].id, n)
+        else:
+            self._challenger = (None, 0)
+        chosen = next((t for t in self._tracks if t.id == self._primary), None)
+        if chosen is not None:
+            self.current = chosen.match
+        elif self._tracks:
+            # Faces in view, nobody named yet: the closest one's best guess.
+            self.current = max(self._tracks, key=lambda t: t.box[2]).match
+        else:
             self.current = None
-            self._recent = []
-            return True
-        return False
 
 
 # ── guided enrollment ─────────────────────────────────────────────────────

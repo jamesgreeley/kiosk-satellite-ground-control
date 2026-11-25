@@ -57,7 +57,7 @@ const POINT = {
 };
 
 function chart(record, total, color) {
-  const pts = (record.timeline || []).filter((p) => p.t !== undefined && p.score !== undefined
+  const pts = (record.timeline || []).filter((p) => p.t !== undefined && p.score !== undefined && p.kind !== "face"
     && (record.mode === "follow" || p.turn === 0 || p.turn === undefined)).map((p) => {
     const who = p.kind === "anchor" || p.kind === "identify";
     const label = p.kind === "identify" && p.room ? "Who is speaking, from the turn with the room around it"
@@ -98,6 +98,7 @@ function steps(record) {
       const both = (record.timeline || []).some((p) => p.kind === "identify" && p.wake_word && p.score === e.score);
       out.push([`${e.name} recognized`, e.by === "only_person" ? "The only person enrolled, with no voice to compare."
         : e.by === "conversation" ? "Recognized earlier in this conversation. Only their voice goes on."
+        : e.by === "face" ? `Score ${e.score}, under the threshold. Face Recognition saw ${e.name} at the kiosk, so the voice was taken for them.`
         : both ? `Score ${e.score}, from the wake word and the command together. The command alone was too short.` : `Score ${e.score}.`, e.t]);
     }
     if (e.type === "speaker" && !e.name && e.by === "answer") {

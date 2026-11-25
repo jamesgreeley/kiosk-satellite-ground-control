@@ -251,8 +251,9 @@ class Look:
     faces: list[dict[str, Any]] | None
     hand: dict[str, Any] | None
     ms: dict[str, float]
-    embedding: np.ndarray | None = None
-    """Face Recognition: the largest face looking at the kiosk, when asked for."""
+    embeddings: list[tuple[list[float], np.ndarray]] | None = None
+    """Face Recognition: each face looking at the kiosk, the largest first and
+    at most ``faces.MAX_FACES``, as its box and embedding, when asked for."""
 
 
 class Vision:
@@ -278,13 +279,13 @@ class Vision:
 
     def look(self, jpeg: bytes, rotation: int = 0, want: tuple[str, ...] = ("face", "hands"),
              recognize: bool = False) -> Look:
-        """What a frame shows. With ``recognize``, also the embedding of the
-        largest face looking at the kiosk, for Face Recognition."""
+        """What a frame shows. With ``recognize``, also the embedding of each
+        face looking at the kiosk, for Face Recognition."""
         t0 = time.perf_counter()
         rgb = decode(jpeg, rotation)
         t1 = time.perf_counter()
         ms = {"decode": round((t1 - t0) * 1000, 1)}
-        faces = hand = embedding = None
+        faces = hand = embeddings = None
         if "face" in want:
             faces = self.face(rgb)
             t2 = time.perf_counter()
@@ -292,14 +293,17 @@ class Vision:
             t1 = t2
             facing = [f for f in faces if f["frontal"]]
             if recognize and facing:
-                embedding = self.embed(rgb, facing[0])
+                from .faces import MAX_FACES
+
+                big = sorted(facing, key=lambda f: -f["box"][2])[:MAX_FACES]
+                embeddings = [(f["box"], self.embed(rgb, f)) for f in big]
                 t2 = time.perf_counter()
                 ms["recognize"] = round((t2 - t1) * 1000, 1)
                 t1 = t2
         if "hands" in want:
             hand = self.hand(rgb)
             ms["hands"] = round((time.perf_counter() - t1) * 1000, 1)
-        return Look(faces, hand, ms, embedding)
+        return Look(faces, hand, ms, embeddings)
 
     def embed(self, rgb: np.ndarray, face: dict[str, Any]) -> np.ndarray:
         from .faces import align, points_px
