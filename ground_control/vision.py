@@ -122,19 +122,30 @@ def turn_of(eye_a: np.ndarray, eye_b: np.ndarray, nose: np.ndarray) -> float:
     return float((nose - (eye_a + eye_b) / 2) @ e / d2)
 
 
-def whole_face(points: np.ndarray, width: int, height: int) -> bool:
-    """Whether all five points of a face, in pixels, are inside the frame.
+WHOLE_FACE = 0.9
+"""How much of a face's box has to be inside the frame for the face to be whole."""
+
+
+def whole_face(points: np.ndarray, box: tuple[float, float, float, float], width: int, height: int) -> bool:
+    """Whether a face is in the frame as a whole: all five of its points, in
+    pixels, and at least WHOLE_FACE of its box (x1, y1, x2, y2 in pixels).
 
     The face model gives five points for every face it finds, also for one
     the edge of the frame cuts off. The hidden ones are guesses that land
     outside the picture. A head angle worked out from guessed points means
     nothing (it swung from 55 to 27 degrees on a face that never moved), and
     a face with half of it missing was still recognized with the score of the
-    whole face. So a face that is cut off doesn't look at the kiosk and isn't
-    recognized. On the kiosk test set, 1 of 1,566 faces looking at the kiosk
-    has a point outside the frame."""
+    whole face. With the points just inside and the chin and a cheek outside,
+    a face in the corner of a tablet's frame still counted. So a face that is
+    cut off doesn't look at the kiosk and isn't recognized. On the kiosk test
+    set, 2 of 1,566 faces looking at the kiosk are cut off by this measure."""
     p = np.asarray(points, np.float64)
-    return bool((p[:, 0] >= 0).all() and (p[:, 0] <= width).all() and (p[:, 1] >= 0).all() and (p[:, 1] <= height).all())
+    if not ((p[:, 0] >= 0).all() and (p[:, 0] <= width).all() and (p[:, 1] >= 0).all() and (p[:, 1] <= height).all()):
+        return False
+    x1, y1, x2, y2 = box
+    area = max(x2 - x1, 1e-9) * max(y2 - y1, 1e-9)
+    inside = max(0.0, min(x2, width) - max(x1, 0.0)) * max(0.0, min(y2, height) - max(y1, 0.0))
+    return bool(inside / area >= WHOLE_FACE)
 
 
 def head_angles(points: np.ndarray) -> tuple[float, float]:
@@ -167,15 +178,17 @@ def head_yaw(points: np.ndarray) -> float:
     return head_angles(points)[0]
 
 
-def facing(points: np.ndarray, width: int, height: int) -> tuple[bool, float, float]:
-    """Whether a face with these five points, in pixels, looks at the kiosk,
+def facing(points: np.ndarray, box: tuple[float, float, float, float], width: int,
+           height: int) -> tuple[bool, float, float]:
+    """Whether a face with these five points and this box (x1, y1, x2, y2), in
+    pixels, looks at the kiosk,
     with its yaw and pitch: the whole face in the frame, the head turned at
     most FRONTAL_MAX_DEG left or right, seen from between PITCH_MIN_DEG and
     PITCH_MAX_DEG up or down, and the nose where a facing head's is."""
     yaw, pitch = head_angles(points)
-    looks = (whole_face(points, width, height) and yaw <= FRONTAL_MAX_DEG and PITCH_MIN_DEG <= pitch <= PITCH_MAX_DEG
+    looks = (whole_face(points, box, width, height) and yaw <= FRONTAL_MAX_DEG and PITCH_MIN_DEG <= pitch <= PITCH_MAX_DEG
              and abs(turn_of(points[0], points[1], points[2])) <= TURN_MAX)
-    return looks, yaw, pitch
+    return bool(looks), yaw, pitch  # a plain bool: it goes out as JSON
 
 
 def nms(boxes: np.ndarray, scores: np.ndarray, iou: float = NMS_IOU) -> list[int]:
@@ -287,7 +300,7 @@ class FaceModel:
         for i in nms(boxes_a, scores_a)[:MAX_FACES]:
             x1, y1, x2, y2 = boxes_a[i]
             p = points_a[i]
-            looks, yaw, pitch = facing(p, w, h)
+            looks, yaw, pitch = facing(p, (x1, y1, x2, y2), w, h)
             faces.append({
                 "box": [_r(x1 / w), _r(y1 / h), _r((x2 - x1) / w), _r((y2 - y1) / h)],
                 "score": _r(scores_a[i]),

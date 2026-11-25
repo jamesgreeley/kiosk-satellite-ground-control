@@ -129,6 +129,9 @@ class VisionTracker:
         self._clock = clock
         self.current: VisionSession | None = None
         self.counts = {"looks": 0, "empty": 0, "sessions": 0}
+        self._told: tuple[dict[str, Any] | None, list[dict[str, Any]] | None] = (None, None)
+        """Who Face Recognition last named at the kiosk and in view. A session
+        that starts while they are still there gets them from here."""
 
     def take_counts(self) -> dict[str, int]:
         """The looks, empty looks and sessions counted since the last call."""
@@ -183,6 +186,10 @@ class VisionTracker:
         self.current = s
         self.counts["sessions"] += 1
         self._publish({"type": "vision_start", "device_id": self.device_id, "session": s.id})
+        # Someone named before this session began: on its first look, which
+        # is recognized before the look opens the session, or in the session
+        # this one carries on from.
+        self.person(*self._told, now=now)
         return s
 
     def _steps(self, s: VisionSession, t: float, face: dict | None, hand: dict | None, hand_look: bool,
@@ -278,6 +285,7 @@ class VisionTracker:
         """Face Recognition named the person at the kiosk, or nobody, and
         everyone else in view. Each person new to the session, or back at
         the kiosk after someone else, is a ``recognized`` event."""
+        self._told = (person, people)
         s = self.current
         if s is None:
             return

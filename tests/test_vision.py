@@ -87,20 +87,24 @@ def _seen_from_below(deg: float) -> np.ndarray:
     return (FACE_3D @ tilt.T)[:, :2] * 2 + [320, 240]
 
 
+def _facing(points: np.ndarray):
+    return facing(points, _box(points), 640, 480)
+
+
 def test_a_face_seen_from_far_below_or_above_does_not_look_at_the_kiosk():
     """A tablet lying on a bed saw a chin from below, or the top of a bowed
     head, and took both for a face looking at it."""
-    looks, yaw, pitch = facing(_seen_from_below(0), 640, 480)
+    looks, yaw, pitch = _facing(_seen_from_below(0))
     assert looks and yaw < 1 and abs(pitch) < 1
     assert abs(head_angles(_seen_from_below(25))[1] + 25) < 1
     assert abs(head_angles(_seen_from_below(-15))[1] - 15) < 1
     # A kiosk's camera sits under the face, so there is more room that way.
-    assert facing(_seen_from_below(30), 640, 480)[0] and not facing(_seen_from_below(45), 640, 480)[0]
-    assert facing(_seen_from_below(-15), 640, 480)[0] and not facing(_seen_from_below(-30), 640, 480)[0]
+    assert _facing(_seen_from_below(30))[0] and not _facing(_seen_from_below(45))[0]
+    assert _facing(_seen_from_below(-15))[0] and not _facing(_seen_from_below(-30))[0]
     assert PITCH_MIN_DEG < 0 < PITCH_MAX_DEG
     # Turned and cut off faces still don't count.
-    assert not facing(_project(-50), 640, 480)[0]
-    assert not facing(_seen_from_below(0) + [300, 0], 640, 480)[0]
+    assert not _facing(_project(-50))[0]
+    assert not _facing(_seen_from_below(0) + [300, 0])[0]
 
 
 def test_the_nose_check_still_applies():
@@ -109,16 +113,34 @@ def test_the_nose_check_still_applies():
     assert turn_of(eye_a, eye_b, np.array([9.0, 6.0])) > 0.3
 
 
+def _box(points: np.ndarray, pad: float = 30.0) -> tuple[float, float, float, float]:
+    """A face box around five points: the points with room for the forehead, cheeks and chin."""
+    return (points[:, 0].min() - pad, points[:, 1].min() - pad, points[:, 0].max() + pad, points[:, 1].max() + pad)
+
+
 def test_a_face_the_frame_cuts_off_is_not_a_whole_face():
     """A face in the corner of a tablet's frame, less than half of it in view,
     was read as looking at the kiosk and recognized (these are its points)."""
     in_the_corner = np.array([[597, 427], [641, 420], [637, 435], [620, 469], [655, 463]], float)
     chin_below_the_frame = np.array([[564, 445], [612, 428], [599, 452], [589, 484], [624, 470]], float)
-    assert not whole_face(in_the_corner, 640, 480)
-    assert not whole_face(chin_below_the_frame, 640, 480)
-    assert whole_face(chin_below_the_frame - [0, 10], 640, 480)
-    # At the very edge still counts, in a frame of either shape.
-    assert whole_face(np.array([[0, 0], [480, 0], [240, 320], [100, 640], [380, 640]], float), 480, 640)
+    assert not whole_face(in_the_corner, (557, 384, 665, 506), 640, 480)
+    assert not whole_face(chin_below_the_frame, (535, 392, 646, 514), 640, 480)
+    # Every point just inside, but the chin and a cheek outside: 72% of the box in the frame.
+    points_just_inside = np.array([[554, 416], [613, 412], [594, 426], [566, 471], [621, 467]], float)
+    assert not whole_face(points_just_inside, (512, 365, 645, 518), 640, 480)
+    # The same face further into the frame is whole, and so is one whose box only grazes the edge.
+    moved = points_just_inside - [120, 100]
+    assert whole_face(moved, (392, 265, 525, 418), 640, 480)
+    assert whole_face(moved, (392, 265, 525, 418), 640, 410)   # 8 of the box's 153 rows under the frame
+    # The answer goes to the kiosk as JSON, also when the model's own number types come in.
+    import json
+
+    as_the_model_gives_them = tuple(np.float32(v) for v in (512, 365, 645, 518))
+    looks, yaw, pitch = facing(points_just_inside.astype(np.float32), as_the_model_gives_them, 640, 480)
+    assert looks is False and json.dumps({"frontal": looks, "yaw": round(yaw, 1), "pitch": round(pitch, 1)})
+    assert facing(moved.astype(np.float32), tuple(np.float32(v) for v in (392, 265, 525, 418)), 640, 480)[0] is True
+    # In a portrait frame too.
+    assert whole_face(np.array([[150, 200], [330, 200], [240, 320], [170, 420], [310, 420]], float), (100, 120, 380, 500), 480, 640)
 
 
 @pytest.fixture(scope="module")

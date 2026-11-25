@@ -173,3 +173,24 @@ def test_a_looks_time_is_its_total_not_its_stages_added_up():
     assert look_ms({"decode": 1.0, "face": 5.0, "hands": 11.0, "total": 13.0}) == 13.0
     # A look saved before the stages could overlap has no total.
     assert look_ms({"decode": 1.0, "face": 5.0, "hands": 11.0}) == 17.0
+
+
+def test_someone_recognized_on_a_sessions_first_look_is_in_its_timeline():
+    """The first look names the person a moment before it opens the session,
+    and the recognition was lost: a screensaver dismissed for someone the
+    timeline never showed."""
+    saved = []
+    tracker = VisionTracker("k1", "Kitchen", "accurate", False, keep_frames=lambda: False,
+                            save=lambda record, frames: saved.append(record), clock=lambda: 100.0)
+    xavier = {"id": "p1", "name": "Xavier", "score": 0.45}
+    face = [{"box": [0.4, 0.3, 0.2, 0.3], "score": 0.9, "frontal": True, "yaw": 2.0, "pitch": -10.0}]
+    tracker.person(xavier, [xavier], now=100.0)          # told before the look below starts the session
+    tracker.look(1, ("face",), face, None, {"decode": 1.0, "face": 5.0, "total": 6.0}, b"", now=100.0)
+    events = tracker.current.events
+    assert [e["type"] for e in events if e["type"] == "recognized"] == ["recognized"]
+    assert next(e for e in events if e["type"] == "recognized")["name"] == "Xavier"
+    # Once they are gone, the next session doesn't name them again.
+    tracker.person(None, [], now=101.0)
+    tracker.close("idle", now=130.0)
+    tracker.look(2, ("face",), face, None, {"decode": 1.0, "face": 5.0, "total": 6.0}, b"", now=140.0)
+    assert not [e for e in tracker.current.events if e["type"] == "recognized"]

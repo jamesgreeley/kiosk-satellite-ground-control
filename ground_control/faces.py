@@ -514,7 +514,8 @@ class FaceEnrollment:
         width = face["box"][2]
         h, w = rgb.shape[:2]
         px = points_px(face, w, h)
-        if not whole_face(px, w, h):
+        x, y, bw, bh = face["box"]
+        if not whole_face(px, (x * w, y * h, (x + bw) * w, (y + bh) * h), w, h):
             # The edge of the frame cuts the face off: nothing to enroll from it.
             return self._event("no_face")
         yaw, pitch = head_angles(px)
