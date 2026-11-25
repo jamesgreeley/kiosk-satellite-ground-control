@@ -95,7 +95,8 @@ Cards on the kiosk screen show who was recognized and what happened because of i
 
 ## Performance Benchmarks
 
-### Voice Match
+<details>
+<summary><strong>Voice Match</strong></summary>
 
 These tables show how much latency each feature adds to a 5-second command.
 
@@ -154,7 +155,10 @@ The Accurate model makes the fewest mix-ups between people and with TV voices. T
 
 On amd64, the CUDA image works with NVIDIA GPUs from the GTX 10 series (Pascal) to the RTX 50 series (Blackwell). On arm64, it works with the GB10 and other Blackwell boards. It needs 1 GB of free GPU memory or 2.5 GB with Isolation. Vision Match needs about 0.5 GB more.
 
-### Vision Match
+</details>
+
+<details>
+<summary><strong>Vision Match</strong></summary>
 
 These tables show how long Ground Control takes for one camera look.
 
@@ -212,6 +216,8 @@ Each feature has its own model under **Settings > Vision Match**:
 - **Face Recognition:** Accurate recognizes small faces in dim light more often, 93% compared to 71%. It runs at most once a second, so Accurate is the default on x86 CPUs and Apple M-series chips. A Raspberry Pi and other ARM CPUs use Light.
 
 On an NVIDIA GPU every feature uses Accurate. Changing the Face Recognition model doesn't require enrolling any faces again.
+
+</details>
 
 ## Install
 
