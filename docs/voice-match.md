@@ -159,4 +159,4 @@ Ground Control picks Accurate on an NVIDIA GPU, an Apple M-series chip or an x86
 | Use Isolation | off | Removes other voices under the user's words, for kiosks with Trimming and Isolation on in Kiosk Satellite. Needs the Accurate model. |
 | Runs on | | NVIDIA GPU (CUDA) or CPU, set by the image. |
 
-The thresholds are a starting point. If a TV voice is taken for someone, raise **Threshold**. If a person is often unknown, enroll them on that kind of device first, then lower it a little.
+The thresholds are a starting point. If a TV voice is taken for someone, raise **Threshold**. If a person is often unknown, enroll them on that device model first, then lower it a little.

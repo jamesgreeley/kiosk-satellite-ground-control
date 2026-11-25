@@ -19,7 +19,7 @@ const FACE_HINTS = { ok: "", no_face: "No face in view.", several_faces: "Only o
   turn_more: "Turn a little more.", turn_less: "Turn back a little.", other_side: "Now to the other side.",
   too_dark: "Too dark to see the face.", other_face: "That's a different face." };
 
-/** The kinds of device in the house: kiosks by model, a kiosk without one on its own. */
+/** The device models in the house: kiosks by model, a kiosk without one on its own. */
 function deviceKinds(kiosks) {
   const byModel = new Map();
   for (const k of kiosks) {
@@ -30,7 +30,7 @@ function deviceKinds(kiosks) {
   return [...byModel.entries()].sort(([a], [b]) => a.localeCompare(b));
 }
 
-/** How far a person's voice reaches: kinds of device enrolled out of those in the house. */
+/** How far a person's voice reaches: device models enrolled out of those in the house. */
 function voiceCoverage(p, kinds) {
   // A kiosk that doesn't say its model can't be matched to a recording, so it isn't counted.
   const known = kinds.filter(([, ks]) => ks.some((k) => k.model));
@@ -68,7 +68,7 @@ function voiceCard(p, kiosks, kinds) {
   const cover = voiceCoverage(p, kinds);
   const status = !p.has_voice ? chip("Not enrolled", "c-off big")
     : !cover.of || cover.n === cover.of ? chip("Enrolled", "c-ok big", icon("check", 14))
-      : chip(`${cover.n} of ${cover.of} kinds`, "c-warn big");
+      : chip(`${cover.n} of ${cover.of} models`, "c-warn big");
   const recordings = p.enrollments || [];
   const speech = p.has_voice ? ` ${Math.round(p.speech_s)} s of speech in ${recordings.length} ${recordings.length === 1 ? "recording" : "recordings"}.` : "";
 
@@ -83,10 +83,9 @@ function voiceCard(p, kiosks, kinds) {
   const bar = h("div", { class: "fbar" },
     ready.length ? [h("label", { for: "voice-kiosk" }, "Enroll on"), sel] : null,
     enroll,
-    h("a", { class: "btn txt sm", href: "#/sessions" }, "Add from a session"),
     h("span", { class: "fnote" }, ready.length
       ? `${p.name} reads a few sentences aloud on the kiosk, about 45 seconds of speech.`
-      : "Needs a connected kiosk with Allow enrollment here on. You can also add a voice from a session."));
+      : "Needs a connected kiosk with Allow enrollment here on."));
 
   const tiles = kinds.map(([model, ks]) => {
     const enrolled = covered.has(model);
@@ -121,8 +120,8 @@ function voiceCard(p, kiosks, kinds) {
     cardHead("voice-title", "mic", "Voice Match", `Who is talking, for the Speaker sensor and personal commands.${speech}`, status),
     bar,
     kinds.length ? h("div", { class: "fpart" },
-      h("h3", {}, "Kinds of device"),
-      h("p", {}, "A voice is recognized best on the kinds of device it was enrolled on. Enroll once on each kind."),
+      h("h3", {}, "Device models"),
+      h("p", {}, "A voice is recognized best on the device models it was enrolled on. Enroll once on each model."),
       h("div", { class: "kinds" }, tiles)) : null,
     recordings.length ? disclose("Recordings", recordings.length, "Confident commands add more over time", rows) : null);
 }
@@ -362,7 +361,7 @@ function detail(p, kiosks, kinds, suggestions, events) {
   const voice = voiceCoverage(p, kinds);
   const summary = h("div", { class: "chips" },
     p.has_voice
-      ? chip(voice.of ? `Voice on ${voice.n} of ${voice.of} kinds of device` : "Voice enrolled", voice.n === voice.of ? "c-ok big" : "c-warn big", icon("mic", 15))
+      ? chip(voice.of ? `Voice on ${voice.n} of ${voice.of} device models` : "Voice enrolled", voice.n === voice.of ? "c-ok big" : "c-warn big", icon("mic", 15))
       : chip("No voice yet", "c-off big", icon("mic", 15)),
     p.has_face ? chip("Face enrolled", "c-ok big", icon("face", 15)) : chip("No face yet", "c-off big", icon("face", 15)));
   return h("section", { class: "right", "aria-label": p.name },

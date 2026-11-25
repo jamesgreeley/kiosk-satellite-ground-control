@@ -37,7 +37,7 @@ Voice Match is Ground Control's first set of features: who is speaking, and only
 
 ### Recognition
 
-Who is speaking, from the voiceprints of the people enrolled. Enroll each person once on every kind of device they talk to, from the People page. Recognition then takes about a second into each command.
+Who is speaking, from the voiceprints of the people enrolled. Enroll each person once on every device model they talk to, from the People page. Recognition then takes about a second into each command.
 
 Each kiosk gets a Speaker sensor in Home Assistant, and a kiosk can answer only the people you choose. An LLM conversation agent can tell who is speaking too: paste the template from **Settings > General > Conversation agents** into the agent's instructions, and "my calendar" or "my list" means the speaker's.
 

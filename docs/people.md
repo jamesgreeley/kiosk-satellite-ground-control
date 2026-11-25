@@ -2,27 +2,27 @@
 
 Navigate to **People** in the Ground Control app.
 
-Everyone Voice Match and Face Recognition can recognize is on this page, with their voice, their face, their color and the things "my" means for them. The list on the left shows each person and how many kinds of device they are enrolled on.
+Everyone Voice Match and Face Recognition can recognize is on this page, with their voice, their face, their color and the things "my" means for them. The list on the left shows each person and whether their voice and face are enrolled, with how many device models the voice is enrolled on.
 
 ## Adding a Person
 
 1. Choose **Add a person** and enter their name. This is how the kiosks and the assistant call them.
-2. Enroll their voice on each kind of device they talk to. See [Enrollment](#enrollment).
+2. Enroll their voice on each device model they talk to. See [Enrollment](#enrollment).
 
 A person without a voice is never recognized, but can still be picked on a kiosk under **Answer > Chosen people**.
 
 ## Enrollment
 
-A voice is recognized best on the kinds of device it was enrolled on, since an Echo Show and an Echo Dot hear the same voice differently. Enrollment always records with a kiosk's own microphone, so enroll each person once on every kind of device they talk to.
+A voice is recognized best on the device models it was enrolled on, since an Echo Show and an Echo Dot hear the same voice differently. Enrollment always records with a kiosk's own microphone, so enroll each person once on every device model they talk to.
 
-1. On the person's page, the **Voice Match** card lists every kind of device in the house under **Kinds of device**, with the seconds of speech enrolled on each. Choose **Enroll** on a kind, or pick a kiosk next to **Enroll on** and choose **Enroll voice**.
+1. On the person's page, the **Voice Match** card lists every device model in the house under **Device models**, with the seconds of speech enrolled on each. Choose **Enroll** on a model, or pick a kiosk next to **Enroll on** and choose **Enroll voice**.
 2. The kiosk shows the text to read, full screen in the kiosk's language. The Ground Control app shows the same text, so it can also be read from a phone.
 3. Read it aloud for about 45 seconds:
     - Talk normally, in the voice you use for commands, not a reading voice.
     - Start close to the kiosk, then move across the room.
     - Face away from the kiosk now and then.
 
-The sentence to read fills as it is spoken and moves on when it is full or after a pause. When another voice talks, such as a TV, that part is left out and a banner says so. The enrollment ends once 45 seconds of speech are counted, and **Enroll next** offers the next kind of device the person isn't enrolled on.
+The sentence to read fills as it is spoken and moves on when it is full or after a pause. When another voice talks, such as a TV, that part is left out and a banner says so. The enrollment ends once 45 seconds of speech are counted, and **Enroll next** offers the next device model the person isn't enrolled on.
 
 What was recorded is kept when the enrollment is stopped early with at least 10 seconds of speech. The wake word doesn't listen during an enrollment, so reading the text never starts a voice command.
 
@@ -34,7 +34,7 @@ Only kiosks with **Allow enrollment here** on, under **Settings > Ground Control
 
 ### Adding a Voice from a Session
 
-**Add from a session** opens the Sessions page. On a session where the person talked, **Use this voice** adds their speech from it to their voice. Only the user's speech goes in, without the voices left out. This is useful for a kind of device nobody enrolled on yet, or for a voice that has changed. See [Sessions](sessions.md#use-this-voice).
+On the **Sessions** page, on a session where the person talked, **Use this voice** adds their speech from it to their voice. Only the user's speech goes in, without the voices left out. This is useful for a device model nobody enrolled on yet, or for a voice that has changed. See [Sessions](sessions.md#use-this-voice).
 
 ### Learning
 

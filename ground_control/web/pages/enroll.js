@@ -1,5 +1,5 @@
 // Enrollment always records through a kiosk's own microphone: a voice is
-// recognized best on the kinds of device it was enrolled on. This page shows
+// recognized best on the device models it was enrolled on. This page shows
 // the text to read, the same the kiosk shows (an Echo Dot has no screen),
 // with the sentence to read filling as it is spoken, and follows the progress.
 import { api, socket } from "../api.js";
@@ -68,8 +68,8 @@ export async function render({ id, device }) {
         h("div", { class: "row" }, h("div", { class: "grow" }, h("div", { class: "rt" }, h("label", { for: "name" }, "Name")),
           h("div", { class: "rd" }, "How the kiosks and the assistant call this person.")), name),
         h("div", { class: "row" }, h("div", { class: "grow" }, h("div", { class: "rt" }, h("label", { for: "where" }, "Record on")),
-          h("div", { class: "rd" }, "The kiosk's own microphone records. Enroll on each kind of device this person talks to.")), where),
-        h("div", { class: "hint" }, icon("info", 18), "A voice is recognized best on the kinds of device it was enrolled on. An Echo Show and an Echo Dot hear the same voice differently.")),
+          h("div", { class: "rd" }, "The kiosk's own microphone records. Enroll on each device model this person talks to.")), where),
+        h("div", { class: "hint" }, icon("info", 18), "A voice is recognized best on the device models it was enrolled on. An Echo Show and an Echo Dot hear the same voice differently.")),
       h("div", { class: "foot" }, h("a", { class: "btn txt", href: existing ? `#/people/${existing.id}` : "#/people" }, "Cancel"), start));
   }
 
