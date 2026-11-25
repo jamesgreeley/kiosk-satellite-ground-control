@@ -40,14 +40,6 @@ function voiceCoverage(p, kinds) {
   return { text: known.length ? `${n} of ${known.length}` : "Voice", n, of: known.length, ok: true };
 }
 
-/** A card's head: the feature's icon, its name, what it is for and where this person stands. */
-function cardHead(id, ic, title, about, status) {
-  return h("div", { class: "fhead" },
-    h("span", { class: "ftile" }, icon(ic, 22)),
-    h("div", { class: "grow" }, h("h2", { class: "ftitle", id }, title), h("p", { class: "fabout" }, about)),
-    status);
-}
-
 /** A list that opens and closes under a card, with its count. */
 function disclose(title, count, aside, rows) {
   return h("details", { class: "fmore" },
@@ -70,7 +62,6 @@ function voiceCard(p, kiosks, kinds) {
     : !cover.of || cover.n === cover.of ? chip("Enrolled", "c-ok big", icon("check", 14))
       : chip(`${cover.n} of ${cover.of} models`, "c-warn big");
   const recordings = p.enrollments || [];
-  const speech = p.has_voice ? ` ${Math.round(p.speech_s)} s of speech in ${recordings.length} ${recordings.length === 1 ? "recording" : "recordings"}.` : "";
 
   // Enroll: a connected kiosk that allows it records the voice through its own microphone.
   const ready = kiosks.filter((k) => k.connected && k.enroll);
@@ -116,14 +107,14 @@ function voiceCard(p, kiosks, kinds) {
       deleteButton(`Delete the ${where} recording`, remove));
   });
 
-  return h("section", { class: "card fcard", "aria-labelledby": "voice-title" },
-    cardHead("voice-title", "mic", "Voice Match", `Who is talking, for the Speaker sensor and personal commands.${speech}`, status),
+  return [section("Voice Match", `${p.name}'s voice, for the Speaker sensor and personal commands.`, status),
+    h("div", { class: "card fcard" },
     bar,
     kinds.length ? h("div", { class: "fpart" },
       h("h3", {}, "Device models"),
       h("p", {}, "A voice is recognized best on the device models it was enrolled on. Enroll once on each model."),
       h("div", { class: "kinds" }, tiles)) : null,
-    recordings.length ? disclose("Recordings", recordings.length, "Confident commands add more over time", rows) : null);
+    recordings.length ? disclose("Recordings", recordings.length, "Confident commands add more over time", rows) : null)];
 }
 
 // ── Vision Match ────────────────────────────────────────────────────────
@@ -179,11 +170,8 @@ function captureView() {
 
 function visionCard(p, kiosks, events) {
   const captures = p.face_enrollments || [];
-  const pictures = captures.reduce((n, e) => n + e.crops, 0);
   const restStatus = () => (p.has_face ? chip("Enrolled", "c-ok big", icon("check", 14)) : chip("Not enrolled", "c-off big"));
   const statusSlot = h("span", { class: "fstatus" }, restStatus());
-  const about = `Who is looking at the kiosk, for the Face sensor on kiosks with Face Recognition on.${p.has_face
-    ? ` ${pictures} face pictures from ${captures.length} ${captures.length === 1 ? "capture" : "captures"}.` : ""}`;
 
   const ready = kiosks.filter((k) => k.connected && k.access === "approved" && k.features?.vision_match
     && k.features?.face_recognition);
@@ -246,12 +234,12 @@ function visionCard(p, kiosks, events) {
       deleteButton(`Delete the ${where} capture`, remove));
   });
 
-  return h("section", { class: "card fcard", "aria-labelledby": "face-title" },
-    cardHead("face-title", "face", "Vision Match", about, statusSlot),
+  return [section("Vision Match", `${p.name}'s face, for the Face sensor on kiosks with Face Recognition on.`, statusSlot),
+    h("div", { class: "card fcard" },
     bar,
     live.node,
     p.has_face ? h("div", { class: "fpart" }, h("h3", {}, "Face pictures"), faceThumbs(p)) : null,
-    captures.length ? disclose("Captures", captures.length, null, rows) : null);
+    captures.length ? disclose("Captures", captures.length, null, rows) : null)];
 }
 
 // ── The page ────────────────────────────────────────────────────────────
