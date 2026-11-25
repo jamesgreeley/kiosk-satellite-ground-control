@@ -2,6 +2,15 @@ import { api } from "../api.js";
 import { shell } from "../app.js";
 import { ago, chip, disc, h, icon, kioskAnswers, kioskChip, outcome, pageHead, section } from "../ui.js";
 
+const modelName = (key) => (key === "accurate" ? "Accurate" : "Light");
+
+/** The Face Detection and Hand Gestures models, as one name when they match. */
+const visionModels = (settings) => {
+  const m = settings.vision_models || {};
+  return m.face === m.hands ? `${modelName(m.face)} models.`
+    : `${modelName(m.face)} Face Detection and ${modelName(m.hands)} Hand Gestures.`;
+};
+
 export async function render() {
   const [status, { sessions }, latest, counts, { kiosks }, { people }, settings] = await Promise.all([
     api("api/status"), api("api/sessions?kind=voice&limit=500"), api("api/sessions?limit=12"),
@@ -112,11 +121,11 @@ export async function render() {
             section("Vision Match"),
             h("div", { class: "card" },
               feature("eye", "Face Detection and Hand Gestures",
-                `Faces looking at the kiosk and raised fingers. ${settings.vision_model === "accurate" ? "Accurate" : "Light"} model.`,
+                `Faces looking at the kiosk and raised fingers. ${visionModels(settings)}`,
                 settings.vision_error ? chip("Can't run", "c-err")
                   : settings.vision_loaded ? chip(settings.vision_on_gpu ? "On, GPU" : "On, CPU", "c-ok") : chip("Not loaded yet"),
                 "vision-match"),
-              feature("person", "Face Recognition", "Who is looking at each kiosk. It shows in each kiosk's Face sensor.",
+              feature("person", "Face Recognition", `Who is looking at each kiosk. It shows in each kiosk's Face sensor. ${modelName(settings.vision_models?.recognition)} model.`,
                 settings.faces_enrolled ? chip(`${settings.faces_enrolled} ${settings.faces_enrolled === 1 ? "face" : "faces"}`, "c-ok") : chip("No faces yet"),
                 "vision-match"))),
           h("section", {},

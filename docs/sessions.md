@@ -37,7 +37,7 @@ Pick a person and choose **Add**. Only the user's speech is added. The other voi
 
 A vision session starts with the first look that finds a face or a hand. It ends 10 seconds after the last look that found one or when the kiosk's camera stops. A stretch longer than 30 minutes continues in a new session. Looks that find nothing open no session. This covers things like a pet walking by or a light changing. These empty looks are counted on the [kiosk's page](kiosks.md#a-kiosks-page) instead, so the list doesn't fill up with empty stretches.
 
-The top of a vision session's page shows what the kiosk did, its length and the vision model.
+The top of a vision session's page shows what the kiosk did, its length, the vision models and whether they ran on the GPU or the CPU.
 
 | Section | What it shows |
 | --- | --- |

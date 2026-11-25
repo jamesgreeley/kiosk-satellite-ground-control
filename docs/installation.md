@@ -4,17 +4,17 @@ Kiosk Satellite Ground Control runs on a CPU or an NVIDIA GPU as a Home Assistan
 
 ## Choosing a Machine
 
-Every Voice Match feature runs on the Ground Control machine instead of the kiosks. How long each one takes depends on that machine:
+Every Voice Match and Vision Match feature runs on the Ground Control machine instead of the kiosks. How long each one takes depends on that machine:
 
-| Machine | Speaker model | Isolation |
-| --- | --- | --- |
-| NVIDIA GPU | Accurate | About a tenth of a second per command |
-| x86 CPU with more than 4 cores | Accurate | About a second per command |
-| Mac with an Apple M-series chip | Accurate | Under a second per command on an M5 |
-| Intel N100 and other small x86 CPUs | Light | About 6 seconds per command with Accurate |
-| Raspberry Pi 4, Home Assistant Green and other ARM boards | Light | Too slow |
+| Machine | Speaker model | Isolation | Vision Match look |
+| --- | --- | --- | --- |
+| NVIDIA GPU | Accurate | About a tenth of a second per command | 17 to 34 ms |
+| x86 CPU with more than 4 cores | Accurate | About a second per command | 64 ms on an i9-13900H |
+| Mac with an Apple M-series chip | Accurate | Under a second per command on an M5 | 70 ms on an M5 |
+| Intel N100 and other small x86 CPUs | Light | About 6 seconds per command with Accurate | 292 ms |
+| Raspberry Pi 4, Home Assistant Green and other ARM boards | Light | Too slow | 671 ms on a Pi 4 |
 
-See [Performance Benchmarks](../README.md#performance-benchmarks) for the measured times. Isolation is optional, so a small machine still runs Recognition, Trimming and the Wake Word Aligner.
+The Vision Match column is a look with Face Detection, Face Recognition and Hand Gestures on the machine's default vision models. See [Performance Benchmarks](../README.md#performance-benchmarks) for the measured times. Isolation is optional, so a small machine still runs Recognition, Trimming and the Wake Word Aligner. Vision Match runs on every machine in the table. On a Pi 4, Face Detection dismisses the screensaver about a second after a face looks at the kiosk. See [Vision Models](vision-match.md#vision-models).
 
 On amd64, the CUDA image works with NVIDIA GPUs from the GTX 10 series (Pascal) to the RTX 50 series (Blackwell). On arm64, it works with the GB10 and other Blackwell boards. It needs 1 GB of free GPU memory or 2.5 GB with Isolation. Vision Match needs about 0.5 GB more.
 
@@ -46,11 +46,11 @@ These options are on the app's **Configuration** tab:
 | Keep session audio | on | Keeps each session's audio, so it can be played back or added to a person. |
 | mDNS address | empty | Optional. See [Kiosks on Another Network](kiosks.md#kiosks-on-another-network). |
 
-You can also change the speaker model, learning and session keeping in the app's [Settings](settings.md). Those settings then take precedence over these options.
+You can also change the speaker model, learning and session keeping in the app's [Settings](settings.md). Those settings then take precedence over these options. The Vision Match models have no option here. Choose them in the app under **Settings > Vision Match**.
 
 ### Files and Backups
 
-People, voiceprints, kiosks and saved sessions are stored in the app's own folder at `addon_configs/…_kiosk_satellite_ground_control`. You can open it with the Samba share and File editor apps. A Home Assistant backup that includes the app keeps all of it, so a restore brings back everyone's voiceprint. See [Backup and Moving](backup.md) to back it up or move it to another machine.
+People, voiceprints, faces, kiosks and saved sessions are stored in the app's own folder at `addon_configs/…_kiosk_satellite_ground_control`. You can open it with the Samba share and File editor apps. A Home Assistant backup that includes the app keeps all of it, so a restore brings back everyone's voiceprint and face. See [Backup and Moving](backup.md) to back it up or move it to another machine.
 
 ## Docker
 
@@ -83,7 +83,7 @@ docker run -d --name ground-control --network host --gpus all \
 
 ### Mac with Apple Silicon
 
-Ground Control runs with the CPU image in [Docker Desktop](https://www.docker.com/products/docker-desktop/) or [OrbStack](https://orbstack.dev) on a Mac with an Apple M-series chip. Docker on a Mac can't use the Mac's GPU, so everything runs on the CPU. An M-series chip is fast enough for every feature. On a MacBook Pro M5, all features together add about 0.8 s to a 5 s command.
+Ground Control runs with the CPU image in [Docker Desktop](https://www.docker.com/products/docker-desktop/) or [OrbStack](https://orbstack.dev) on a Mac with an Apple M-series chip. Docker on a Mac can't use the Mac's GPU, so everything runs on the CPU. An M-series chip is fast enough for every feature. On a MacBook Pro M5, all Voice Match features together add about 0.8 s to a 5 s command. A look with every Vision Match feature takes 70 ms.
 
 1. Install Docker Desktop or OrbStack.
 2. Start Ground Control with its port published:
@@ -99,7 +99,7 @@ Ground Control runs with the CPU image in [Docker Desktop](https://www.docker.co
 
 Ground Control on a Mac isn't discovered automatically. Docker runs it in a small Linux VM, so its mDNS announcement doesn't reach your network. Docker Desktop's host network option doesn't change that. Give the Mac a fixed address in your router so the address in each kiosk keeps working.
 
-Ground Control picks the Accurate speaker model automatically on an Apple chip. Keep the Mac from sleeping. On a Mac mini, the setting is under **System Settings > Energy**. On a MacBook, it is under **Battery > Options**. While the Mac sleeps, the kiosks use their own microphone and Voice Match is unavailable.
+Ground Control picks the Accurate speaker model and the Accurate Face Recognition model automatically on an Apple chip. Keep the Mac from sleeping. On a Mac mini, the setting is under **System Settings > Energy**. On a MacBook, it is under **Battery > Options**. While the Mac sleeps, the kiosks use their own microphone and Voice Match is unavailable. The Vision Match features on Ground Control wait until it answers again.
 
 ### NVIDIA GPU
 
@@ -133,7 +133,7 @@ If the GPU has memory to spare, set `KEEP_GPU_MEMORY` to `true`. Isolation then 
 | Variable | Default | What it does |
 | --- | --- | --- |
 | `HA_URL` | `http://homeassistant:8123` | Your Home Assistant address. Kiosk tokens are checked there and you log in to the web app there. |
-| `MODEL` | `auto` | `accurate`, `light` or `auto`. `auto` picks Accurate on an NVIDIA GPU, an Apple M-series chip or an x86 CPU with more than 4 cores and Light otherwise. |
+| `MODEL` | `auto` | The speaker model: `accurate`, `light` or `auto`. `auto` picks Accurate on an NVIDIA GPU, an Apple M-series chip or an x86 CPU with more than 4 cores and Light otherwise. The Vision Match models are chosen in the app under **Settings > Vision Match**. |
 | `THREADS` | half the CPUs, 1 to 4 | Threads per check. |
 | `LEARN` | `true` | Fold confident commands into each person's voiceprint. |
 | `KEEP_DAYS` | `7` | Days saved sessions are kept. |
@@ -141,7 +141,7 @@ If the GPU has memory to spare, set `KEEP_GPU_MEMORY` to `true`. Isolation then 
 | `PORT` | `10900` | The port for kiosks and the web app. |
 | `MDNS` | `true` | Advertise the service so it is discovered automatically on the network. |
 | `MDNS_ADDRESS` | the main network's | The address kiosks get. See [Kiosks on Another Network](kiosks.md#kiosks-on-another-network). |
-| `DATA_DIR` | `/data` | Where people, voiceprints, kiosks and sessions are stored. |
+| `DATA_DIR` | `/data` | Where people, voiceprints, faces, kiosks and sessions are stored. |
 | `UPDATE_CHECK` | `true` | Look for a new Ground Control version on GitHub every 12 hours and show it on Overview. |
 | `KEEP_GPU_MEMORY` | `false` | CUDA image only. Isolation and the vision models keep their GPU memory between runs instead of handing it back. See [GPU Memory](#gpu-memory). |
 
@@ -160,5 +160,6 @@ Each Ground Control version works with the Kiosk Satellite version released alon
 ## Next Steps
 
 1. [Connect and approve your kiosks](kiosks.md).
-2. [Add people and enroll their voices](people.md).
+2. [Add people and enroll their voices and faces](people.md).
 3. [Turn on Voice Match on each kiosk](voice-match.md#on-the-kiosks).
+4. [Turn on Vision Match on each kiosk with a camera](vision-match.md#on-the-kiosks).

@@ -9,8 +9,10 @@ Ground Control keeps all of its data in one folder. Back it up or copy it to ano
 | `people.json` | Everyone on the People page. It includes each person's color and Home Assistant links. |
 | `voices/` | Each person's enrollment audio. Each person has their own folder. |
 | `profiles/` | The voiceprints. There is one file per speaker model. |
+| `faces/` | Each person's face pictures from their captures. Each person has their own folder. |
+| `faceprints/` | The faces built from those pictures. There is one file per Face Recognition model. |
 | `kiosks.json` | Every kiosk and whether it is approved. |
-| `settings.json` | The settings changed in the app, such as the speaker model, the thresholds and Isolation. |
+| `settings.json` | The settings changed in the app, such as the speaker model, the vision models, the thresholds and Isolation. |
 | `sessions.db` | Saved sessions and each kiosk's look counts. You don't need to keep it because sessions expire after a few days anyway. |
 | `sessions/` | The audio and frames of saved sessions. Like `sessions.db`, you don't need to keep it. |
 
@@ -55,9 +57,9 @@ The steps are the same for any old and new installation:
 4. **Start the new installation.** Keep the old one stopped or uninstall it so only one installation is discovered on the network.
 5. **Point the kiosks at the new machine.** Kiosks that connect through automatic discovery need no changes. If you entered the address in a kiosk under **Settings > Ground Control** in Kiosk Satellite, enter the new address there.
 
-Everyone's voice stays enrolled. The kiosks stay approved and keep the people they answer. People keep the same IDs, so you don't need to choose them again on a kiosk set to answer chosen people.
+Everyone's voice and face stay enrolled. The kiosks stay approved and keep the people they answer. People keep the same IDs, so you don't need to choose them again on a kiosk set to answer chosen people.
 
-The new machine might use another speaker model, such as Accurate on a GPU after Light on a Raspberry Pi. In that case the voiceprints for it are rebuilt from the enrollment audio when Ground Control starts. Nobody needs to record again. A speaker model or setting you changed in the app moves with `settings.json`, so check **Settings > Voice Match** on the new machine.
+The new machine might use another speaker model, such as Accurate on a GPU after Light on a Raspberry Pi. In that case the voiceprints for it are rebuilt from the enrollment audio when Ground Control starts. Nobody needs to record again. A new Face Recognition model works the same way: the faces are rebuilt from the face pictures. A model or setting you changed in the app moves with `settings.json`, so check **Settings > Voice Match** and **Settings > Vision Match** on the new machine.
 
 ### From a Home Assistant App
 

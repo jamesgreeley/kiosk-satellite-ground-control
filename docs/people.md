@@ -8,8 +8,9 @@ This page lists everyone Voice Match and Face Recognition can recognize. It hold
 
 1. Choose **Add a person** and enter their name. The kiosks and the assistant use this name for them.
 2. Enroll their voice on each device model they talk to. See [Enrollment](#enrollment).
+3. For Face Recognition, enroll their face on a kiosk with a camera. See [Enrolling a Face](#enrolling-a-face).
 
-A person without a voice is never recognized. They can still be picked on a kiosk under **Answer > Chosen people**.
+A person without a voice or a face is never recognized. Someone with only a face is recognized by Face Recognition but never by their voice. They can still be picked on a kiosk under **Answer > Chosen people**.
 
 ## Enrollment
 
@@ -57,7 +58,7 @@ Each step needs a few good pictures of the face. When a picture isn't good, the 
 
 If the capture stops early after the first step, what was captured is kept. Enrolling on another kiosk or in other light helps the face be recognized there.
 
-Ground Control keeps only small pictures of the face that are lined up and 112 pixels wide. Changing the vision model rebuilds the faces from them, so nobody has to enroll again. The **Vision Match** card shows them under **Face pictures**. **Captures** opens the list of captures with the kiosk each was taken on. Deleting a capture rebuilds the person's face without it.
+Ground Control keeps only small pictures of the face that are lined up and 112 pixels wide. Changing the Face Recognition model rebuilds the faces from them, so nobody has to enroll again. The **Vision Match** card shows them under **Face pictures**. **Captures** opens the list of captures with the kiosk each was taken on. Deleting a capture rebuilds the person's face without it.
 
 ### How a Face Is Recognized
 
@@ -71,7 +72,7 @@ There is no check for a real person, so a photo or a video of an enrolled person
 
 ## Color
 
-**Color on the kiosk** is the person's color: the name before a command on the voice overlay, the listening arc on a device with a light ring and the person's marks in the Ground Control app.
+**Color on the kiosk** is the person's color: the name before a command on the voice overlay, the listening arc on a device with a light ring, the ring around their picture on the recognition cards and the person's marks in the Ground Control app.
 
 ## Home Assistant and Personal Commands
 
@@ -82,7 +83,7 @@ Each person can be linked to things in Home Assistant. As you type, the fields s
 | To-do list | "Add milk to my list" and "what's on my list" use it when this person says them. |
 | Calendar | "What's on my calendar" reads it. |
 | Playlist | "Play my playlist" plays it in Music Assistant. |
-| Person | This person in Home Assistant. The People page shows their Home Assistant picture and speaker events include it for automations. |
+| Person | This person in Home Assistant. The People page and the kiosk's recognition cards show their Home Assistant picture. Speaker events and face events include it for automations. |
 
 The kiosks receive these along with the voices, so "my" works on the kiosk with no extra step. Anyone without a list of their own uses the shared list. Kiosk Satellite's blueprints add the sentences to Home Assistant's own conversation agent and to LLM agents. See [Personal Commands](https://github.com/jxlarrea/kiosk-satellite/blob/main/docs/voice-match.md#personal-commands) in the Kiosk Satellite docs.
 
