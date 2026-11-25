@@ -177,6 +177,73 @@ select.fld { appearance: none; -webkit-appearance: none; padding: 0 44px 0 14px;
 .swatch { width: 32px; height: 32px; border-radius: 50%; border: 0; cursor: pointer; padding: 0; }
 /* The ring of the chosen color is drawn inside it, so the row keeps its left edge. */
 .swatch[aria-checked="true"] { box-shadow: inset 0 0 0 2px var(--text), inset 0 0 0 5px var(--surface); }
+/* The person's head: the summary chips under the name, then the color. */
+.head .chips { margin: 8px 0 0; }
+.head .chips .chip { max-width: 100%; white-space: normal; height: auto; min-height: 30px; padding-block: 4px; line-height: 1.3; }
+.head > .grow { flex: 1 1 0; }
+.colorrow { display: flex; align-items: center; gap: 12px 16px; flex-wrap: wrap; margin: 0 20px; padding: 16px 0 18px; border-top: 1px solid var(--border); }
+.colorrow .swatches { padding: 0; }
+.colorrow .rd { flex: 1 1 220px; margin: 0; }
+.clabel { font-size: 14px; font-weight: 500; color: var(--muted); }
+/* Under each name in the list: whether the voice and the face are enrolled. */
+.pstat { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 3px; font-size: 12.5px; font-weight: 500; color: var(--muted); }
+.pstat > span { display: inline-flex; align-items: center; gap: 4px; }
+.pstat > span.on { color: var(--primary); }
+/* A feature's card: Voice Match, Vision Match. */
+.right > .card + .card { margin-top: 16px; }
+.fcard { padding: 0; }
+.fhead { display: flex; align-items: flex-start; gap: 14px; padding: 22px 20px 16px; }
+.ftile { width: 44px; height: 44px; border-radius: 14px; flex: none; display: flex; align-items: center; justify-content: center; background: var(--soft); color: var(--primary); }
+.ftitle { margin: 0; font-size: 19px; font-weight: 600; line-height: 1.3; }
+.fabout { margin: 3px 0 0; font-size: 13.5px; color: var(--muted); line-height: 1.4; }
+.fstatus { display: contents; }
+.fbar { margin: 0 20px; padding: 14px 16px; border-radius: 16px; background: var(--bg); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.fbar[hidden] { display: none; }
+.fbar label { font-size: 14px; font-weight: 500; color: var(--muted); }
+.fbar .fld { flex: 1 1 200px; height: 40px; background-color: var(--surface); border: 1px solid var(--outline); }
+.fnote { flex-basis: 100%; font-size: 13px; color: var(--muted); line-height: 1.4; }
+.fpart { padding: 20px 20px 4px; }
+.fpart h3 { margin: 0; font-size: 14px; font-weight: 600; }
+.fpart p { margin: 3px 0 12px; font-size: 13px; color: var(--muted); }
+.fpart h3 + .facethumbs { padding: 12px 0 0; }
+.kinds { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 760px) { .kinds { grid-template-columns: minmax(0, 1fr); } }
+.kind { border: 1px solid var(--border); border-radius: 16px; padding: 10px 12px 10px 14px; display: flex; align-items: center; gap: 12px; min-height: 64px; color: var(--muted); }
+.kind.on > svg { color: var(--primary); }
+.kind .grow { flex: 1 1 0; color: var(--text); }
+.kt { font-size: 15px; font-weight: 500; line-height: 1.3; }
+.kd { font-size: 12.5px; color: var(--muted); line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fmore { margin-top: 12px; border-top: 1px solid var(--border); }
+.fmore summary { list-style: none; display: flex; align-items: center; gap: 10px; padding: 14px 20px; min-height: 52px; cursor: pointer; font-size: 15px; font-weight: 500; }
+.fmore summary::-webkit-details-marker { display: none; }
+.fmore summary:hover { background: var(--bg); }
+.fmore summary > svg { color: var(--muted); flex: none; transition: transform .15s; }
+.fmore[open] summary > svg { transform: rotate(180deg); }
+.fcount { color: var(--muted); font-weight: 400; }
+.faside { font-size: 13px; color: var(--muted); font-weight: 400; }
+@media (max-width: 640px) { .faside { display: none; } }
+.fmorebody { padding: 0 0 8px; }
+.frow { display: flex; align-items: center; gap: 12px; padding: 8px 12px 8px 20px; }
+.frow .grow { flex: 1 1 0; }
+.ft { font-size: 14.5px; font-weight: 500; }
+.fcard { padding-bottom: 20px; }
+.fcard:has(> .fmore) { padding-bottom: 0; }
+.fcard > .capture { margin-top: 0; }
+/* A face capture as it runs. */
+.capture { margin: 0 20px; padding: 16px; border-radius: 16px; background: var(--soft); display: flex; flex-direction: column; gap: 10px; }
+.capture[hidden] { display: none; }
+.cwhere { font-size: 13px; font-weight: 600; color: var(--primary); }
+.cstep { font-size: 17px; font-weight: 500; margin-top: -6px; }
+.csegs { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 6px; }
+.csegs span { height: 6px; border-radius: 3px; background: var(--outline); opacity: .6; overflow: hidden; }
+.csegs i { display: block; height: 100%; background: var(--fill); transition: width .3s; }
+.csegs:has(i) span { opacity: 1; background: color-mix(in srgb, var(--fill) 25%, var(--surface)); }
+.cline { display: flex; align-items: center; gap: 10px; font-size: 13.5px; min-height: 26px; }
+.cline .chip[hidden] { display: none; }
+.capture .fnote { margin-top: 2px; }
+/* Forget, alone at the bottom. */
+.card.forget { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding: 16px 20px; margin-top: 24px; }
+.btn.out.danger { border-color: var(--error); }
 
 /* Radio options */
 .opt { display: flex; align-items: flex-start; gap: 14px; padding: 14px 20px; position: relative; cursor: pointer; width: 100%; border: 0; background: transparent; color: inherit; text-align: left; font-size: inherit; }

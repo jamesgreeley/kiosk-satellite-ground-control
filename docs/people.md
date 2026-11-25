@@ -15,7 +15,7 @@ A person without a voice is never recognized, but can still be picked on a kiosk
 
 A voice is recognized best on the kinds of device it was enrolled on, since an Echo Show and an Echo Dot hear the same voice differently. Enrollment always records with a kiosk's own microphone, so enroll each person once on every kind of device they talk to.
 
-1. On the person's page, the **Devices** section lists every kind of device in the house and whether they are enrolled on it. Choose **Enroll** next to one, or **Enroll on a kiosk** to pick the kiosk.
+1. On the person's page, the **Voice Match** card lists every kind of device in the house under **Kinds of device**, with the seconds of speech enrolled on each. Choose **Enroll** on a kind, or pick a kiosk next to **Enroll on** and choose **Enroll voice**.
 2. The kiosk shows the text to read, full screen in the kiosk's language. The Ground Control app shows the same text, so it can also be read from a phone.
 3. Read it aloud for about 45 seconds:
     - Talk normally, in the voice you use for commands, not a reading voice.
@@ -28,9 +28,9 @@ What was recorded is kept when the enrollment is stopped early with at least 10 
 
 Only kiosks with **Allow enrollment here** on, under **Settings > Ground Control > Voice Match** in Kiosk Satellite, are offered. A kiosk busy with a voice command or an alarm can't start an enrollment until it is done.
 
-### Enrollments
+### Recordings
 
-The **Voice Match** section lists each enrollment with the kiosk it was recorded on and how much speech it has. Deleting one rebuilds the person's voice without it.
+**Recordings**, at the bottom of the **Voice Match** card, opens the list of each enrollment with the kiosk it was recorded on and how much speech it has. Deleting one rebuilds the person's voice without it.
 
 ### Adding a Voice from a Session
 
@@ -46,18 +46,18 @@ Face Recognition tells who is looking at a kiosk, from the faces enrolled here. 
 
 ### Enrolling a Face
 
-A face is enrolled through a kiosk's own camera, in a guided capture of about half a minute. Start it on the kiosk, or in the person's **Vision Match** section here: pick the kiosk and choose **Enroll face**. Only kiosks with Face Recognition on are offered. The kiosk then shows the steps:
+A face is enrolled through a kiosk's own camera, in a guided capture of about half a minute. Start it on the kiosk, or in the person's **Vision Match** card here: pick the kiosk next to **Enroll on** and choose **Enroll face**. Only kiosks with Face Recognition on are offered. The kiosk then shows the steps:
 
 1. Look at the screen.
 2. Turn your head a little to one side.
 3. Now a little to the other side.
 4. Take a step back.
 
-Each step needs a few good pictures of the face. The kiosk says what is wrong when one isn't good: no face, more than one face, come closer, turn more or less, too dark. A different face is left out, so someone walking past doesn't end up in the enrollment. The Ground Control app follows the steps as they happen.
+Each step needs a few good pictures of the face. The kiosk says what is wrong when one isn't good: no face, more than one face, come closer, turn more or less, too dark. A different face is left out, so someone walking past doesn't end up in the enrollment. The person's page follows the steps as they happen, wherever the capture was started: the kiosk, the step, the pictures taken and what to fix. To stop early, use **Stop** on the kiosk.
 
 What was captured is kept when the capture stops early after the first step. Enrolling on another kiosk, or in other light, helps the face be recognized there.
 
-Only small pictures of the face, lined up and 112 pixels wide, are kept, so a change of vision model rebuilds the faces without anyone enrolling again. The **Vision Match** section shows them, with each enrollment and the kiosk it was captured on. Deleting an enrollment rebuilds the person's face without it.
+Only small pictures of the face, lined up and 112 pixels wide, are kept, so a change of vision model rebuilds the faces without anyone enrolling again. The **Vision Match** card shows them under **Face pictures**, and **Captures** opens the list of each capture with the kiosk it was taken on. Deleting a capture rebuilds the person's face without it.
 
 ### How a Face Is Recognized
 
