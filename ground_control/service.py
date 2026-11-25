@@ -289,7 +289,7 @@ class GroundControl:
                 names = ", ".join(f"{f} {VISION_MODELS[f][k].label}" for f, k in self.vision_keys.items())
                 try:
                     self._vision = Vision(self.cfg.models_dir, self.vision_keys, threads=self.cfg.threads,
-                                          use_cuda=self.cfg.cuda)
+                                          use_cuda=self.cfg.cuda, keep_memory=self.cfg.keep_gpu_memory)
                 except Exception as err:  # noqa: BLE001 - reported on the status page
                     self._vision_error = f"Vision Match's models ({names}) failed to load: {err}"
                     self.status.errors.append(self._vision_error)
@@ -297,8 +297,9 @@ class GroundControl:
                     return None
                 ms = self._vision.ms
                 _LOG.info("Vision Match models loaded on %s (%s): face look %s ms, hand look %s ms, "
-                          "%s ms a face recognized", "the GPU" if self._vision.on_gpu else "the CPU", names,
-                          ms["face"], ms["hands"], ms["recognition"])
+                          "%s ms a face recognized%s", "the GPU" if self._vision.on_gpu else "the CPU", names,
+                          ms["face"], ms["hands"], ms["recognition"],
+                          ". They keep their GPU memory between looks" if self._vision.keeps_memory else "")
                 people = [p.id for p in self.people.all()]
                 rec = self._vision.rec_key
                 if self.faces.needs_rebuild(rec, people):

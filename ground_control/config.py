@@ -13,8 +13,9 @@ Variable             Meaning                                      Default
 ``MODEL``            ``accurate``, ``light`` or ``auto``          ``auto``
 ``THREADS``          threads per inference                        half the CPUs, 1 to 4
 ``CUDA``             run the speaker model on an NVIDIA GPU       ``false``
-``KEEP_GPU_MEMORY``  Isolation keeps its GPU memory between       ``false``
-                     commands: faster, about 2 GB more held
+``KEEP_GPU_MEMORY``  Isolation and the vision models keep         ``false``
+                     their GPU memory between runs: faster,
+                     about 2.25 GB more held
 ``HA_URL``           Home Assistant: kiosk tokens and the web     ``http://homeassistant:8123``, or
                      UI's login, so a browser must reach it too   ``auto`` (from the Supervisor) as an app
 ``PORT``             the service port                             ``10900``

@@ -197,7 +197,7 @@ async function detail(kiosk, people, status, onKiosk) {
     const handLook = seen.findLast((x) => (x.want || "h").includes("h"));
     const face = !faceLook ? null : faceLook.face ? (faceLook.face.frontal ? "Looking at the kiosk" : "Face turned away") : "No face";
     const hand = handLook?.hand ? (handLook.hand.fingers != null ? fingers(handLook.hand.fingers) : "Hand") : null;
-    const ms = lk ? Object.values(lk.ms || {}).reduce((a, b) => a + b, 0) : null;
+    const ms = lk ? (lk.ms?.total ?? Object.values(lk.ms || {}).reduce((a, b) => a + b, 0)) : null;
     seeBox.replaceChildren(...[viewer ? disc(byId[viewer.id] || viewer) : h("span", { class: "disc vis" }, icon("eye", 20)),
       viewer ? h("span", { class: "big" }, viewer.name) : null,
       others.length ? h("span", { class: "val" }, `also ${others.map((p) => p.name).join(", ")}`) : null,

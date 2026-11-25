@@ -164,3 +164,12 @@ def test_a_skipped_pin_and_lockdown_by_face_are_recorded():
         {"type": "lockdown_on", "t": 3.0},
     ]
     assert record["summary"][:4] == ["Lockdown PIN skipped", "Lockdown off", "Kiosk PIN skipped", "Lockdown on"]
+
+
+def test_a_looks_time_is_its_total_not_its_stages_added_up():
+    """Face Detection and Hand Gestures overlap in a look, so the stages add up to more than the look took."""
+    from ground_control.vision_sessions import look_ms
+
+    assert look_ms({"decode": 1.0, "face": 5.0, "hands": 11.0, "total": 13.0}) == 13.0
+    # A look saved before the stages could overlap has no total.
+    assert look_ms({"decode": 1.0, "face": 5.0, "hands": 11.0}) == 17.0

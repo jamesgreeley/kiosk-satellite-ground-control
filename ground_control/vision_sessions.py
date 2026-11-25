@@ -88,6 +88,12 @@ class VisionSession:
         return round(now - self.started, 2)
 
 
+def look_ms(ms: dict[str, float]) -> float:
+    """How long a look took on Ground Control: its ``total``, or the sum of its
+    stages for a look saved before stages could overlap."""
+    return ms["total"] if "total" in ms else sum(ms.values())
+
+
 def summarize_look(faces: list[dict[str, Any]] | None, hand: dict[str, Any] | None) -> tuple[dict | None, dict | None]:
     """What a look found, kept small: the largest face and the shown hand."""
     face = None
@@ -320,7 +326,7 @@ class VisionTracker:
 
     def _record(self, s: VisionSession, end_t: float, frames: list[_Frame]) -> dict[str, Any]:
         looks = s.looks
-        gc = [sum(v for v in lk["ms"].values()) for lk in looks]
+        gc = [look_ms(lk["ms"]) for lk in looks]
         readings: dict[str, int] = {}
         for lk in looks:
             n = (lk.get("hand") or {}).get("fingers")

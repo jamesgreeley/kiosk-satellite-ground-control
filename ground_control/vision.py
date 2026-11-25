@@ -24,6 +24,8 @@ import ast
 import io
 import logging
 import time
+from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -31,7 +33,7 @@ from typing import Any
 import numpy as np
 from PIL import Image
 
-from .engine import LEAN_CUDA, GpuThread, open_session, session_options as _session_options
+from .engine import LEAN_CUDA, GpuThread, open_session, run_options, session_options as _session_options
 from .models import VISION_MODELS, verified_path
 
 _LOG = logging.getLogger(__name__)
@@ -51,8 +53,22 @@ NMS_IOU = 0.4
 MAX_FACES = 10
 FACE_SIDE = 640
 """Faces are found on the frame with its longer side at most this long."""
+FACE_SHAPES = 4
+"""On a GPU, how many frame shapes the face model keeps a session for. A GPU
+session sets up again each time its input shape changes, which takes 80 ms
+with CUDA 12 for a model that runs in 4 ms. With one session, kiosks whose
+frames differ in shape, such as one in landscape and one in portrait, would
+pay that on every look. Landscape and portrait frames in 4:3 and 16:9 make four."""
 HAND_SIZE = (640, 480)
 """The hand model's fixed input, width by height."""
+KEEPS = "about 0.25 GB"
+"""What the three Accurate models keep on a GPU between looks with
+``KEEP_GPU_MEMORY`` on. Without it each model hands its memory back after
+every run. Taking it again for the next run costs about 4 ms a look on an
+RTX 4000 and 13 ms on a GB10, where taking GPU memory is slow."""
+AT_ONCE = 4
+"""Looks that can have their hand model running beside their face model at the
+same moment. The service runs at most this many looks at a time."""
 MAX_PIXELS = 1920 * 1080
 
 FINGERS = {"fist": 0, "one": 1, "peace": 2, "peace_inverted": 2, "two_up": 2, "two_up_inverted": 2,
@@ -145,14 +161,43 @@ def _r(v: float) -> float:
 class FaceModel:
     """SCRFD with five face points."""
 
-    def __init__(self, path: Path, threshold: float, threads: int, use_cuda: bool, gpu: GpuThread) -> None:
+    def __init__(self, path: Path, threshold: float, threads: int, use_cuda: bool, gpu: GpuThread,
+                 keep_memory: bool = False) -> None:
         self.threshold = threshold
         self._gpu = gpu
-        self.session = gpu(open_session, path, session_options(threads), use_cuda, LEAN_CUDA)
+        self._path, self._options = path, session_options(threads)
+        self.session = gpu(open_session, path, self._options, use_cuda, LEAN_CUDA)
         self.on_gpu = self.session.get_providers()[0] == "CUDAExecutionProvider"
         self._input = self.session.get_inputs()[0].name
         if len(self.session.get_outputs()) != 9:
             raise ValueError(f"{path.name} is not a SCRFD model with face points")
+        # On a GPU, a session for each frame shape (see FACE_SHAPES). The
+        # first shape seen, the one the models are timed with when they load,
+        # runs in the session above. With ``keep_memory`` it keeps its GPU
+        # memory between looks (see KEEPS). The others always hand theirs back.
+        self._first: tuple[int, int] | None = None
+        self._others: OrderedDict[tuple[int, int], Any] = OrderedDict()
+        self._hand_back = run_options(self.on_gpu)
+        self._after_run = run_options(self.on_gpu and not keep_memory)
+
+    def _run(self, x: np.ndarray) -> list[np.ndarray]:
+        """The model on a prepared frame. Runs on the GPU thread, so sessions are opened one at a time."""
+        if not self.on_gpu:
+            return self.session.run(None, {self._input: x})
+        shape = (x.shape[2], x.shape[3])
+        if self._first is None:
+            self._first = shape
+        if shape == self._first:
+            return self.session.run(None, {self._input: x}, self._after_run)
+        session = self._others.get(shape)
+        if session is None:
+            if len(self._others) >= FACE_SHAPES - 1:
+                self._others.popitem(last=False)
+            session = self._others[shape] = open_session(self._path, self._options, True, LEAN_CUDA)
+            _LOG.debug("face model session opened for %sx%s frames", shape[1], shape[0])
+        else:
+            self._others.move_to_end(shape)
+        return session.run(None, {self._input: x}, self._hand_back)
 
     def __call__(self, rgb: np.ndarray) -> list[dict[str, Any]]:
         h, w = rgb.shape[:2]
@@ -162,10 +207,13 @@ class FaceModel:
             img = np.asarray(Image.fromarray(rgb).resize((round(w * scale), round(h * scale)), Image.BILINEAR))
         ih, iw = img.shape[:2]
         ph, pw = -(-ih // 32) * 32, -(-iw // 32) * 32
-        x = np.zeros((ph, pw, 3), np.float32)
-        x[:ih, :iw] = img
-        x = ((x - 127.5) / 128.0).transpose(2, 0, 1)[None]
-        out = self._gpu(self.session.run, None, {self._input: x})
+        # Straight into the layout the model takes, scaled in place. Padding
+        # is black, as before it is scaled.
+        x = np.empty((1, 3, ph, pw), np.float32) if (ph, pw) == (ih, iw) else np.zeros((1, 3, ph, pw), np.float32)
+        x[0, :, :ih, :iw] = img.transpose(2, 0, 1)
+        x -= 127.5
+        x /= 128.0
+        out = self._gpu(self._run, x)
         boxes, scores, points = [], [], []
         for k, s in enumerate((8, 16, 32)):
             score = out[k].reshape(-1)
@@ -205,12 +253,14 @@ class FaceModel:
 class HandModel:
     """YOLOv10 trained on HaGRIDv2's gestures. Its class names come from the model file."""
 
-    def __init__(self, path: Path, threshold: float, threads: int, use_cuda: bool, gpu: GpuThread) -> None:
+    def __init__(self, path: Path, threshold: float, threads: int, use_cuda: bool, gpu: GpuThread,
+                 keep_memory: bool = False) -> None:
         self.threshold = threshold
         self._gpu = gpu
         self.session = gpu(open_session, path, session_options(threads), use_cuda, LEAN_CUDA)
         self.on_gpu = self.session.get_providers()[0] == "CUDAExecutionProvider"
         self._input = self.session.get_inputs()[0].name
+        self._after_run = run_options(self.on_gpu and not keep_memory)
         names = ast.literal_eval(self.session.get_modelmeta().custom_metadata_map.get("names", "{}"))
         self.names = [names[i] for i in range(len(names))]
         if NO_GESTURE not in self.names:
@@ -223,11 +273,16 @@ class HandModel:
         r = min(tw / w, th / h)
         nw, nh = round(w * r), round(h * r)
         px, py = (tw - nw) // 2, (th - nh) // 2
-        canvas = np.full((th, tw, 3), 114, np.uint8)
         img = rgb if (nw, nh) == (w, h) else np.asarray(Image.fromarray(rgb).resize((nw, nh), Image.BILINEAR))
-        canvas[py:py + nh, px:px + nw] = img
-        x = (canvas.astype(np.float32) / 255.0).transpose(2, 0, 1)[None]
-        out = self._gpu(self.session.run, None, {self._input: x})[0][0]  # (4 + classes, places)
+        # Straight into the layout the model takes, scaled in place. A frame
+        # of another shape sits in the middle of a gray one.
+        if (nw, nh) == (tw, th):
+            x = np.empty((1, 3, th, tw), np.float32)
+        else:
+            x = np.full((1, 3, th, tw), 114, np.float32)
+        x[0, :, py:py + nh, px:px + nw] = img.transpose(2, 0, 1)
+        x /= 255.0
+        out = self._gpu(self.session.run, None, {self._input: x}, self._after_run)[0][0]  # (4 + classes, places)
         scores = out[4:]
         shown = scores.copy()
         shown[self._none] = 0
@@ -261,23 +316,31 @@ class Vision:
     (``keys``: face, hands and recognition), loaded once and shared by every
     kiosk."""
 
-    def __init__(self, models_dir: Path, keys: dict[str, str], threads: int = 1, use_cuda: bool = False) -> None:
+    def __init__(self, models_dir: Path, keys: dict[str, str], threads: int = 1, use_cuda: bool = False,
+                 keep_memory: bool = False) -> None:
+        """``keep_memory``: on a GPU, the models keep their memory between looks
+        (the ``KEEP_GPU_MEMORY`` setting, see KEEPS)."""
         self.keys = dict(keys)
         face, hand, rec = (VISION_MODELS[f][keys[f]] for f in ("face", "hands", "recognition"))
         self._gpu = GpuThread(use_cuda, "gpu-vision")
+        # The hand model runs beside the face model in a look that asks for
+        # both (see ``look``), so on a GPU it has a thread of its own.
+        self._gpu_hands = GpuThread(use_cuda, "gpu-vision-hands")
+        self._beside = ThreadPoolExecutor(AT_ONCE, thread_name_prefix="vision-hands")
         try:
             self.face = FaceModel(verified_path(models_dir, face.file, face.sha256),
-                                  face.threshold, threads, use_cuda, self._gpu)
+                                  face.threshold, threads, use_cuda, self._gpu, keep_memory)
             self.hand = HandModel(verified_path(models_dir, hand.file, hand.sha256),
-                                  hand.threshold, threads, use_cuda, self._gpu)
+                                  hand.threshold, threads, use_cuda, self._gpu_hands, keep_memory)
             from .faces import FaceEmbedder
 
             self.recognizer = FaceEmbedder(verified_path(models_dir, rec.file, rec.sha256),
-                                           threads, use_cuda, self._gpu)
+                                           threads, use_cuda, self._gpu, keep_memory)
         except Exception:
-            self._gpu.close()
+            self.close()
             raise
         self.on_gpu = self.face.on_gpu and self.hand.on_gpu and self.recognizer.on_gpu
+        self.keeps_memory = self.on_gpu and keep_memory
         self.ms: dict[str, float] = {}
         """Each feature's model time on this machine, in ms: a face look, a
         hand look and one face recognized. Measured when the models load."""
@@ -305,26 +368,42 @@ class Vision:
         t1 = time.perf_counter()
         ms = {"decode": round((t1 - t0) * 1000, 1)}
         faces = hand = embeddings = None
-        if "face" in want:
-            faces = self.face(rgb)
-            t2 = time.perf_counter()
-            ms["face"] = round((t2 - t1) * 1000, 1)
-            t1 = t2
-            facing = [f for f in faces if f["frontal"]]
-            if recognize and facing:
-                from .faces import MAX_FACES
-
-                big = sorted(facing, key=lambda f: -f["box"][2])[:MAX_FACES]
-                embeddings = [(f["box"], self.embed(rgb, f)) for f in big]
+        # A look for both runs the hand model beside the face model: neither
+        # needs the other's result, and one after the other took the sum of
+        # the two.
+        beside = self._beside.submit(self._hand, rgb, hand_min) if "hands" in want and "face" in want else None
+        try:
+            if "face" in want:
+                faces = self.face(rgb)
                 t2 = time.perf_counter()
-                ms["recognize"] = round((t2 - t1) * 1000, 1)
+                ms["face"] = round((t2 - t1) * 1000, 1)
                 t1 = t2
-        if "hands" in want:
-            hand = self.hand(rgb)
-            if hand is not None and max(hand["box"][2], hand["box"][3]) < hand_min:
-                hand = None
-            ms["hands"] = round((time.perf_counter() - t1) * 1000, 1)
+                facing = [f for f in faces if f["frontal"]]
+                if recognize and facing:
+                    from .faces import MAX_FACES
+
+                    big = sorted(facing, key=lambda f: -f["box"][2])[:MAX_FACES]
+                    embeddings = [(f["box"], self.embed(rgb, f)) for f in big]
+                    ms["recognize"] = round((time.perf_counter() - t1) * 1000, 1)
+        except BaseException:
+            if beside is not None:
+                beside.cancel()
+            raise
+        if beside is not None:
+            hand, ms["hands"] = beside.result()
+        elif "hands" in want:
+            hand, ms["hands"] = self._hand(rgb, hand_min)
+        # The stages overlap in a look for both, so their times no longer add up to the look's.
+        ms["total"] = round((time.perf_counter() - t0) * 1000, 1)
         return Look(faces, hand, ms, embeddings)
+
+    def _hand(self, rgb: np.ndarray, hand_min: float) -> tuple[dict[str, Any] | None, float]:
+        """The shown hand and the hand model's own time in ms."""
+        t = time.perf_counter()
+        hand = self.hand(rgb)
+        if hand is not None and max(hand["box"][2], hand["box"][3]) < hand_min:
+            hand = None
+        return hand, round((time.perf_counter() - t) * 1000, 1)
 
     def embed(self, rgb: np.ndarray, face: dict[str, Any]) -> np.ndarray:
         from .faces import align, points_px
@@ -356,4 +435,6 @@ class Vision:
         return out
 
     def close(self) -> None:
+        self._beside.shutdown(wait=False)
         self._gpu.close()
+        self._gpu_hands.close()

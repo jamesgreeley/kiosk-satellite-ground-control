@@ -28,7 +28,7 @@ services:
       # KEEP_AUDIO: "true"   # keep each session's audio
       # PORT: 10900
       # MDNS_ADDRESS: 192.168.1.20  # advertise this address instead of the main network's
-      # KEEP_GPU_MEMORY: "false"  # Isolation keeps its GPU memory between commands: faster, about 2 GB more held
+      # KEEP_GPU_MEMORY: "false"  # Isolation and the vision models keep their GPU memory: faster, about 2.25 GB more held
     volumes:
       - ground-control:/data
     deploy:

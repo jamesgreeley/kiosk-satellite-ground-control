@@ -34,7 +34,7 @@ from typing import Any
 import numpy as np
 from PIL import Image
 
-from .engine import LEAN_CUDA, GpuThread, open_session
+from .engine import LEAN_CUDA, GpuThread, open_session, run_options
 
 TEMPLATE = np.array([[38.2946, 51.6963], [73.5318, 51.5014], [56.0252, 71.7366],
                      [41.5493, 92.3655], [70.7299, 92.2041]], np.float64)
@@ -79,17 +79,19 @@ def jpeg(crop: np.ndarray, quality: int = 92) -> bytes:
 class FaceEmbedder:
     """A face crop to a unit-length embedding."""
 
-    def __init__(self, path: Path, threads: int, use_cuda: bool, gpu: GpuThread) -> None:
+    def __init__(self, path: Path, threads: int, use_cuda: bool, gpu: GpuThread, keep_memory: bool = False) -> None:
         from .vision import session_options
 
         self.session = gpu(open_session, path, session_options(threads), use_cuda, LEAN_CUDA)
         self.on_gpu = self.session.get_providers()[0] == "CUDAExecutionProvider"
         self._input = self.session.get_inputs()[0].name
         self._gpu = gpu
+        # On a GPU the memory of a run goes back after it, unless KEEP_GPU_MEMORY is on.
+        self._after_run = run_options(self.on_gpu and not keep_memory)
 
     def __call__(self, crop: np.ndarray) -> np.ndarray:
         x = ((crop.astype(np.float32) - 127.5) / 127.5).transpose(2, 0, 1)[None]
-        v = self._gpu(self.session.run, None, {self._input: x})[0][0].astype(np.float32)
+        v = self._gpu(self.session.run, None, {self._input: x}, self._after_run)[0][0].astype(np.float32)
         return v / max(float(np.linalg.norm(v)), 1e-9)
 
 

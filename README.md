@@ -166,29 +166,29 @@ These tables show how long Ground Control takes for one camera look.
 
 #### CPU
 
-| | Raspberry Pi 4 | Intel N100 | Intel N100 | i9-13900H | MacBook Pro M5 |
-|---|---|---|---|---|---|
-| Vision models | Light | Light, Accurate recognition | Accurate | Light, Accurate recognition | Light, Accurate recognition |
-| Face Detection | 386 ms | 81 ms | 319 ms | 18 ms | 18 ms |
-| Hand Gestures | 455 ms | 94 ms | 1,830 ms | 23 ms | 20 ms |
-| Face Recognition | 78 ms | 173 ms | 173 ms | 35 ms | 49 ms |
-| **All features** | **913 ms** | **346 ms** | **2,320 ms** | **75 ms** | **85 ms** |
-| Looks a second | 1.1 | 2.9 | 0.4 | 13.4 | 11.7 |
+| | Raspberry Pi 4 | Intel N100 | i9-13900H | MacBook Pro M5 |
+|---|---|---|---|---|
+| Vision models | Light | Light, Accurate recognition | Light, Accurate recognition | Light, Accurate recognition |
+| Face Detection | 361 ms | 80 ms | 18 ms | 18 ms |
+| Hand Gestures | 455 ms | 94 ms | 23 ms | 20 ms |
+| Face Recognition | 78 ms | 173 ms | 35 ms | 49 ms |
+| **All features** | **671 ms** | **292 ms** | **64 ms** | **70 ms** |
+| Looks a second | 1.5 | 3.4 | 15.6 | 14.4 |
 
-These numbers use the CPU image with Ground Control's default threads. That is 2 threads on the Pi and the N100 and 4 on the others. The MacBook Pro runs it in Docker Desktop. Each column uses that machine's default models except the second N100 column, which has every feature on Accurate. Accurate Hand Gestures is what makes it slow: 1.8 s a look on the N100, 352 ms on the i9 and 256 ms on the MacBook Pro.
+These numbers use the CPU image with Ground Control's default threads. That is 2 threads on the Pi and the N100 and 4 on the others. The MacBook Pro runs it in Docker Desktop. Each column uses that machine's default models. Accurate Hand Gestures is too slow on a CPU: 1.8 s a look on the N100, 352 ms on the i9 and 256 ms on the MacBook Pro.
 
 #### NVIDIA GPU (CUDA)
 
 | | RTX 3050 | RTX 4000 SFF Ada | GB10 |
 |---|---|---|---|
 | Vision models | Accurate | Accurate | Accurate |
-| Face Detection | 11 ms | 6 ms | 9 ms |
+| Face Detection | 9 ms | 6 ms | 8 ms |
 | Hand Gestures | 23 ms | 12 ms | 13 ms |
 | Face Recognition | 5 ms | 3 ms | 5 ms |
-| **All features** | **38 ms** | **20 ms** | **24 ms** |
-| Looks a second | 26.2 | 49.5 | 41.5 |
+| **All features** | **34 ms** | **17 ms** | **17 ms** |
+| Looks a second | 29.1 | 58.7 | 58.7 |
 
-These numbers use the CUDA image with CUDA 12 on the RTX 3050 and the RTX 4000 and CUDA 13 on the GB10. The vision models' time depends on the GPU's compute, so a GPU with about half the compute takes about twice as long for them. Reading the JPEG and the rest of a look's work run on the machine's CPU even in the CUDA image, so that part doesn't change with the GPU.
+These numbers use the CUDA image with CUDA 12 on the RTX 3050 and the RTX 4000 and CUDA 13 on the GB10. The vision models' time depends on the GPU's compute, so a GPU with about half the compute takes about twice as long for them. Reading the JPEG and the rest of a look's work run on the machine's CPU even in the CUDA image, so that part doesn't change with the GPU. `KEEP_GPU_MEMORY` is on for the RTX 4000 and the GB10. It keeps the vision models' GPU memory between looks (see [GPU Memory](docs/installation.md#gpu-memory)). Without it, a look with every feature takes 21 ms on the RTX 4000 and 31 ms on the GB10.
 
 #### GPU Memory
 
@@ -196,18 +196,19 @@ This table shows how much GPU memory the CUDA image uses with every vision model
 
 | | amd64 image (CUDA 12) | arm64 image (CUDA 13) |
 |---|---|---|
-| Kept | 0.7 GB | 0.7 GB |
-| Most during a look | 0.7 GB | 0.7 GB |
+| Kept | 0.4 GB | 0.4 GB |
+| Most during a look | 0.5 GB | 0.6 GB |
+| Kept with `KEEP_GPU_MEMORY` | 0.7 GB | 0.7 GB |
 
-The vision models load when the first kiosk asks for a look. Ground Control then keeps their memory for as long as it runs. A look adds nothing to it. Vision Match shares the CUDA runtime with Voice Match, so together they need about 0.5 GB more than Voice Match's numbers above.
+The vision models load when the first kiosk asks for a look. Each model hands the memory of a run back when the run is done, so a look needs more for a moment than what is kept. With `KEEP_GPU_MEMORY` on, the models keep that memory and a look adds nothing to it. If some kiosks send frames of another shape, such as a kiosk in portrait, each shape adds about 0.05 GB and its looks use up to 0.15 GB more while they run. Vision Match shares the CUDA runtime with Voice Match. Together they keep about 0.25 GB more than Voice Match's numbers above, or 0.5 GB more with `KEEP_GPU_MEMORY`.
 
 #### How It Is Measured
 
-Each test sends 64 frames from an Echo Show 5's camera through Ground Control's own code just like a kiosk does. They are 640x480 JPEGs, the size Kiosk Satellite sends, and each one has a face looking at the camera and a raised hand.
+Each test sends 64 frames from an Echo Show 5's camera through Ground Control's own code just like a kiosk does. They are 640x480 JPEGs, the size Kiosk Satellite sends, and each one has a face looking at the camera and a raised hand. Each row is timed in a run of its own after half a minute of looks, so the machine is at the speed it keeps up.
 
 - **Face Detection** is a look for faces alone. **Hand Gestures** is a look for hands alone. Both include reading the JPEG.
 - **Face Recognition** is the time to recognize one face once it is found. Once someone is recognized, their face is checked again only every 2 seconds. A face nobody enrolled is checked again once a second.
-- **All features** is one look with Face Detection, Face Recognition and Hand Gestures. That is the longest a look takes.
+- **All features** is one look with Face Detection, Face Recognition and Hand Gestures. That is the longest a look takes. Hand Gestures runs at the same time as the other two in that look, so it takes less than the three rows added up.
 - **Looks a second** is how many of those looks Ground Control keeps up with. A kiosk sends one frame at a time and only after something moves, so several kiosks can share them. Since Face Recognition runs on at most one look a second, the looks between get closer to the time of Face Detection and Hand Gestures alone.
 - On a Pi 4, Face Detection dismisses the screensaver about a second after a face looks at the kiosk. Hand Gestures feel slow there because a gesture needs more than one look.
 

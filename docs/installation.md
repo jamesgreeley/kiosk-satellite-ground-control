@@ -126,7 +126,7 @@ This table shows how much GPU memory Ground Control uses with the Accurate speak
 
 Ground Control keeps the first two amounts for as long as it runs. While a command runs, it needs up to 0.3 GB more. With Isolation, a command of 10 seconds or longer needs up to 1.5 GB more. That memory is freed once the command is done. Commands that end at the same moment are cleaned one after the other, so the total never goes above that. If the GPU is shared with an LLM or speech-to-text, leave that much free for Ground Control.
 
-If the GPU has memory to spare, set `KEEP_GPU_MEMORY` to `true`. Isolation then keeps about 2 GB more memory between commands. Each command is done about 0.05 s sooner on a GB10 and 0.01 s sooner on an RTX 4000.
+If the GPU has memory to spare, set `KEEP_GPU_MEMORY` to `true`. Isolation then keeps about 2 GB more memory between commands. Each command is done about 0.05 s sooner on a GB10 and 0.01 s sooner on an RTX 4000. Vision Match's models keep about 0.25 GB more between looks. A look with every feature then takes 17 ms instead of 31 ms on a GB10 and 17 ms instead of 21 ms on an RTX 4000.
 
 ### Environment Variables
 
@@ -143,7 +143,7 @@ If the GPU has memory to spare, set `KEEP_GPU_MEMORY` to `true`. Isolation then 
 | `MDNS_ADDRESS` | the main network's | The address kiosks get. See [Kiosks on Another Network](kiosks.md#kiosks-on-another-network). |
 | `DATA_DIR` | `/data` | Where people, voiceprints, kiosks and sessions are stored. |
 | `UPDATE_CHECK` | `true` | Look for a new Ground Control version on GitHub every 12 hours and show it on Overview. |
-| `KEEP_GPU_MEMORY` | `false` | CUDA image only. Isolation keeps its GPU memory between commands instead of handing it back. See [GPU Memory](#gpu-memory). |
+| `KEEP_GPU_MEMORY` | `false` | CUDA image only. Isolation and the vision models keep their GPU memory between runs instead of handing it back. See [GPU Memory](#gpu-memory). |
 
 ## Updating
 

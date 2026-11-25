@@ -83,7 +83,8 @@ function lane(label, looks, total, mark) {
 
 function timeline(record, total) {
   const looks = record.looks || [];
-  const gc = (lk) => Object.values(lk.ms || {}).reduce((a, b) => a + b, 0);
+  // A look's stages overlap, so newer looks carry their total.
+  const gc = (lk) => lk.ms?.total ?? Object.values(lk.ms || {}).reduce((a, b) => a + b, 0);
   const top = Math.max(1, ...looks.map((lk) => Math.max(gc(lk), lk.rtt || 0)));
   const outcomes = (record.events || []).filter((e) => OUTCOMES.includes(e.type));
   // A reading the hand look before or after it agrees with. One on its own is

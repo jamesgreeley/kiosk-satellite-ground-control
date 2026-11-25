@@ -95,7 +95,9 @@ def light() -> Vision:
 def test_the_light_models_see_nothing_in_an_empty_frame(light):
     look = light.look(jpeg(np.full((480, 640, 3), 128, np.uint8)))
     assert look.faces == [] and look.hand is None
-    assert set(look.ms) == {"decode", "face", "hands"}
+    assert set(look.ms) == {"decode", "face", "hands", "total"}
+    # The hand model runs beside the face model, so the look takes less than its stages added up.
+    assert look.ms["total"] >= max(look.ms["face"], look.ms["hands"])
     assert light.max_looks["face"] > 0 and light.max_looks["hands"] > 0
     assert set(light.ms) == {"face", "hands", "recognition"} and light.label == "light"
 
@@ -103,6 +105,90 @@ def test_the_light_models_see_nothing_in_an_empty_frame(light):
 def test_a_portrait_frame_and_a_single_look(light):
     look = light.look(jpeg(np.full((640, 480, 3), 90, np.uint8)), rotation=90, want=("face",))
     assert look.faces == [] and look.hand is None and "hands" not in look.ms
+
+
+def test_a_look_for_both_reads_the_same_as_a_look_for_each(light):
+    """Face Detection and Hand Gestures run at the same time in a look for both."""
+    rng = np.random.default_rng(3)
+    for shape in ((480, 640, 3), (640, 480, 3), (360, 640, 3)):
+        frame = jpeg(rng.integers(0, 255, shape, dtype=np.uint8))
+        both = light.look(frame)
+        face, hands = light.look(frame, want=("face",)), light.look(frame, want=("hands",))
+        assert both.faces == face.faces and both.hand == hands.hand
+        assert "hands" not in face.ms and "face" not in hands.ms and face.ms["total"] >= face.ms["face"]
+
+
+def test_a_look_that_fails_on_the_face_does_not_wait_on_the_hand(light, monkeypatch):
+    def broken(rgb):
+        raise RuntimeError("no face model")
+
+    monkeypatch.setattr(light, "face", broken)
+    with pytest.raises(RuntimeError, match="no face model"):
+        light.look(jpeg(np.full((480, 640, 3), 128, np.uint8)))
+    monkeypatch.undo()
+    assert light.look(jpeg(np.full((480, 640, 3), 128, np.uint8))).faces == []
+
+
+class _Session:
+    """Stands in for a GPU session: counts its runs."""
+
+    opened: list["_Session"] = []
+
+    def __init__(self) -> None:
+        self.runs: list[tuple[int, int]] = []
+        self.options: list[object] = []
+        _Session.opened.append(self)
+
+    def run(self, outputs, feed, options=None):
+        self.runs.append(next(iter(feed.values())).shape[2:])
+        self.options.append(options)
+        return []
+
+
+def test_on_a_gpu_each_frame_shape_has_a_face_session_of_its_own(light, monkeypatch):
+    """One session set up again for every change of shape: 80 ms a look with
+    a landscape and a portrait kiosk looking in turn."""
+    from ground_control import vision
+
+    face = light.face
+    _Session.opened = []
+    first = _Session()
+    monkeypatch.setattr(face, "session", first)
+    monkeypatch.setattr(face, "on_gpu", True)
+    monkeypatch.setattr(face, "_first", None)
+    monkeypatch.setattr(face, "_others", type(face._others)())
+    monkeypatch.setattr(vision, "open_session", lambda *a, **k: _Session())
+    land, port = np.zeros((1, 3, 480, 640), np.float32), np.zeros((1, 3, 640, 480), np.float32)
+    for x in (land, port, land, port, land):
+        face._run(x)
+    # The first shape keeps the session the model loaded with. Whether it
+    # keeps its memory too is KEEP_GPU_MEMORY's choice. The others never do.
+    assert first.runs == [(480, 640)] * 3 and all(o is face._after_run for o in first.options)
+    assert len(_Session.opened) == 2 and _Session.opened[1].runs == [(640, 480)] * 2
+    assert all(o is face._hand_back for o in _Session.opened[1].options)
+    # At most FACE_SHAPES sessions: the shape used longest ago gives its place up.
+    for side in (352, 384, 416, 448):
+        face._run(np.zeros((1, 3, side, 640), np.float32))
+    assert len(face._others) == vision.FACE_SHAPES - 1 and (640, 480) not in face._others
+    face._run(land)
+    assert first.runs[-1] == (480, 640)
+
+
+def test_gpu_memory_goes_back_after_each_run_unless_it_is_kept():
+    """KEEP_GPU_MEMORY: the vision models keep their GPU memory between looks, about 2 ms faster a look."""
+    from ground_control.engine import run_options
+
+    shrink = "memory.enable_memory_arena_shrinkage"
+    assert run_options(True).get_run_config_entry(shrink) == "gpu:0"
+    with pytest.raises(Exception):
+        run_options(False).get_run_config_entry(shrink)
+    # Nothing to keep on a CPU.
+    kept = Vision(MODELS, {f: "light" for f in VISION_FEATURES}, threads=1, keep_memory=True)
+    try:
+        assert not kept.keeps_memory
+        assert kept.look(jpeg(np.full((480, 640, 3), 128, np.uint8))).faces == []
+    finally:
+        kept.close()
 
 
 # ── the socket ────────────────────────────────────────────────────────────
