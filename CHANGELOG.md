@@ -15,6 +15,7 @@ All notable changes to Kiosk Satellite Ground Control are documented here.
 - **Stop a face capture from the person's page.** The capture's progress on a person's page now has a **Stop** button, which stops it on the kiosk and keeps the pictures from a finished first step.
 - **Hand sensitivity.** A new setting under **Settings > Vision Match > Hand Gestures**, from 1 to 100, sets the smallest hand counted. At the default of 50 a hand has to be about 9% of the frame on its longer side. Lower it if a hand that is only a small part of the frame, such as one cut off at its edge, shows up in vision sessions. A hand under the minimum counts as no hand, so it opens no vision session and doesn't reach the kiosk's gestures. See [Vision Match](docs/settings.md#vision-match).
 - **Kiosk PIN and Lockdown Mode in vision sessions.** A vision session now shows when a kiosk skipped its kiosk or lockdown PIN for a recognized person and when it turned Lockdown Mode off or on because of who was recognized. This needs a Kiosk Satellite version with these settings.
+- **Face Recognition is not a lock.** The People docs explain that a photo of an enrolled person can be recognized as them and that the Kiosk Satellite settings that act on faces are for convenience. See [Not a Lock](docs/people.md#not-a-lock).
 
 ### Changed
 - **Plainer wording in the app and the docs.** Sentences that ended in a phrase tacked on after a comma, or that had a comma before "and" or "or", are rewritten throughout the web app, its error messages, its log lines and the docs.

@@ -65,6 +65,10 @@ A face looking at the kiosk is compared with every enrolled face. The face is na
 
 Up to three faces looking at the kiosk are recognized at once. Each one is tracked from look to look by its position. The person at the kiosk is the one with the highest score. Someone else becomes the person at the kiosk only after scoring higher two checks in a row or when the person at the kiosk leaves. This keeps it from flipping between two people side by side. The kiosk's **Face** sensor shows the person at the kiosk and its **People in view** sensor shows everyone recognized. The kiosk's page and the vision sessions show the others in view too.
 
+### Not a Lock
+
+There is no check for a real person, so a photo or a video of an enrolled person held up to the camera can be recognized as them. Twins, siblings and young children can be mistaken for each other. Use the Kiosk Satellite settings that act on faces to skip steps for your family, not to keep anyone out, and don't unlock doors or disarm an alarm with the Face sensor or the face event in Home Assistant.
+
 ## Color
 
 **Color on the kiosk** is the person's color: the name before a command on the voice overlay, the listening arc on a device with a light ring and the person's marks in the Ground Control app.
