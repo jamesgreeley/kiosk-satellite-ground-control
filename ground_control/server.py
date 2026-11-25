@@ -803,7 +803,7 @@ async def vision_ws(request: web.Request) -> web.WebSocketResponse:
             ids, _ = faceprints() if recognize else ([], None)
             embed = recognize and bool(ids) and "face" in job["want"] and rec.wants(now)
             try:
-                look = await vm.run(vision.look, job["jpeg"], job["rotation"], job["want"], embed)
+                look = await vm.run(vision.look, job["jpeg"], job["rotation"], job["want"], embed, vm.hand_min_size)
             except ValueError as err:
                 tracker.lost("failed")
                 if not ws.closed:

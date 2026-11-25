@@ -117,11 +117,14 @@ class FakeVision:
         self.delay = delay
         self.face_embedding = np.eye(8, dtype=np.float32)[0]
 
-    def look(self, data, rotation=0, want=("face", "hands"), recognize=False):
+    def look(self, data, rotation=0, want=("face", "hands"), recognize=False, hand_min=0.0):
         decode(data, rotation)
         time.sleep(self.delay)
         face = {"box": [0.4, 0.2, 0.1, 0.15], "score": 0.9, "frontal": True, "yaw": 1.5, "points": []}
         hand = {"box": [0.6, 0.3, 0.05, 0.1], "score": 0.88, "gesture": "three", "fingers": 3}
+        self.hand_min = hand_min
+        if max(hand["box"][2], hand["box"][3]) < hand_min:
+            hand = None
         self.recognized = getattr(self, "recognized", 0) + bool(recognize)
         return Look([face] if "face" in want else None, hand if "hands" in want else None, {"decode": 1.0},
                     [(face["box"], self.face_embedding)] if recognize and "face" in want else None)
@@ -322,3 +325,25 @@ async def test_a_face_is_enrolled_through_the_guided_capture(client, monkeypatch
     assert crop.status == 200 and (await crop.read())[:2] == b"\xff\xd8"
     r = await client.delete(f"/api/people/{mia.id}/faces/{eid}", headers=GOOD)
     assert r.status == 200 and not (await r.json())["has_face"]
+
+
+async def test_hand_sensitivity_sets_the_smallest_hand_counted(client):
+    vm = client.app[VM]
+    assert vm.hand_sensitivity == 50 and vm.hand_min_size == pytest.approx(0.09)
+    r = await client.patch("/api/settings", json={"hand_sensitivity": 0}, headers=GOOD)
+    assert r.status == 400
+    r = await client.patch("/api/settings", json={"hand_sensitivity": 1}, headers=GOOD)
+    assert r.status == 200 and vm.hand_min_size == pytest.approx(0.188)
+    settings = await (await client.get("/api/settings", headers=GOOD)).json()
+    assert settings["hand_sensitivity"] == 1 and settings["hand_min_size"] == 0.188
+    # The fake hand is 10% of the frame on its longer side: too small now.
+    fake = FakeVision()
+    use(client, fake)
+    ws = await open_vision(client)
+    await receive(ws, "ready")
+    await ws.send_json({"type": "frame", "id": 1, "want": ["hands"]})
+    await ws.send_bytes(jpeg(halves()))
+    result = await receive(ws, "result")
+    assert result["hand"] is None and fake.hand_min == pytest.approx(0.188)
+    await client.patch("/api/settings", json={"hand_sensitivity": 100}, headers=GOOD)
+    assert vm.hand_min_size == 0.0

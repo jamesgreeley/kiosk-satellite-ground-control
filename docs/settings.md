@@ -5,7 +5,7 @@ Navigate to **Settings** in the Ground Control app.
 Settings has three areas. Pick one from the list on the left:
 
 - **Voice Match:** Recognition, Trimming, the Wake Word Aligner and Isolation. See [Voice Match](voice-match.md#settings).
-- **Vision Match:** the vision models, Face Recognition and the frames kept with vision sessions. See [Vision Match](#vision-match).
+- **Vision Match:** the vision models, Hand sensitivity, Face Recognition and the frames kept with vision sessions. See [Vision Match](#vision-match).
 - **General:** the engine, sessions, conversation agents and kiosks.
 
 Changes are saved right away and take precedence over the app's options or the container's environment variables.
@@ -18,6 +18,8 @@ Changes are saved right away and take precedence over the app's options or the c
 | Vision model | Accurate with an NVIDIA GPU, else Light | Light runs on any CPU. Accurate gets the finger count right more often, recognizes faces better in dim light and needs an NVIDIA GPU. |
 | Runs on | | NVIDIA GPU (CUDA) or CPU. The CUDA option sets it. The models load when the first kiosk requests them. |
 | Looks a second | | How many looks a second one kiosk can get. It is measured on this machine when the models load. |
+| **Hand Gestures** | | |
+| Hand sensitivity | 50 | From 1 to 100. It sets the smallest hand counted, by the longer side of its box: about 9% of the frame at 50, 13% at 30 and any size at 100. Lower it if a hand that is only a small part of the frame, such as one cut off at its edge, shows up in vision sessions. Hands that gave a finger count on kiosk frames were 10% of the frame or more. |
 | **Face Recognition** | | |
 | Threshold | Accurate 0.3, Light 0.35 | How close a face has to be to count as someone enrolled. Higher means fewer mix-ups and more unknown faces. Each vision model has its own. See [Face](people.md#face). |
 | Faces enrolled | | People with a face enrolled. |

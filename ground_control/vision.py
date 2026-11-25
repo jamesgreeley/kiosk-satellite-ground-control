@@ -278,9 +278,11 @@ class Vision:
         self.max_looks = self._measure()
 
     def look(self, jpeg: bytes, rotation: int = 0, want: tuple[str, ...] = ("face", "hands"),
-             recognize: bool = False) -> Look:
+             recognize: bool = False, hand_min: float = 0.0) -> Look:
         """What a frame shows. With ``recognize``, also the embedding of each
-        face looking at the kiosk, for Face Recognition."""
+        face looking at the kiosk, for Face Recognition. A hand whose box is
+        smaller than ``hand_min`` of the frame on its longer side counts as no
+        hand (Hand sensitivity)."""
         t0 = time.perf_counter()
         rgb = decode(jpeg, rotation)
         t1 = time.perf_counter()
@@ -302,6 +304,8 @@ class Vision:
                 t1 = t2
         if "hands" in want:
             hand = self.hand(rgb)
+            if hand is not None and max(hand["box"][2], hand["box"][3]) < hand_min:
+                hand = None
             ms["hands"] = round((time.perf_counter() - t1) * 1000, 1)
         return Look(faces, hand, ms, embeddings)
 

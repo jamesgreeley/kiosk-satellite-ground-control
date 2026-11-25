@@ -31,6 +31,9 @@ from .vad import VadModel
 
 _LOG = logging.getLogger(__name__)
 
+HAND_SENSITIVITY = 50
+"""Hand sensitivity's default."""
+
 
 @dataclass
 class Status:
@@ -67,6 +70,7 @@ class GroundControl:
         self.sessions.keep_days = int(saved.get("keep_days", cfg.keep_days))
         self.sessions.keep_audio = bool(saved.get("keep_audio", cfg.keep_audio))
         self.sessions.keep_frames = bool(saved.get("keep_frames", True))
+        self._hand_sensitivity = int(saved.get("hand_sensitivity", HAND_SENSITIVITY))
         self.isolate = bool(saved.get("isolator", False))
         self._isolator = None
         self._isolator_lock = threading.Lock()
@@ -135,6 +139,8 @@ class GroundControl:
                 "vision_max_looks": self._vision.max_looks if self._vision is not None else None,
                 "vision_error": self._vision_error,
                 "face_threshold": self.face_threshold,
+                "hand_sensitivity": self.hand_sensitivity,
+                "hand_min_size": round(self.hand_min_size, 3),
                 "default_face_threshold": VISION_MODELS[self.vision_model].rec_threshold,
                 "faces_enrolled": sum(1 for p in self.people.all() if self.faces.has_face(p.id))}
 
@@ -181,6 +187,11 @@ class GroundControl:
             if not 0.0 < v < 1.0:
                 raise ValueError("face_threshold must be between 0 and 1")
             out["face_thresholds"] = {**(saved.get("face_thresholds") or {}), self.vision_model: round(v, 3)}
+        if "hand_sensitivity" in values:
+            v = int(values["hand_sensitivity"])
+            if not 1 <= v <= 100:
+                raise ValueError("hand_sensitivity must be 1 to 100")
+            self._hand_sensitivity = out["hand_sensitivity"] = v
         if "vision_model" in values:
             key = values["vision_model"]
             if key not in self.vision_choices():
@@ -266,6 +277,18 @@ class GroundControl:
         """Face Recognition's threshold for the chosen vision model, as tuned or its default."""
         tuned = (self._saved().get("face_thresholds") or {}).get(self.vision_model)
         return float(tuned) if tuned is not None else VISION_MODELS[self.vision_model].rec_threshold
+
+    @property
+    def hand_sensitivity(self) -> int:
+        """Hand sensitivity, 1 to 100: higher counts smaller hands."""
+        return self._hand_sensitivity
+
+    @property
+    def hand_min_size(self) -> float:
+        """The smallest hand counted, as the longer side of its box over the
+        frame's: about 9% at the default 50, 13% at 30 and anything at 100.
+        Hands that gave a finger count on kiosk frames were 10% or more."""
+        return max(0.0, 0.2 * (100 - self.hand_sensitivity) / 100 - 0.01)
 
     def face_embedders(self) -> dict:
         """The loaded recognition model, so an enrollment lands in its faceprints."""

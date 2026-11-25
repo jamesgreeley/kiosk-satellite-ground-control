@@ -213,6 +213,11 @@ export async function render({ area } = {}) {
         s.vision_error ? hint(s.vision_error)
           : hint("Turn Vision Match on for each kiosk in Kiosk Satellite under Ground Control > Vision Match.")),
 
+      section("Hand Gestures", "Settings for reading raised hands on kiosk frames."),
+      h("div", { class: "card" },
+        row("Hand sensitivity", `From 1 to 100. With a higher value, smaller hands farther away count too. With a lower value, a hand that is only a small part of the frame, such as one cut off at its edge, counts as no hand. At ${s.hand_sensitivity} the smallest hand counted is ${Math.round(s.hand_min_size * 100)}% of the frame. The default is 50.`,
+          number("hsens", s.hand_sensitivity, "hand_sensitivity"), "hsens")),
+
       section("Frames", "Camera frames are kept with each vision session and shown on its page in Sessions."),
       h("div", { class: "card" },
         row("Keep frames", `Up to 8 frames a session: the first look, a face looking at the kiosk, each new finger reading and the last look. They are deleted with the session after ${s.keep_days} day${s.keep_days === 1 ? "" : "s"}.`,
