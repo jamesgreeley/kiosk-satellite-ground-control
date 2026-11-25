@@ -28,7 +28,7 @@ See [Kiosks](kiosks.md).
 ## 3. Enroll People
 
 1. In Ground Control, open **People**, choose **Add a person** and enter their name.
-2. On their page, choose **Enroll** on a device model they talk to, or pick a kiosk next to **Enroll on** and choose **Enroll voice**.
+2. On their page, choose **Enroll** on a device model they talk to, or pick a kiosk under **Enroll on a kiosk** and choose **Enroll voice**.
 3. They read the text on the kiosk aloud for about 45 seconds, walking slowly around the room.
 
 Enroll each person once on every device model they talk to, such as once on an Echo Show and once on an Echo Dot. See [People](people.md).

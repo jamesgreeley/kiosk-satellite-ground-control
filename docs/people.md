@@ -15,7 +15,7 @@ A person without a voice is never recognized, but can still be picked on a kiosk
 
 A voice is recognized best on the device models it was enrolled on, since an Echo Show and an Echo Dot hear the same voice differently. Enrollment always records with a kiosk's own microphone, so enroll each person once on every device model they talk to.
 
-1. On the person's page, the **Voice Match** card lists every device model in the house under **Device models**, with the seconds of speech enrolled on each. Choose **Enroll** on a model, or pick a kiosk next to **Enroll on** and choose **Enroll voice**.
+1. On the person's page, the **Voice Match** card lists every device model in the house under **Device models**, with the seconds of speech enrolled on each. Choose **Enroll** on a model, or pick a kiosk under **Enroll on a kiosk** and choose **Enroll voice**.
 2. The kiosk shows the text to read, full screen in the kiosk's language. The Ground Control app shows the same text, so it can also be read from a phone.
 3. Read it aloud for about 45 seconds:
     - Talk normally, in the voice you use for commands, not a reading voice.
@@ -46,7 +46,7 @@ Face Recognition tells who is looking at a kiosk, from the faces enrolled here. 
 
 ### Enrolling a Face
 
-A face is enrolled through a kiosk's own camera, in a guided capture of about half a minute. Start it on the kiosk, or in the person's **Vision Match** card here: pick the kiosk next to **Enroll on** and choose **Enroll face**. Only kiosks with Face Recognition on are offered. The kiosk then shows the steps:
+A face is enrolled through a kiosk's own camera, in a guided capture of about half a minute. Start it on the kiosk, or in the person's **Vision Match** card here: pick the kiosk under **Enroll on a kiosk** and choose **Enroll face**. Only kiosks with Face Recognition on are offered. The kiosk then shows the steps:
 
 1. Look at the screen.
 2. Turn your head a little to one side.

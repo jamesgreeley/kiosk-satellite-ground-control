@@ -66,17 +66,18 @@ function voiceCard(p, kiosks, kinds) {
   // Enroll: a connected kiosk that allows it records the voice through its own microphone.
   const ready = kiosks.filter((k) => k.connected && k.enroll);
   const covered = new Set(p.models || []);
-  const sel = h("select", { class: "fld", id: "voice-kiosk" },
+  const sel = h("select", { class: "fld", id: "voice-kiosk", "aria-label": "Kiosk" },
     [...ready].sort((a, b) => Number(covered.has(a.model)) - Number(covered.has(b.model)))
       .map((k) => h("option", { value: k.device_id }, k.model && k.model !== k.name ? `${k.name} (${k.model})` : k.name)));
-  const enroll = h("button", { class: "btn fill sm", disabled: !ready.length,
+  const enroll = h("button", { class: "btn out sm", disabled: !ready.length,
     onclick: () => { location.hash = `#/enroll/${p.id}/${encodeURIComponent(sel.value)}`; } }, "Enroll voice");
-  const bar = h("div", { class: "fbar" },
-    ready.length ? [h("label", { for: "voice-kiosk" }, "Enroll on"), sel] : null,
-    enroll,
-    h("span", { class: "fnote" }, ready.length
-      ? `${p.name} reads a few sentences aloud on the kiosk, about 45 seconds of speech.`
-      : "Needs a connected kiosk with Allow enrollment here on."));
+  const bar = h("div", { class: "row" },
+    h("div", { class: "grow" }, h("div", { class: "rt" }, "Enroll on a kiosk"),
+      h("div", { class: "rd" }, ready.length
+        ? `${p.name} reads a few sentences aloud, about 45 seconds of speech.`
+        : "Needs a connected kiosk with Allow enrollment here on.")),
+    ready.length ? sel : null,
+    enroll);
 
   const tiles = kinds.map(([model, ks]) => {
     const enrolled = covered.has(model);
@@ -176,14 +177,15 @@ function visionCard(p, kiosks, events) {
   const ready = kiosks.filter((k) => k.connected && k.access === "approved" && k.features?.vision_match
     && k.features?.face_recognition);
   const name = (id) => kiosks.find((k) => k.device_id === id)?.name || "a kiosk";
-  const sel = h("select", { class: "fld", id: "face-kiosk" }, ready.map((k) => h("option", { value: k.device_id }, k.name)));
-  const go = h("button", { class: "btn fill sm", disabled: !ready.length }, "Enroll face");
-  const bar = h("div", { class: "fbar" },
-    ready.length ? [h("label", { for: "face-kiosk" }, "Enroll on"), sel] : null,
-    go,
-    h("span", { class: "fnote" }, ready.length
-      ? `${p.name} stands in front of the kiosk and follows four steps on its screen. It takes about half a minute.${p.has_face ? " Another capture in different light helps." : ""}`
-      : "Needs a connected kiosk with Face Recognition on."));
+  const sel = h("select", { class: "fld", id: "face-kiosk", "aria-label": "Kiosk" }, ready.map((k) => h("option", { value: k.device_id }, k.name)));
+  const go = h("button", { class: "btn out sm", disabled: !ready.length }, "Enroll face");
+  const bar = h("div", { class: "row" },
+    h("div", { class: "grow" }, h("div", { class: "rt" }, "Enroll on a kiosk"),
+      h("div", { class: "rd" }, ready.length
+        ? `${p.name} follows four steps on the kiosk's screen, about half a minute.${p.has_face ? " Another capture in different light helps." : ""}`
+        : "Needs a connected kiosk with Face Recognition on.")),
+    ready.length ? sel : null,
+    go);
   const live = captureView();
 
   const running = (on) => {

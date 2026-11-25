@@ -190,16 +190,17 @@ select.fld { appearance: none; -webkit-appearance: none; padding: 0 44px 0 14px;
 .pstat > span { display: inline-flex; align-items: center; gap: 4px; }
 .pstat > span.on { color: var(--primary); }
 /* A feature's card: Voice Match, Vision Match. */
-.fcard { padding: 20px 0 0; }
+.fcard { padding: 8px 0; }
+.fcard:has(> .fmore) { padding-bottom: 0; }
 .fstatus { display: contents; }
-.fbar { margin: 0 20px; padding: 14px 16px; border-radius: 16px; background: var(--bg); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.fbar[hidden] { display: none; }
-.fbar label { font-size: 14px; font-weight: 500; color: var(--muted); }
-.fbar .fld { flex: 1 1 200px; height: 40px; background-color: var(--surface); border: 1px solid var(--outline); }
-.fnote { flex-basis: 100%; font-size: 13px; color: var(--muted); line-height: 1.4; }
-.fpart { padding: 20px 20px 4px; }
-.fpart h3 { margin: 0; font-size: 14px; font-weight: 600; }
-.fpart p { margin: 3px 0 12px; font-size: 13px; color: var(--muted); }
+.fcard > .row[hidden] { display: none; }
+.fcard > .row .fld { flex: 0 1 260px; }
+/* The parts under the enroll row, divided like rows. */
+.fpart, .fmore { position: relative; }
+.fpart::before, .fmore::before { content: ""; position: absolute; top: 0; left: 20px; right: 20px; height: 1px; background: var(--border); }
+.fpart { padding: 16px 20px 20px; }
+.fpart h3 { margin: 0; font-size: 17px; font-weight: 500; line-height: 1.3; }
+.fpart p { margin: 2px 0 12px; font-size: 13px; color: var(--muted); }
 .fpart h3 + .facethumbs { padding: 12px 0 0; }
 .kinds { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 @media (max-width: 760px) { .kinds { grid-template-columns: minmax(0, 1fr); } }
@@ -208,8 +209,7 @@ select.fld { appearance: none; -webkit-appearance: none; padding: 0 44px 0 14px;
 .kind .grow { flex: 1 1 0; color: var(--text); }
 .kt { font-size: 15px; font-weight: 500; line-height: 1.3; }
 .kd { font-size: 12.5px; color: var(--muted); line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.fmore { margin-top: 12px; border-top: 1px solid var(--border); }
-.fmore summary { list-style: none; display: flex; align-items: center; gap: 10px; padding: 14px 20px; min-height: 52px; cursor: pointer; font-size: 15px; font-weight: 500; }
+.fmore summary { list-style: none; display: flex; align-items: center; gap: 10px; padding: 14px 20px; min-height: 52px; cursor: pointer; font-size: 17px; font-weight: 500; }
 .fmore summary::-webkit-details-marker { display: none; }
 .fmore summary > svg { color: var(--muted); flex: none; transition: transform .15s; }
 .fmore[open] summary > svg { transform: rotate(180deg); }
@@ -220,11 +220,8 @@ select.fld { appearance: none; -webkit-appearance: none; padding: 0 44px 0 14px;
 .frow { display: flex; align-items: center; gap: 12px; padding: 8px 12px 8px 20px; }
 .frow .grow { flex: 1 1 0; }
 .ft { font-size: 14.5px; font-weight: 500; }
-.fcard { padding-bottom: 20px; }
-.fcard:has(> .fmore) { padding-bottom: 0; }
-.fcard > .capture { margin-top: 0; }
 /* A face capture as it runs. */
-.capture { margin: 0 20px; padding: 16px; border-radius: 16px; background: var(--soft); display: flex; flex-direction: column; gap: 10px; }
+.capture { margin: 8px 20px 16px; padding: 16px; border-radius: 16px; background: var(--soft); display: flex; flex-direction: column; gap: 10px; }
 .capture[hidden] { display: none; }
 .cwhere { font-size: 13px; font-weight: 600; color: var(--primary); }
 .cstep { font-size: 17px; font-weight: 500; margin-top: -6px; }
@@ -234,7 +231,7 @@ select.fld { appearance: none; -webkit-appearance: none; padding: 0 44px 0 14px;
 .csegs:has(i) span { opacity: 1; background: color-mix(in srgb, var(--fill) 25%, var(--surface)); }
 .cline { display: flex; align-items: center; gap: 10px; font-size: 13.5px; min-height: 26px; }
 .cline .chip[hidden] { display: none; }
-.capture .fnote { margin-top: 2px; }
+.capture .fnote { font-size: 13px; color: var(--muted); line-height: 1.4; }
 /* Forget, alone at the bottom. */
 .card.forget { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding: 16px 20px; margin-top: 24px; }
 .btn.out.danger { border-color: var(--error); }
