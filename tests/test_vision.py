@@ -14,7 +14,8 @@ from ground_control.auth import TokenCheck
 from ground_control.models import VISION_FEATURES, default_vision_keys
 from ground_control.server import VM, build_app
 from ground_control.service import GroundControl
-from ground_control.vision import FACE_3D, FINGERS, FRONTAL_MAX_DEG, BadFrame, Look, Vision, decode, head_yaw, nms, turn_of
+from ground_control.vision import (FACE_3D, FINGERS, FRONTAL_MAX_DEG, PITCH_MAX_DEG, PITCH_MIN_DEG, BadFrame, Look, Vision,
+                                   decode, facing, head_angles, head_yaw, nms, turn_of, whole_face)
 
 from .conftest import MODELS
 from .kiosks import CLIENTS, approve, receive
@@ -79,10 +80,45 @@ def test_a_head_turned_away_is_not_frontal():
     assert head_yaw(_project(-50)) > FRONTAL_MAX_DEG > head_yaw(_project(15))
 
 
+def _seen_from_below(deg: float) -> np.ndarray:
+    """The generic face as a camera this many degrees under it sees it (negative: over it)."""
+    a = np.radians(deg)
+    tilt = np.array([[1, 0, 0], [0, np.cos(a), -np.sin(a)], [0, np.sin(a), np.cos(a)]])
+    return (FACE_3D @ tilt.T)[:, :2] * 2 + [320, 240]
+
+
+def test_a_face_seen_from_far_below_or_above_does_not_look_at_the_kiosk():
+    """A tablet lying on a bed saw a chin from below, or the top of a bowed
+    head, and took both for a face looking at it."""
+    looks, yaw, pitch = facing(_seen_from_below(0), 640, 480)
+    assert looks and yaw < 1 and abs(pitch) < 1
+    assert abs(head_angles(_seen_from_below(25))[1] + 25) < 1
+    assert abs(head_angles(_seen_from_below(-15))[1] - 15) < 1
+    # A kiosk's camera sits under the face, so there is more room that way.
+    assert facing(_seen_from_below(30), 640, 480)[0] and not facing(_seen_from_below(45), 640, 480)[0]
+    assert facing(_seen_from_below(-15), 640, 480)[0] and not facing(_seen_from_below(-30), 640, 480)[0]
+    assert PITCH_MIN_DEG < 0 < PITCH_MAX_DEG
+    # Turned and cut off faces still don't count.
+    assert not facing(_project(-50), 640, 480)[0]
+    assert not facing(_seen_from_below(0) + [300, 0], 640, 480)[0]
+
+
 def test_the_nose_check_still_applies():
     eye_a, eye_b = np.array([0.0, 0.0]), np.array([10.0, 0.0])
     assert abs(turn_of(eye_a, eye_b, np.array([5.0, 6.0]))) < 0.01
     assert turn_of(eye_a, eye_b, np.array([9.0, 6.0])) > 0.3
+
+
+def test_a_face_the_frame_cuts_off_is_not_a_whole_face():
+    """A face in the corner of a tablet's frame, less than half of it in view,
+    was read as looking at the kiosk and recognized (these are its points)."""
+    in_the_corner = np.array([[597, 427], [641, 420], [637, 435], [620, 469], [655, 463]], float)
+    chin_below_the_frame = np.array([[564, 445], [612, 428], [599, 452], [589, 484], [624, 470]], float)
+    assert not whole_face(in_the_corner, 640, 480)
+    assert not whole_face(chin_below_the_frame, 640, 480)
+    assert whole_face(chin_below_the_frame - [0, 10], 640, 480)
+    # At the very edge still counts, in a frame of either shape.
+    assert whole_face(np.array([[0, 0], [480, 0], [240, 320], [100, 640], [380, 640]], float), 480, 640)
 
 
 @pytest.fixture(scope="module")
@@ -398,6 +434,38 @@ async def test_a_kiosk_with_face_recognition_hears_who_is_in_front_of_it(client)
             break
         await asyncio.sleep(0.02)
     assert "k1" not in vm.at_kiosk
+
+
+async def test_a_new_threshold_applies_to_a_kiosk_that_is_already_connected(client, monkeypatch):
+    """The Threshold was read once when the kiosk connected, so a kiosk kept
+    recognizing faces under a threshold that had since been raised."""
+    from ground_control import faces
+    from tests.test_faces import FakeEmbedder
+
+    monkeypatch.setattr(faces, "RECHECK_S", 0.0)
+    fake = FakeVision()
+    use(client, fake)
+    vm = client.app[VM]
+    ana = vm.people.add("Ana")
+    vm.faces.enroll(ana.id, [np.full((112, 112, 3), 10, np.uint8)], {"light": FakeEmbedder()})
+    # A face that scores 0.6 against Ana's faceprint.
+    fake.face_embedding = np.array([0.6, 0.8, 0, 0, 0, 0, 0, 0], np.float32)
+    ws = await open_vision(client, recognize=True)
+    await receive(ws, "ready")
+
+    async def look(frame_id: int) -> dict:
+        await ws.send_json({"type": "frame", "id": frame_id, "want": ["face"]})
+        await ws.send_bytes(jpeg(halves()))
+        return await receive(ws, "result")
+
+    await look(1)
+    named = await look(2)
+    assert named["person"]["name"] == "Ana" and named["person"]["score"] == pytest.approx(0.6, abs=0.01)
+    vm.update_settings({"face_threshold": 0.7})
+    after = await look(3)
+    assert after["person"]["id"] is None and after["people"] == []
+    assert vm.at_kiosk["k1"] is None
+    await ws.close()
 
 
 async def test_without_asking_for_it_a_kiosk_gets_no_recognition(client):

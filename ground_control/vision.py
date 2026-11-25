@@ -10,7 +10,9 @@ models the look asks for:
   between the eyes can't tell: on a head turned far, the face model puts the
   hidden eye near the nose, and a face 50 degrees away read as one looking.
   The nose check (``turn_of``) still has to pass too: on a face a dozen pixels
-  wide the points are too rough for the fit, and it catches those.
+  wide the points are too rough for the fit, and it catches those. A face the
+  edge of the frame cuts off never looks at the kiosk (``whole_face``), and
+  neither does one seen from far below or above (the pitch, see PITCH_MIN_DEG).
 - **Hands** (YOLOv10 trained on HaGRIDv2 gestures): the shown hand and its
   gesture, and the fingers that gesture holds up. The shown hand is the best
   one with a gesture, so a hand resting at the side doesn't hide a raised one.
@@ -42,6 +44,16 @@ FRONTAL_MAX_DEG = 30.0
 """How far a head can be turned from the camera, in degrees, and still look at the kiosk.
 On kiosk frames, faces looking at the screen measured 0 to 4 degrees and faces
 looking away 45 to 77."""
+
+PITCH_MIN_DEG, PITCH_MAX_DEG = -35.0, 20.0
+"""How far up or down a face can be seen from and still look at the kiosk
+(``head_angles``' pitch). Under the first, the camera sees the face from far
+below: the chin and the nostrils of someone looking over the kiosk. Over the
+second it sees the top of a head that is bowed. On kiosk frames of faces
+looking at the screen from 1 to 3 m the pitch measured -33 to 14, around
+-13: the generic face's nose isn't everyone's, and a kiosk's camera sits
+below the face. On a tablet lying on a bed it ran from -55 to 48, with the
+faces under -35 and over 20 not looking at it."""
 
 TURN_MAX = 0.6
 """The nose's offset along the eye line, in eye distances, up to which a face can look at the kiosk."""
@@ -110,10 +122,29 @@ def turn_of(eye_a: np.ndarray, eye_b: np.ndarray, nose: np.ndarray) -> float:
     return float((nose - (eye_a + eye_b) / 2) @ e / d2)
 
 
-def head_yaw(points: np.ndarray) -> float:
-    """How far the head is turned left or right from the camera, in degrees, from
-    its five points in pixels: the generic face fitted to them with a scaled
-    orthographic camera. 0 is straight at the camera."""
+def whole_face(points: np.ndarray, width: int, height: int) -> bool:
+    """Whether all five points of a face, in pixels, are inside the frame.
+
+    The face model gives five points for every face it finds, also for one
+    the edge of the frame cuts off. The hidden ones are guesses that land
+    outside the picture. A head angle worked out from guessed points means
+    nothing (it swung from 55 to 27 degrees on a face that never moved), and
+    a face with half of it missing was still recognized with the score of the
+    whole face. So a face that is cut off doesn't look at the kiosk and isn't
+    recognized. On the kiosk test set, 1 of 1,566 faces looking at the kiosk
+    has a point outside the frame."""
+    p = np.asarray(points, np.float64)
+    return bool((p[:, 0] >= 0).all() and (p[:, 0] <= width).all() and (p[:, 1] >= 0).all() and (p[:, 1] <= height).all())
+
+
+def head_angles(points: np.ndarray) -> tuple[float, float]:
+    """How far the head is turned from the camera, in degrees, from its five
+    points in pixels: the generic face fitted to them with a scaled
+    orthographic camera.
+
+    The yaw is the turn left or right, 0 straight at the camera, without a
+    sign. The pitch is the angle up or down: negative when the camera sees the
+    face from below, positive from above or with the head bowed."""
     model = FACE_3D - FACE_3D.mean(0)
     image = np.asarray(points, np.float64)
     image = image - image.mean(0)
@@ -122,11 +153,29 @@ def head_yaw(points: np.ndarray) -> float:
     a = -np.arctan2(ey, ex)
     image = image @ np.array([[np.cos(a), np.sin(a)], [-np.sin(a), np.cos(a)]])
     m, *_ = np.linalg.lstsq(model, image, rcond=None)
-    r1 = m[:, 0]
-    if not np.isfinite(r1).all() or float(r1 @ r1) <= 0:
-        return 90.0
+    r1, r2 = m[:, 0], m[:, 1]
+    if not np.isfinite(m).all() or float(r1 @ r1) <= 0 or float(r2 @ r2) <= 0:
+        return 90.0, 90.0
     r1 = r1 / np.linalg.norm(r1)
-    return float(np.degrees(np.arcsin(min(1.0, abs(r1[2])))))
+    r2 = r2 / np.linalg.norm(r2)
+    return (float(np.degrees(np.arcsin(min(1.0, abs(r1[2]))))),
+            float(np.degrees(np.arcsin(float(np.clip(r2[2], -1.0, 1.0))))))
+
+
+def head_yaw(points: np.ndarray) -> float:
+    """How far the head is turned left or right from the camera, in degrees. 0 is straight at the camera."""
+    return head_angles(points)[0]
+
+
+def facing(points: np.ndarray, width: int, height: int) -> tuple[bool, float, float]:
+    """Whether a face with these five points, in pixels, looks at the kiosk,
+    with its yaw and pitch: the whole face in the frame, the head turned at
+    most FRONTAL_MAX_DEG left or right, seen from between PITCH_MIN_DEG and
+    PITCH_MAX_DEG up or down, and the nose where a facing head's is."""
+    yaw, pitch = head_angles(points)
+    looks = (whole_face(points, width, height) and yaw <= FRONTAL_MAX_DEG and PITCH_MIN_DEG <= pitch <= PITCH_MAX_DEG
+             and abs(turn_of(points[0], points[1], points[2])) <= TURN_MAX)
+    return looks, yaw, pitch
 
 
 def nms(boxes: np.ndarray, scores: np.ndarray, iou: float = NMS_IOU) -> list[int]:
@@ -238,12 +287,13 @@ class FaceModel:
         for i in nms(boxes_a, scores_a)[:MAX_FACES]:
             x1, y1, x2, y2 = boxes_a[i]
             p = points_a[i]
-            yaw = head_yaw(p)
+            looks, yaw, pitch = facing(p, w, h)
             faces.append({
                 "box": [_r(x1 / w), _r(y1 / h), _r((x2 - x1) / w), _r((y2 - y1) / h)],
                 "score": _r(scores_a[i]),
-                "frontal": yaw <= FRONTAL_MAX_DEG and abs(turn_of(p[0], p[1], p[2])) <= TURN_MAX,
+                "frontal": looks,
                 "yaw": round(yaw, 1),
+                "pitch": round(pitch, 1),
                 "points": [[_r(px / w), _r(py / h)] for px, py in p],
             })
         faces.sort(key=lambda f: -f["box"][2])

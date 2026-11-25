@@ -44,7 +44,7 @@ Each stretch of time someone is in front of a kiosk is saved as a vision session
 
 ## Face Detection
 
-Face Detection finds the faces in a look and whether each one looks at the kiosk. A face looks at the kiosk when the head is turned 30 degrees or less from the camera. Only a face looking at the kiosk dismisses or postpones the screensaver. Only those faces are recognized.
+Face Detection finds the faces in a look and whether each one looks at the kiosk. A face looks at the kiosk when the whole face is in the frame, the head is turned 30 degrees or less to either side and the camera doesn't see it from far below or above. A face cut off by the edge of the frame, a chin seen from underneath and the top of a bowed head don't count. Only a face looking at the kiosk dismisses or postpones the screensaver. Only those faces are recognized.
 
 On kiosk frames from 1 to 3 m, a head turned away passed as a face looking at the screen in 10% of frames. With the models on the kiosk it was 82%.
 

@@ -100,7 +100,7 @@ def summarize_look(faces: list[dict[str, Any]] | None, hand: dict[str, Any] | No
     if faces:
         top = faces[0]
         face = {"count": len(faces), "frontal": any(f.get("frontal") for f in faces),
-                "width": top["box"][2], "yaw": top.get("yaw")}
+                "width": top["box"][2], "yaw": top.get("yaw"), "pitch": top.get("pitch")}
     hand_out = None
     if hand:
         hand_out = {"gesture": hand.get("gesture"), "fingers": hand.get("fingers"), "score": hand.get("score")}

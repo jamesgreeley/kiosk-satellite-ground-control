@@ -827,6 +827,8 @@ async def vision_ws(request: web.Request) -> web.WebSocketResponse:
                     rec.seen(facing, now)
                 if look.embeddings:
                     ids, m = faceprints()
+                    # The Threshold as it is set now, not as it was when this kiosk connected.
+                    rec.threshold = vm.face_threshold
                     rec.add(look.embeddings, ids, m, now)
                 result["person"], result["people"] = await tell_person()
             _LOG.debug("vision %s frame %s: %s", who, job["id"], result)

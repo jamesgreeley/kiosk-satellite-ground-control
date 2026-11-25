@@ -501,7 +501,7 @@ class FaceEnrollment:
                 "have": len(self.crops[name]), "need": need, "hint": hint, "done": self.done}
 
     def feed(self, rgb: np.ndarray, faces: list[dict[str, Any]], now: float) -> dict[str, Any]:
-        from .vision import head_yaw, turn_of
+        from .vision import PITCH_MAX_DEG, PITCH_MIN_DEG, head_angles, turn_of, whole_face
 
         if self.done:
             return self._event("ok")
@@ -514,7 +514,13 @@ class FaceEnrollment:
         width = face["box"][2]
         h, w = rgb.shape[:2]
         px = points_px(face, w, h)
-        yaw = head_yaw(px)
+        if not whole_face(px, w, h):
+            # The edge of the frame cuts the face off: nothing to enroll from it.
+            return self._event("no_face")
+        yaw, pitch = head_angles(px)
+        if not PITCH_MIN_DEG <= pitch <= PITCH_MAX_DEG:
+            # Seen from far below or above: not a picture to know the face by.
+            return self._event("look_at_screen")
         side = 1 if turn_of(px[0], px[1], px[2]) > 0 else -1
         name, need = STEPS[self.step]
         if name in ("look", "far") and yaw > FACING_DEG:
