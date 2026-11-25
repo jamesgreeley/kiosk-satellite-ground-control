@@ -216,7 +216,6 @@ select.fld { appearance: none; -webkit-appearance: none; padding: 0 44px 0 14px;
 .fmore { margin-top: 12px; border-top: 1px solid var(--border); }
 .fmore summary { list-style: none; display: flex; align-items: center; gap: 10px; padding: 14px 20px; min-height: 52px; cursor: pointer; font-size: 15px; font-weight: 500; }
 .fmore summary::-webkit-details-marker { display: none; }
-.fmore summary:hover { background: var(--bg); }
 .fmore summary > svg { color: var(--muted); flex: none; transition: transform .15s; }
 .fmore[open] summary > svg { transform: rotate(180deg); }
 .fcount { color: var(--muted); font-weight: 400; }
