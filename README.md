@@ -73,7 +73,7 @@ https://github.com/user-attachments/assets/4485f1fc-af2a-4d17-a7de-2b0b3ebe7f3f
 
 ## Vision Match
 
-Vision Match runs Kiosk Satellite's camera features on Ground Control. The camera and motion detection stay on the kiosk. When something moves, the kiosk sends a camera frame to Ground Control and gets back what is in it. A kiosk that is too slow for these models or can't run them, like an Echo Show 5 or an Android 7 tablet, gets the same features as a fast one. Turn it on for each kiosk in Kiosk Satellite under **Settings > Ground Control > Vision Match**.
+Vision Match runs Kiosk Satellite's camera features on Ground Control. The camera and motion detection stay on the kiosk. When something moves, the kiosk sends a camera frame to Ground Control and gets back what is in it. A kiosk that is too slow for these models or can't run them, like an Echo Show 5 or an Android 7 tablet, gets the same features as a fast one. Turn it on for each kiosk in Kiosk Satellite under **Settings > Ground Control > Vision Match**. See [Vision Match](docs/vision-match.md).
 
 ### Face Detection
 
@@ -286,6 +286,7 @@ The GPU needs to be from the GTX 10 series or newer. The host needs an NVIDIA dr
 - [Kiosks](docs/kiosks.md): connecting and approving kiosks, kiosks on another network and each kiosk's page.
 - [People](docs/people.md): adding people, enrollment and personal commands.
 - [Voice Match](docs/voice-match.md): Recognition, Trimming, the Wake Word Aligner, Isolation and the speaker models.
+- [Vision Match](docs/vision-match.md): Face Detection, Hand Gestures, Face Recognition and the vision models.
 - [Backup and moving](docs/backup.md): backing up the data and moving it to another machine for the app and Docker.
 - [Sessions](docs/sessions.md): what each voice command did, its audio and how to download it for an issue.
 - [Settings](docs/settings.md): every setting and the template for LLM conversation agents.
