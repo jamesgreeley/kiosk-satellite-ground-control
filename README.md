@@ -93,8 +93,6 @@ Enroll each person's face once on the People page with a guided capture of about
 
 Cards on the kiosk screen show who was recognized and what happened because of it. A Face event in Home Assistant fires when someone arrives at the kiosk and when they leave. Ground Control keeps only small pictures of each enrolled face.
 
-Face Recognition is a convenience for the people who live with the kiosk. It is not a lock, since a photo of an enrolled person can be recognized as them. See [Not a Lock](docs/people.md#not-a-lock).
-
 ## Performance Benchmarks
 
 ### Voice Match
@@ -162,29 +160,29 @@ These tables show how long Ground Control takes for one camera look.
 
 #### CPU
 
-| | Raspberry Pi 4 | Intel N100 | MacBook Pro M5 |
-|---|---|---|---|
-| Vision model | Light | Light | Light |
-| Face Detection | 386 ms | 81 ms | 18 ms |
-| Hand Gestures | 455 ms | 94 ms | 20 ms |
-| Face Recognition | 78 ms | 22 ms | 5 ms |
-| **All features** | **913 ms** | **194 ms** | **42 ms** |
-| Looks a second | 1.1 | 5.2 | 23.6 |
+| | Raspberry Pi 4 | Intel N100 | Intel N100 | i9-13900H | MacBook Pro M5 |
+|---|---|---|---|---|---|
+| Vision model | Light | Light | Accurate | Light | Light |
+| Face Detection | 386 ms | 81 ms | 319 ms | 16 ms | 18 ms |
+| Hand Gestures | 455 ms | 94 ms | 1,830 ms | 20 ms | 20 ms |
+| Face Recognition | 78 ms | 22 ms | 173 ms | 7 ms | 5 ms |
+| **All features** | **913 ms** | **194 ms** | **2,320 ms** | **41 ms** | **42 ms** |
+| Looks a second | 1.1 | 5.2 | 0.4 | 24.5 | 23.6 |
 
-These numbers use the CPU image with Ground Control's default threads. That is 2 threads on the Pi and the N100 and 4 on the MacBook Pro, which runs it in Docker Desktop. The CPU image has the Light vision model only.
+These numbers use the CPU image with Ground Control's default threads. That is 2 threads on the Pi and the N100 and 4 on the others. The MacBook Pro runs it in Docker Desktop. The CPU image has only the Light vision model. The Accurate column for the N100 shows why: a look with every feature takes more than 2 seconds there.
 
 #### NVIDIA GPU (CUDA)
 
-| | RTX 4000 SFF Ada | GB10 |
-|---|---|---|
-| Vision model | Accurate | Accurate |
-| Face Detection | 6 ms | 9 ms |
-| Hand Gestures | 12 ms | 13 ms |
-| Face Recognition | 3 ms | 5 ms |
-| **All features** | **20 ms** | **24 ms** |
-| Looks a second | 49.5 | 41.5 |
+| | RTX 3050 | RTX 4000 SFF Ada | GB10 |
+|---|---|---|---|
+| Vision model | Accurate | Accurate | Accurate |
+| Face Detection | 11 ms | 6 ms | 9 ms |
+| Hand Gestures | 23 ms | 12 ms | 13 ms |
+| Face Recognition | 5 ms | 3 ms | 5 ms |
+| **All features** | **38 ms** | **20 ms** | **24 ms** |
+| Looks a second | 26.2 | 49.5 | 41.5 |
 
-These numbers use the CUDA image with CUDA 12 on the RTX 4000 and CUDA 13 on the GB10. Reading the JPEG runs on the machine's CPU even in the CUDA image.
+These numbers use the CUDA image with CUDA 12 on the RTX 3050 and the RTX 4000 and CUDA 13 on the GB10. The vision models' time depends on the GPU's compute, so a GPU with about half the compute takes about twice as long for them. Reading the JPEG and the rest of a look's work run on the machine's CPU even in the CUDA image, so that part doesn't change with the GPU.
 
 #### GPU Memory
 
