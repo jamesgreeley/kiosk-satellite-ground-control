@@ -97,6 +97,7 @@ Cards on the kiosk screen show who was recognized and what happened because of i
 
 <details>
 <summary><strong>Voice Match</strong></summary>
+<p></p>
 
 These tables show how much latency each feature adds to a 5-second command.
 
@@ -156,9 +157,10 @@ The Accurate model makes the fewest mix-ups between people and with TV voices. T
 On amd64, the CUDA image works with NVIDIA GPUs from the GTX 10 series (Pascal) to the RTX 50 series (Blackwell). On arm64, it works with the GB10 and other Blackwell boards. It needs 1 GB of free GPU memory or 2.5 GB with Isolation. Vision Match needs about 0.5 GB more.
 
 </details>
-
+<p></p>
 <details>
 <summary><strong>Vision Match</strong></summary>
+<p></p>
 
 These tables show how long Ground Control takes for one camera look.
 
