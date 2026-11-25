@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import platform
 import threading
 import time
 from collections.abc import Callable
@@ -20,8 +21,8 @@ import numpy as np
 from .config import Config
 from .engine import Embedder, malloc_trim
 from .models import (ALIGNER_FILE, ALIGNER_SHA256, ISOLATOR_CPU_FILE, ISOLATOR_CPU_SHA256, ISOLATOR_FILE,
-                     ISOLATOR_MODEL, ISOLATOR_SHA256, SPEAKER_MODELS, VAD_FILE, VAD_SHA256, VISION_MODELS, SpeakerModel,
-                     default_vision_key, verified_path)
+                     ISOLATOR_MODEL, ISOLATOR_SHA256, SPEAKER_MODELS, VAD_FILE, VAD_SHA256, VISION_FEATURES,
+                     VISION_MODELS, SpeakerModel, apple_silicon, default_vision_keys, verified_path)
 from .hub import Hub
 from .people import People
 from .session import Session, SessionConfig
@@ -83,11 +84,9 @@ class GroundControl:
         self._aligner = None
         self._aligner_failed = False
         self._aligner_lock = threading.Lock()
-        choices = self.vision_choices()
-        chosen_vision, default_vision = saved.get("vision_model"), default_vision_key(cfg.cuda)
-        self.vision_model = (chosen_vision if chosen_vision in choices else default_vision if default_vision in choices
-                             else choices[0] if choices else default_vision)
-        """Vision Match's models: Light or Accurate. Accurate only with CUDA."""
+        self.vision_keys = self._vision_keys(saved)
+        """Vision Match's model for each feature (face, hands, recognition):
+        Light or Accurate, as chosen or this machine's default."""
         self._vision = None
         self._vision_error: str | None = None
         self._vision_lock = threading.Lock()
@@ -132,16 +131,19 @@ class GroundControl:
                 "isolator_on_gpu": self._isolator.on_gpu if self._isolator is not None else None,
                 "aligner": self.align, "aligner_missing": self._aligner_missing(),
                 "short_answers": self.short_answers,
-                "vision_model": self.vision_model,
-                "vision_models": {k: VISION_MODELS[k].label for k in self.vision_choices()},
+                "vision_models": dict(self.vision_keys),
+                "vision_defaults": self._vision_defaults(),
+                "vision_choices": {f: {k: VISION_MODELS[f][k].label for k in keys}
+                                   for f, keys in self.vision_choices().items()},
                 "vision_loaded": self._vision is not None,
                 "vision_on_gpu": self._vision.on_gpu if self._vision is not None else None,
                 "vision_max_looks": self._vision.max_looks if self._vision is not None else None,
+                "vision_ms": self._vision.ms if self._vision is not None else None,
                 "vision_error": self._vision_error,
                 "face_threshold": self.face_threshold,
                 "hand_sensitivity": self.hand_sensitivity,
                 "hand_min_size": round(self.hand_min_size, 3),
-                "default_face_threshold": VISION_MODELS[self.vision_model].rec_threshold,
+                "default_face_threshold": VISION_MODELS["recognition"][self.vision_keys["recognition"]].threshold,
                 "faces_enrolled": sum(1 for p in self.people.all() if self.faces.has_face(p.id))}
 
     def update_settings(self, values: dict[str, object]) -> None:
@@ -186,18 +188,28 @@ class GroundControl:
             v = float(values["face_threshold"])
             if not 0.0 < v < 1.0:
                 raise ValueError("face_threshold must be between 0 and 1")
-            out["face_thresholds"] = {**(saved.get("face_thresholds") or {}), self.vision_model: round(v, 3)}
+            out["face_thresholds"] = {**(saved.get("face_thresholds") or {}),
+                                      self.vision_keys["recognition"]: round(v, 3)}
         if "hand_sensitivity" in values:
             v = int(values["hand_sensitivity"])
             if not 1 <= v <= 100:
                 raise ValueError("hand_sensitivity must be 1 to 100")
             self._hand_sensitivity = out["hand_sensitivity"] = v
         if "vision_model" in values:
-            key = values["vision_model"]
-            if key not in self.vision_choices():
-                raise ValueError("vision_model must be one of " + ", ".join(self.vision_choices()))
-            if key != self.vision_model:
-                self.vision_model = out["vision_model"] = key
+            # One key for every feature, as before the models were chosen per feature.
+            values = {**values, "vision_models": {f: values["vision_model"] for f in VISION_FEATURES}}
+        if "vision_models" in values:
+            asked = values["vision_models"]
+            if not isinstance(asked, dict) or not set(asked) <= set(VISION_FEATURES):
+                raise ValueError("vision_models must map face, hands or recognition to a model")
+            choices = self.vision_choices()
+            for f, key in asked.items():
+                if key not in choices[f]:
+                    raise ValueError(f"the {f} model must be one of " + ", ".join(choices[f]))
+            keys = {**self.vision_keys, **asked}
+            if keys != self.vision_keys:
+                self.vision_keys = keys
+                out["vision_models"] = dict(keys)
                 self._switch_vision()
         self._save(**out)
 
@@ -236,12 +248,31 @@ class GroundControl:
                 _LOG.info("Wake Word Aligner %s loaded", self._aligner.version)
             return self._aligner
 
-    def vision_choices(self) -> list[str]:
-        """The Vision Match model sets this install can run: their files are
-        here, and Accurate needs CUDA."""
-        return [k for k, m in VISION_MODELS.items()
-                if (self.cfg.cuda or not m.gpu_only)
-                and all((self.cfg.models_dir / f).is_file() for f in (m.face_file, m.hand_file, m.rec_file))]
+    def vision_choices(self) -> dict[str, list[str]]:
+        """For each feature, the models this install has the files of."""
+        return {f: [k for k, m in VISION_MODELS[f].items() if (self.cfg.models_dir / m.file).is_file()]
+                for f in VISION_FEATURES}
+
+    def _vision_defaults(self) -> dict[str, str]:
+        return default_vision_keys(platform.machine(), self.cfg.cuda, apple_silicon())
+
+    def _vision_keys(self, saved: dict) -> dict[str, str]:
+        """Each feature's model: as saved, else as saved before the models
+        were chosen per feature (one key for all), else this machine's
+        default. A model whose file isn't here falls back to one that is."""
+        chosen = saved.get("vision_models")
+        if not isinstance(chosen, dict):
+            old = saved.get("vision_model")
+            chosen = {f: old for f in VISION_FEATURES} if old else {}
+        defaults, choices, keys = self._vision_defaults(), self.vision_choices(), {}
+        for f in VISION_FEATURES:
+            for key in (chosen.get(f), defaults[f], *choices[f]):
+                if key in choices[f]:
+                    keys[f] = key
+                    break
+            else:
+                keys[f] = defaults[f]
+        return keys
 
     def vision(self):
         """Vision Match's models, loaded with the first look a kiosk asks for.
@@ -250,33 +281,39 @@ class GroundControl:
             if self._vision is None and self._vision_error is None:
                 from .vision import Vision
 
-                if self.vision_model not in self.vision_choices():
+                choices = self.vision_choices()
+                if any(self.vision_keys[f] not in choices[f] for f in VISION_FEATURES):
                     self._vision_error = "Vision Match's models are not in this install"
                     _LOG.warning("Vision Match can't run: its models are not in this install")
                     return None
-                m = VISION_MODELS[self.vision_model]
+                names = ", ".join(f"{f} {VISION_MODELS[f][k].label}" for f, k in self.vision_keys.items())
                 try:
-                    self._vision = Vision(self.cfg.models_dir, m, threads=self.cfg.threads, use_cuda=self.cfg.cuda)
+                    self._vision = Vision(self.cfg.models_dir, self.vision_keys, threads=self.cfg.threads,
+                                          use_cuda=self.cfg.cuda)
                 except Exception as err:  # noqa: BLE001 - reported on the status page
-                    self._vision_error = f"Vision Match's {m.label} models failed to load: {err}"
+                    self._vision_error = f"Vision Match's models ({names}) failed to load: {err}"
                     self.status.errors.append(self._vision_error)
-                    _LOG.exception("Vision Match's %s models failed to load", m.label)
+                    _LOG.exception("Vision Match's models (%s) failed to load", names)
                     return None
-                looks = self._vision.max_looks
-                _LOG.info("Vision Match %s models loaded on %s: %s face and %s hand looks a second", m.label,
-                          "the GPU" if self._vision.on_gpu else "the CPU", looks["face"], looks["hands"])
+                ms = self._vision.ms
+                _LOG.info("Vision Match models loaded on %s (%s): face look %s ms, hand look %s ms, "
+                          "%s ms a face recognized", "the GPU" if self._vision.on_gpu else "the CPU", names,
+                          ms["face"], ms["hands"], ms["recognition"])
                 people = [p.id for p in self.people.all()]
-                if self.faces.needs_rebuild(m.key, people):
+                rec = self._vision.rec_key
+                if self.faces.needs_rebuild(rec, people):
                     t0 = time.perf_counter()
-                    self.faces.rebuild(m.key, self._vision.recognizer, people)
-                    _LOG.info("faceprints rebuilt for the %s model in %.1f s", m.label, time.perf_counter() - t0)
+                    self.faces.rebuild(rec, self._vision.recognizer, people)
+                    _LOG.info("faceprints rebuilt for the %s recognition model in %.1f s",
+                              VISION_MODELS["recognition"][rec].label, time.perf_counter() - t0)
             return self._vision
 
     @property
     def face_threshold(self) -> float:
-        """Face Recognition's threshold for the chosen vision model, as tuned or its default."""
-        tuned = (self._saved().get("face_thresholds") or {}).get(self.vision_model)
-        return float(tuned) if tuned is not None else VISION_MODELS[self.vision_model].rec_threshold
+        """Face Recognition's threshold for the chosen recognition model, as tuned or its default."""
+        key = self.vision_keys["recognition"]
+        tuned = (self._saved().get("face_thresholds") or {}).get(key)
+        return float(tuned) if tuned is not None else VISION_MODELS["recognition"][key].threshold
 
     @property
     def hand_sensitivity(self) -> int:
@@ -293,7 +330,7 @@ class GroundControl:
     def face_embedders(self) -> dict:
         """The loaded recognition model, so an enrollment lands in its faceprints."""
         vision = self._vision
-        return {vision.model.key: vision.recognizer} if vision is not None else {}
+        return {vision.rec_key: vision.recognizer} if vision is not None else {}
 
     def _switch_vision(self) -> None:
         """Drop the loaded models. The next look loads the chosen ones."""

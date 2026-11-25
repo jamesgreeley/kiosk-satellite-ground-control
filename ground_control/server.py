@@ -716,7 +716,7 @@ async def vision_ws(request: web.Request) -> web.WebSocketResponse:
     who = kiosk.name if kiosk else device_id or "an unknown kiosk"
     recognize = start.get("recognize") is True and "face" in want
     _LOG.info("vision from %s: %s%s", who, " and ".join(want), " with Face Recognition" if recognize else "")
-    await ws.send_json({"type": "ready", "model": vision.model.key, "want": list(want),
+    await ws.send_json({"type": "ready", "model": vision.label, "models": vision.keys, "want": list(want),
                         "max_looks": vision.max_looks, "recognize": recognize})
     waiting: dict[str, Any] | None = None
     wake = asyncio.Event()
@@ -734,9 +734,9 @@ async def vision_ws(request: web.Request) -> web.WebSocketResponse:
         if not job.cancelled() and job.exception() is not None:
             _LOG.error("could not save a vision session from %s: %s", who, job.exception())
 
-    tracker = VisionTracker(device_id, kiosk.name if kiosk else start.get("device_name"), vision.model.key,
+    tracker = VisionTracker(device_id, kiosk.name if kiosk else start.get("device_name"), vision.label,
                             vision.on_gpu, keep_frames=lambda: vm.sessions.keep_frames, save=save,
-                            publish=vm.hub.publish)
+                            publish=vm.hub.publish, models=vision.keys if vision.label == "mixed" else None)
 
     # Face Recognition: who is in front of this kiosk, over its face looks.
     rec = Recognizer(vm.face_threshold)
@@ -745,7 +745,7 @@ async def vision_ws(request: web.Request) -> web.WebSocketResponse:
 
     def faceprints() -> tuple[list[str], Any]:
         if prints["ids"] is None:
-            prints["ids"], prints["m"] = vm.faces.faceprints(vision.model.key)
+            prints["ids"], prints["m"] = vm.faces.faceprints(vision.rec_key)
         return prints["ids"], prints["m"]
 
     def forget_prints() -> None:

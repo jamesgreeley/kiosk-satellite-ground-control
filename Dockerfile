@@ -20,10 +20,12 @@ WORKDIR /app
 COPY pyproject.toml README.md LICENSE ./
 COPY ground_control ./ground_control
 RUN pip install --no-cache-dir . && rm -rf /root/.cache
-# Vision Match runs its Light models on a CPU. Accurate needs CUDA: it is only in the CUDA image.
+# Every Vision Match model: each feature picks Light or Accurate, and Face
+# Recognition defaults to Accurate on x86 and Apple chips.
 COPY models/silero_vad.onnx models/redimnet2_b3_multi.onnx models/redimnet2_b1.onnx models/voice_isolator_cpu.onnx \
-     models/wake_word_aligner.onnx models/scrfd_2.5g.onnx models/yolov10n_gestures.onnx \
-     models/arcface_w600k_mbf.onnx models/*.LICENSE.md ./models/
+     models/wake_word_aligner.onnx models/scrfd_2.5g.onnx models/scrfd_10g.onnx models/yolov10n_gestures.onnx \
+     models/yolov10x_gestures.onnx models/arcface_w600k_mbf.onnx models/arcface_w600k_r50.onnx \
+     models/*.LICENSE.md ./models/
 
 VOLUME /data
 EXPOSE 10900

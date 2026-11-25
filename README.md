@@ -162,20 +162,20 @@ These tables show how long Ground Control takes for one camera look.
 
 | | Raspberry Pi 4 | Intel N100 | Intel N100 | i9-13900H | MacBook Pro M5 |
 |---|---|---|---|---|---|
-| Vision model | Light | Light | Accurate | Light | Light |
-| Face Detection | 386 ms | 81 ms | 319 ms | 16 ms | 18 ms |
-| Hand Gestures | 455 ms | 94 ms | 1,830 ms | 20 ms | 20 ms |
-| Face Recognition | 78 ms | 22 ms | 173 ms | 7 ms | 5 ms |
-| **All features** | **913 ms** | **194 ms** | **2,320 ms** | **41 ms** | **42 ms** |
-| Looks a second | 1.1 | 5.2 | 0.4 | 24.5 | 23.6 |
+| Vision models | Light | Light, Accurate recognition | Accurate | Light, Accurate recognition | Light, Accurate recognition |
+| Face Detection | 386 ms | 81 ms | 319 ms | 18 ms | 18 ms |
+| Hand Gestures | 455 ms | 94 ms | 1,830 ms | 23 ms | 20 ms |
+| Face Recognition | 78 ms | 173 ms | 173 ms | 35 ms | 49 ms |
+| **All features** | **913 ms** | **346 ms** | **2,320 ms** | **75 ms** | **85 ms** |
+| Looks a second | 1.1 | 2.9 | 0.4 | 13.4 | 11.7 |
 
-These numbers use the CPU image with Ground Control's default threads. That is 2 threads on the Pi and the N100 and 4 on the others. The MacBook Pro runs it in Docker Desktop. The CPU image has only the Light vision model. The Accurate column for the N100 shows why: a look with every feature takes more than 2 seconds there.
+These numbers use the CPU image with Ground Control's default threads. That is 2 threads on the Pi and the N100 and 4 on the others. The MacBook Pro runs it in Docker Desktop. Each column uses that machine's default models except the second N100 column, which has every feature on Accurate. Accurate Hand Gestures is what makes it slow: 1.8 s a look on the N100, 352 ms on the i9 and 256 ms on the MacBook Pro.
 
 #### NVIDIA GPU (CUDA)
 
 | | RTX 3050 | RTX 4000 SFF Ada | GB10 |
 |---|---|---|---|
-| Vision model | Accurate | Accurate | Accurate |
+| Vision models | Accurate | Accurate | Accurate |
 | Face Detection | 11 ms | 6 ms | 9 ms |
 | Hand Gestures | 23 ms | 12 ms | 13 ms |
 | Face Recognition | 5 ms | 3 ms | 5 ms |
@@ -186,7 +186,7 @@ These numbers use the CUDA image with CUDA 12 on the RTX 3050 and the RTX 4000 a
 
 #### GPU Memory
 
-This table shows how much GPU memory the CUDA image uses with the Accurate vision model. It was measured on the RTX 4000 SFF Ada and the GB10.
+This table shows how much GPU memory the CUDA image uses with every vision model on Accurate. It was measured on the RTX 4000 SFF Ada and the GB10.
 
 | | amd64 image (CUDA 12) | arm64 image (CUDA 13) |
 |---|---|---|
@@ -203,12 +203,18 @@ The vision models load when the first kiosk asks for a look. Ground Control then
 Each test sends 64 frames from an Echo Show 5's camera through Ground Control's own code just like a kiosk does. They are 640x480 JPEGs, the size Kiosk Satellite sends, and each one has a face looking at the camera and a raised hand.
 
 - **Face Detection** is a look for faces alone. **Hand Gestures** is a look for hands alone. Both include reading the JPEG.
-- **Face Recognition** is the time to recognize one face once it is found. Once someone is recognized, their face is checked again only every 2 seconds.
+- **Face Recognition** is the time to recognize one face once it is found. Once someone is recognized, their face is checked again only every 2 seconds. A face nobody enrolled is checked again once a second.
 - **All features** is one look with Face Detection, Face Recognition and Hand Gestures. That is the longest a look takes.
-- **Looks a second** is how many of those looks Ground Control keeps up with. A kiosk sends one frame at a time and only after something moves, so several kiosks can share them.
+- **Looks a second** is how many of those looks Ground Control keeps up with. A kiosk sends one frame at a time and only after something moves, so several kiosks can share them. Since Face Recognition runs on at most one look a second, the looks between get closer to the time of Face Detection and Hand Gestures alone.
 - On a Pi 4, Face Detection dismisses the screensaver about a second after a face looks at the kiosk. Hand Gestures feel slow there because a gesture needs more than one look.
 
-The Accurate model gets the finger count right more often and recognizes faces better in dim light. It needs an NVIDIA GPU. Ground Control picks Accurate when it has one and Light otherwise. You can change it under **Settings > Vision Match** without enrolling any faces again.
+Each feature has its own model under **Settings > Vision Match**:
+
+- **Face Detection:** both models found every face looking at the kiosk on the test set and let the same turned heads through. Accurate takes about 3 times as long, so Light is the default on a CPU.
+- **Hand Gestures:** Accurate gets the finger count right more often at 3 m and in dim light, 96% of frames compared to 68%. It runs on every look, so Light is the default on a CPU.
+- **Face Recognition:** Accurate recognizes small faces in dim light more often, 93% compared to 71%. It runs at most once a second, so Accurate is the default on x86 CPUs and Apple M-series chips. A Raspberry Pi and other ARM CPUs use Light.
+
+On an NVIDIA GPU every feature uses Accurate. Changing the Face Recognition model doesn't require enrolling any faces again.
 
 ## Install
 

@@ -32,7 +32,7 @@ import numpy as np
 from PIL import Image
 
 from .engine import LEAN_CUDA, GpuThread, open_session, session_options as _session_options
-from .models import VisionModel, verified_path
+from .models import VISION_MODELS, verified_path
 
 _LOG = logging.getLogger(__name__)
 
@@ -257,25 +257,42 @@ class Look:
 
 
 class Vision:
-    """One Light or Accurate set of models, loaded once and shared by every kiosk."""
+    """Vision Match's models, one Light or Accurate choice for each feature
+    (``keys``: face, hands and recognition), loaded once and shared by every
+    kiosk."""
 
-    def __init__(self, models_dir: Path, model: VisionModel, threads: int = 1, use_cuda: bool = False) -> None:
-        self.model = model
+    def __init__(self, models_dir: Path, keys: dict[str, str], threads: int = 1, use_cuda: bool = False) -> None:
+        self.keys = dict(keys)
+        face, hand, rec = (VISION_MODELS[f][keys[f]] for f in ("face", "hands", "recognition"))
         self._gpu = GpuThread(use_cuda, "gpu-vision")
         try:
-            self.face = FaceModel(verified_path(models_dir, model.face_file, model.face_sha256),
-                                  model.face_threshold, threads, use_cuda, self._gpu)
-            self.hand = HandModel(verified_path(models_dir, model.hand_file, model.hand_sha256),
-                                  model.hand_threshold, threads, use_cuda, self._gpu)
+            self.face = FaceModel(verified_path(models_dir, face.file, face.sha256),
+                                  face.threshold, threads, use_cuda, self._gpu)
+            self.hand = HandModel(verified_path(models_dir, hand.file, hand.sha256),
+                                  hand.threshold, threads, use_cuda, self._gpu)
             from .faces import FaceEmbedder
 
-            self.recognizer = FaceEmbedder(verified_path(models_dir, model.rec_file, model.rec_sha256),
+            self.recognizer = FaceEmbedder(verified_path(models_dir, rec.file, rec.sha256),
                                            threads, use_cuda, self._gpu)
         except Exception:
             self._gpu.close()
             raise
         self.on_gpu = self.face.on_gpu and self.hand.on_gpu and self.recognizer.on_gpu
+        self.ms: dict[str, float] = {}
+        """Each feature's model time on this machine, in ms: a face look, a
+        hand look and one face recognized. Measured when the models load."""
         self.max_looks = self._measure()
+
+    @property
+    def rec_key(self) -> str:
+        """The Face Recognition model, which faceprints are kept for."""
+        return self.keys["recognition"]
+
+    @property
+    def label(self) -> str:
+        """``light`` or ``accurate`` when every feature uses it, else ``mixed``."""
+        kinds = set(self.keys.values())
+        return kinds.pop() if len(kinds) == 1 else "mixed"
 
     def look(self, jpeg: bytes, rotation: int = 0, want: tuple[str, ...] = ("face", "hands"),
              recognize: bool = False, hand_min: float = 0.0) -> Look:
@@ -323,15 +340,19 @@ class Vision:
     def _measure(self) -> dict[str, float]:
         """Looks a second this machine keeps up with for one kiosk, from a few warm runs."""
         rgb = np.full((HAND_SIZE[1], HAND_SIZE[0], 3), 127, np.uint8)
+        crop = np.full((112, 112, 3), 127, np.uint8)
         out = {}
-        for key, fn in (("face", self.face), ("hands", self.hand)):
-            fn(rgb)
-            fn(rgb)
+        for key, fn, arg in (("face", self.face, rgb), ("hands", self.hand, rgb),
+                             ("recognition", self.recognizer, crop)):
+            fn(arg)
+            fn(arg)
             t0 = time.perf_counter()
             for _ in range(5):
-                fn(rgb)
+                fn(arg)
             ms = (time.perf_counter() - t0) * 1000 / 5
-            out[key] = round(1000 / max(ms, 1e-3), 1)
+            self.ms[key] = round(ms, 1)
+            if key != "recognition":
+                out[key] = round(1000 / max(ms, 1e-3), 1)
         return out
 
     def close(self) -> None:

@@ -16,6 +16,20 @@ const REASONS = {
 /** A face looking at the kiosk, on a frame: green, like a connected kiosk. */
 const FACING = "#4f9a55";
 
+/** The session's models: "Accurate models", or which feature used which when they differ. */
+const modelsText = (record) => {
+  const label = (k) => (k === "accurate" ? "Accurate" : "Light");
+  if (!record.models) return `${label(record.model)} models`;
+  const names = { face: "Face Detection", hands: "Hand Gestures", recognition: "Face Recognition" };
+  const by = {};
+  for (const f of ["face", "hands", "recognition"]) {
+    const k = record.models[f];
+    if (k) (by[k] = by[k] || []).push(names[f]);
+  }
+  const and = (xs) => (xs.length > 1 ? `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}` : xs[0]);
+  return Object.entries(by).map(([k, fs]) => `${label(k)} ${and(fs)}`).join(", ");
+};
+
 const OUTCOMES = ["screensaver_dismissed", "screensaver_postponed", "gesture", "pin_skipped", "lockdown_off", "lockdown_on"];
 
 function outcomeLabel(e) {
@@ -258,7 +272,7 @@ export async function renderVision(record) {
           (record.summary || []).map((w) => chip(w, `big ${/dismissed|→/.test(w) ? "c-ok" : "c-info"}`)),
           chip(`Vision Match, ${secs(stats.duration_s)}`, "big", icon("eye", 16)),
           (record.people || []).map((p) => h("a", { class: "chip big", href: `#/people/${p.id}` }, p.name)),
-          chip(`${record.model === "accurate" ? "Accurate" : "Light"} model, ${record.on_gpu ? "GPU" : "CPU"}`, "big"),
+          chip(`${modelsText(record)}, ${record.on_gpu ? "GPU" : "CPU"}`, "big"),
           record.continues ? h("a", { class: "chip big", href: `#/sessions/${record.continues}` }, "Goes on from an earlier session") : null),
         section("Timeline"),
         timeline(record, total),

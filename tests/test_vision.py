@@ -11,7 +11,7 @@ import pytest
 from PIL import Image
 
 from ground_control.auth import TokenCheck
-from ground_control.models import VISION_MODELS
+from ground_control.models import VISION_FEATURES, default_vision_keys
 from ground_control.server import VM, build_app
 from ground_control.service import GroundControl
 from ground_control.vision import FACE_3D, FINGERS, FRONTAL_MAX_DEG, BadFrame, Look, Vision, decode, head_yaw, nms, turn_of
@@ -87,7 +87,7 @@ def test_the_nose_check_still_applies():
 
 @pytest.fixture(scope="module")
 def light() -> Vision:
-    v = Vision(MODELS, VISION_MODELS["light"], threads=2)
+    v = Vision(MODELS, {f: "light" for f in VISION_FEATURES}, threads=2)
     yield v
     v.close()
 
@@ -97,6 +97,7 @@ def test_the_light_models_see_nothing_in_an_empty_frame(light):
     assert look.faces == [] and look.hand is None
     assert set(look.ms) == {"decode", "face", "hands"}
     assert light.max_looks["face"] > 0 and light.max_looks["hands"] > 0
+    assert set(light.ms) == {"face", "hands", "recognition"} and light.label == "light"
 
 
 def test_a_portrait_frame_and_a_single_look(light):
@@ -111,7 +112,9 @@ class FakeVision:
     """Answers one face and a hand showing three, after ``delay`` seconds."""
 
     def __init__(self, delay: float = 0.0) -> None:
-        self.model = VISION_MODELS["light"]
+        self.keys = {f: "light" for f in VISION_FEATURES}
+        self.label = "light"
+        self.rec_key = "light"
         self.max_looks = {"face": 12.5, "hands": 10.0}
         self.on_gpu = False
         self.delay = delay
@@ -213,11 +216,43 @@ async def test_vision_says_when_its_models_cant_run(client):
     assert (await receive(ws, "error"))["code"] == "vision_unavailable"
 
 
-async def test_settings_offer_accurate_only_with_cuda(client):
+def test_the_default_models_follow_the_machine():
+    assert default_vision_keys("x86_64", cuda=True) == {"face": "accurate", "hands": "accurate",
+                                                        "recognition": "accurate"}
+    # An N100 or an i9 and an Apple chip: Accurate only for Face Recognition.
+    assert default_vision_keys("x86_64") == {"face": "light", "hands": "light", "recognition": "accurate"}
+    assert default_vision_keys("aarch64", apple=True)["recognition"] == "accurate"
+    # A Raspberry Pi: Light everywhere.
+    assert default_vision_keys("aarch64") == {"face": "light", "hands": "light", "recognition": "light"}
+
+
+async def test_settings_choose_a_model_for_each_feature(client):
     s = await (await client.get("/api/settings", headers=GOOD)).json()
-    assert s["vision_model"] == "light" and list(s["vision_models"]) == ["light"]
-    r = await client.patch("/api/settings", json={"vision_model": "accurate"}, headers=GOOD)
-    assert r.status == 400
+    assert s["vision_models"] == s["vision_defaults"]
+    assert all(set(s["vision_choices"][f]) == {"light", "accurate"} for f in VISION_FEATURES)
+    r = await client.patch("/api/settings", json={"vision_models": {"hands": "accurate"}}, headers=GOOD)
+    assert r.status == 200
+    s = await (await client.get("/api/settings", headers=GOOD)).json()
+    assert s["vision_models"]["hands"] == "accurate"
+    assert s["vision_models"]["face"] == s["vision_defaults"]["face"]
+    assert (await client.patch("/api/settings", json={"vision_models": {"hands": "huge"}}, headers=GOOD)).status == 400
+    assert (await client.patch("/api/settings", json={"vision_models": {"eyes": "light"}}, headers=GOOD)).status == 400
+    # The old single key still sets every feature.
+    assert (await client.patch("/api/settings", json={"vision_model": "light"}, headers=GOOD)).status == 200
+    s = await (await client.get("/api/settings", headers=GOOD)).json()
+    assert set(s["vision_models"].values()) == {"light"}
+
+
+def test_a_saved_single_model_carries_over_to_every_feature(cfg):
+    import json
+
+    from ground_control.service import GroundControl
+
+    (cfg.data_dir / "settings.json").write_text(json.dumps({"vision_model": "accurate"}))
+    try:
+        assert set(GroundControl(cfg).vision_keys.values()) == {"accurate"}
+    finally:
+        (cfg.data_dir / "settings.json").unlink()
 
 
 async def test_a_look_with_a_face_saves_a_vision_session_when_the_socket_closes(client):

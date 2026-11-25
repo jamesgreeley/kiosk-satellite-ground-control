@@ -64,6 +64,8 @@ class VisionSession:
     on_gpu: bool
     started: float
     continues: str | None = None
+    models: dict[str, str] | None = None
+    """Each feature's model when they differ (``model`` is then ``mixed``)."""
     id: str = field(default_factory=new_id)
     looks: list[dict[str, Any]] = field(default_factory=list)
     events: list[dict[str, Any]] = field(default_factory=list)
@@ -109,10 +111,11 @@ class VisionTracker:
     """
 
     def __init__(self, device_id: str | None, device_name: str | None, model: str, on_gpu: bool,
-                 keep_frames, save, publish=None, clock=time.time) -> None:
+                 keep_frames, save, publish=None, clock=time.time, models: dict[str, str] | None = None) -> None:
         self.device_id = device_id
         self.device_name = device_name
         self.model = model
+        self.models = models
         self.on_gpu = on_gpu
         self._keep_frames = keep_frames
         self._save = save
@@ -170,7 +173,7 @@ class VisionTracker:
 
     def _start(self, now: float, continues: str | None = None) -> VisionSession:
         s = VisionSession(self.device_id, self.device_name, self.model, self.on_gpu, started=now,
-                          continues=continues, last_found=now)
+                          continues=continues, last_found=now, models=self.models)
         self.current = s
         self.counts["sessions"] += 1
         self._publish({"type": "vision_start", "device_id": self.device_id, "session": s.id})
@@ -348,7 +351,7 @@ class VisionTracker:
         record = {
             "id": s.id, "kind": "vision", "started": s.started,
             "device_id": s.device_id, "device_name": s.device_name,
-            "model": s.model, "on_gpu": s.on_gpu, "stats": stats,
+            "model": s.model, **({"models": s.models} if s.models else {}), "on_gpu": s.on_gpu, "stats": stats,
             "events": s.events, "looks": looks,
             "frames": [{"n": f.n, "reason": f.reason, "t": f.t, "rotation": f.rotation, **f.boxes}
                        for f in frames],

@@ -160,27 +160,34 @@ export async function render({ area } = {}) {
   // ── Vision Match ─────────────────────────────────────────────────────────
 
   const visionMatch = () => {
-    const option = (key, label, desc) => {
-      const offered = key in s.vision_models;
-      const b = h("button", { class: "opt", role: "radio", "aria-checked": String(s.vision_model === key), disabled: !offered },
-        h("span", { class: "radio" }),
-        h("span", { class: "grow" },
-          h("span", { class: "rt", style: { display: "block" } }, label),
-          h("span", { class: "rd", style: { display: "block" } }, offered ? desc : `${desc} Not available in this install.`)));
-      b.addEventListener("click", async () => {
-        if (s.vision_model === key || !offered) return;
-        b.setAttribute("aria-busy", "true");
-        try {
-          await api("api/settings", { method: "PATCH", json: { vision_model: key } });
-          toast(`Now using ${label}`);
-          location.reload();
-        } catch (err) {
-          toast(err.message);
-          b.removeAttribute("aria-busy");
-        }
-      });
-      return b;
+    const names = { face: "Face Detection", hands: "Hand Gestures", recognition: "Face Recognition" };
+    const pick = (feature) => {
+      const offered = s.vision_choices[feature] || {};
+      const seg = h("div", { class: "seg", role: "radiogroup", "aria-label": `${names[feature]} model` });
+      for (const [key, label] of [["light", "Light"], ["accurate", "Accurate"]]) {
+        const on = s.vision_models[feature] === key;
+        const b = h("button", { class: on ? "on" : "", role: "radio", "aria-checked": String(on), disabled: !(key in offered) }, label);
+        b.addEventListener("click", async () => {
+          if (on || !(key in offered)) return;
+          b.setAttribute("aria-busy", "true");
+          try {
+            await api("api/settings", { method: "PATCH", json: { vision_models: { [feature]: key } } });
+            toast(`${names[feature]} now uses ${label}`);
+            location.reload();
+          } catch (err) {
+            toast(err.message);
+            b.removeAttribute("aria-busy");
+          }
+        });
+        seg.append(b);
+      }
+      return seg;
     };
+    const measured = (feature, what) => {
+      const ms = s.vision_ms && s.vision_ms[feature];
+      return ms == null ? "" : ` On this machine it takes ${ms < 10 ? ms : Math.round(ms)} ms ${what}.`;
+    };
+    const byDefault = (feature) => ` The default here is ${s.vision_defaults[feature] === "accurate" ? "Accurate" : "Light"}.`;
     const where = !s.vision_loaded ? h("span", { class: "val" }, "Loads with the first look")
       : chip(s.vision_on_gpu ? "NVIDIA GPU (CUDA)" : "CPU", s.vision_on_gpu ? "c-ok" : "");
     const looks = s.vision_max_looks
@@ -202,12 +209,11 @@ export async function render({ area } = {}) {
       } catch (err) { toast(err.message); }
     });
     return [
-      section("Models", "Face Detection and Hand Gestures run here for kiosks with Vision Match on."),
+      section("Models", "Choose Light or Accurate for each feature. Kiosks with Vision Match on use these models."),
       h("div", { class: "card" },
-        h("div", { role: "radiogroup", "aria-label": "Vision model" },
-          row("Vision model", "Both find faces and whether they look at the kiosk equally well. They differ in reading raised fingers.", null),
-          option("accurate", "Accurate", "Reads the finger count right more often and works even in dim light at 3 m. Needs an NVIDIA GPU."),
-          option("light", "Light", "Runs on any CPU. Each kiosk is told how many looks a second this machine keeps up with.")),
+        row("Face Detection", `Both models found every face looking at the kiosk on the test set and let the same turned heads through. Accurate takes about 3 times as long.${byDefault("face")}${measured("face", "a look")}`, pick("face")),
+        row("Hand Gestures", `Accurate reads the finger count right more often at 3 m and in dim light. The hand model runs on every look, so on a CPU Accurate lowers the looks a second each kiosk gets.${byDefault("hands")}${measured("hands", "a look")}`, pick("hands")),
+        row("Face Recognition", `Accurate recognizes small faces in dim light more often. A recognized face is checked again only every 2 seconds, so Accurate costs little even on a CPU. Faces are rebuilt from their pictures, so nobody has to enroll again.${byDefault("recognition")}${measured("recognition", "a face")}`, pick("recognition")),
         row("Runs on", "Set by the CUDA option in the same way as the speaker model.", where),
         row("Looks a second", "For one kiosk, measured on this machine when the models load. Kiosks look at most 2 times a second for faces and 4 for hands.", looks),
         s.vision_error ? hint(s.vision_error)
@@ -226,7 +232,7 @@ export async function render({ area } = {}) {
 
       section("Face Recognition", "Settings for matching faces to the faces enrolled on the People page."),
       h("div", { class: "card" },
-        row("Threshold", `How close a face has to be to count as someone enrolled. Higher means fewer mix-ups and more unknown faces. Each vision model has its own threshold. The default is ${s.default_face_threshold}.`,
+        row("Threshold", `How close a face has to be to count as someone enrolled. Higher means fewer mix-ups and more unknown faces. Each Face Recognition model has its own threshold. The default is ${s.default_face_threshold}.`,
           number("fthr", s.face_threshold, "face_threshold"), "fthr"),
         row("Faces enrolled", "How many people on the People page have a face enrolled.",
           h("a", { class: "val", href: "#/people" }, String(s.faces_enrolled))),

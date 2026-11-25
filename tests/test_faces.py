@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 
 from ground_control.faces import (
-    GONE_S, MARGIN, RECHECK_S, SURE_ABOVE, TEMPLATE, FaceEnrollment, Faces, Recognizer, STEPS, align, similarity,
+    GONE_S, MARGIN, RECHECK_S, SURE_ABOVE, UNKNOWN_RECHECK_S, TEMPLATE, FaceEnrollment, Faces, Recognizer, STEPS, align, similarity,
 )
 from ground_control.vision import FACE_3D
 
@@ -87,6 +87,18 @@ def test_a_named_face_is_rechecked_and_forgotten_when_gone():
     r.seen([BOX], 1.0)
     assert not r.tick(1.0 + GONE_S - 0.1)
     assert r.tick(1.0 + GONE_S + 0.1) and r.current is None and r.people == []
+
+
+def test_an_unknown_face_is_rechecked_once_a_second_after_two_looks():
+    ids, prints = ["ana"], unit(0)[None]
+    r = Recognizer(threshold=0.4)
+    r.add([(BOX, unit(3))], ids, prints, 0.0)
+    # The second look a name needs comes right away.
+    assert r.wants(0.1)
+    r.add([(BOX, unit(3))], ids, prints, 0.2)
+    assert not r.people
+    assert not r.wants(0.2 + UNKNOWN_RECHECK_S / 2)
+    assert r.wants(0.2 + UNKNOWN_RECHECK_S + 0.01)
 
 
 def _toward(i: int, score: float) -> np.ndarray:

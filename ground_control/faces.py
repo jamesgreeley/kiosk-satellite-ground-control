@@ -270,6 +270,10 @@ GONE_S = 3.0
 """With no face looking at the kiosk this long, nobody is in front of it."""
 RECHECK_S = 2.0
 """Once someone is named, their face is checked again this often, not on every look."""
+UNKNOWN_RECHECK_S = 1.0
+"""A face nobody enrolled matches, after the two looks a name needs, is
+checked again this often. A guest standing at the kiosk then costs one face
+recognized a second instead of one on every look."""
 MAX_FACES = 3
 """Faces looking at the kiosk recognized in one look, the largest first."""
 SWITCH_AFTER = 2
@@ -329,8 +333,16 @@ class Recognizer:
     def wants(self, now: float) -> bool:
         if not self._tracks:
             return True
-        return any(t.match is None or t.match.person_id is None or now - t.last_check >= RECHECK_S
-                   for t in self._tracks)
+        return any(self._due(t, now) for t in self._tracks)
+
+    @staticmethod
+    def _due(t: _Track, now: float) -> bool:
+        m = t.match
+        if m is None:
+            return True
+        if m.person_id:
+            return now - t.last_check >= RECHECK_S
+        return m.looks < 2 or now - t.last_check >= UNKNOWN_RECHECK_S
 
     @property
     def people(self) -> list[Match]:

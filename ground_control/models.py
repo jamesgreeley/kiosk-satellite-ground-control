@@ -64,64 +64,59 @@ ALIGNER_SHA256 = "894258d611a9c4a5175434838eecee364194fab51b2f0836b4e20b95bb89e7
 
 
 @dataclass(frozen=True)
-class VisionModel:
-    """Vision Match's face and hand models, chosen together as Light or Accurate."""
+class VisionPart:
+    """One feature's Light or Accurate model for Vision Match."""
     key: str
     label: str
-    face_file: str
-    face_sha256: str
-    face_threshold: float
-    """A face at or above this score counts. SCRFD 10G's default 0.5 saw faces
-    in an empty room on the test set, 0.6 doesn't."""
-    hand_file: str
-    hand_sha256: str
-    hand_threshold: float
-    """A hand at or above this score counts."""
-    rec_file: str
-    rec_sha256: str
-    rec_threshold: float
-    """Face Recognition: a face looking at the kiosk is someone enrolled at or
-    above this similarity to their faceprint. On kiosk-sized faces it let 0.1%
-    of strangers through, and families look more alike than strangers."""
-    gpu_only: bool
-    """Too slow for 4 looks a second on any CPU measured: offered only with CUDA."""
+    file: str
+    sha256: str
+    threshold: float
+    """Face Detection and Hand Gestures: a face or hand at or above this
+    score counts. Face Recognition: a face looking at the kiosk is someone
+    enrolled at or above this similarity to their faceprint."""
 
 
-VISION_MODELS: dict[str, VisionModel] = {
-    "light": VisionModel(
-        key="light",
-        label="Light",
-        face_file="scrfd_2.5g.onnx",
-        face_sha256="041f73f47371333d1d17a6fee6c8ab4e6aecabefe398ff32cca4e2d5eaee0af9",
-        face_threshold=0.5,
-        hand_file="yolov10n_gestures.onnx",
-        hand_sha256="748b2f34f8bb45ea078c52ebc2c1344b1f1a6709e3b6104759c6f9a383b3d9f4",
-        hand_threshold=0.4,
-        rec_file="arcface_w600k_mbf.onnx",
-        rec_sha256="9cc6e4a75f0e2bf0b1aed94578f144d15175f357bdc05e815e5c4a02b319eb4f",
-        rec_threshold=0.35,
-        gpu_only=False,
-    ),
-    "accurate": VisionModel(
-        key="accurate",
-        label="Accurate",
-        face_file="scrfd_10g.onnx",
-        face_sha256="5838f7fe053675b1c7a08b633df49e7af5495cee0493c7dcf6697200b85b5b91",
-        face_threshold=0.6,
-        hand_file="yolov10x_gestures.onnx",
-        hand_sha256="cab82c898c5ddf7a20c5120d5b190de669df71e47431f98266118be7aa1f85f0",
-        hand_threshold=0.4,
-        rec_file="arcface_w600k_r50.onnx",
-        rec_sha256="3a728e738b4c0c802d3f2315ca877e76387f4fee9f240d4ae49e8da371dab25c",
-        rec_threshold=0.3,
-        gpu_only=True,
-    ),
+VISION_FEATURES = ("face", "hands", "recognition")
+"""Vision Match's features, each with its own model choice."""
+
+VISION_MODELS: dict[str, dict[str, VisionPart]] = {
+    "face": {
+        # SCRFD 10G's default 0.5 saw faces in an empty room on the test set, 0.6 doesn't.
+        "light": VisionPart("light", "Light", "scrfd_2.5g.onnx",
+                            "041f73f47371333d1d17a6fee6c8ab4e6aecabefe398ff32cca4e2d5eaee0af9", 0.5),
+        "accurate": VisionPart("accurate", "Accurate", "scrfd_10g.onnx",
+                               "5838f7fe053675b1c7a08b633df49e7af5495cee0493c7dcf6697200b85b5b91", 0.6),
+    },
+    "hands": {
+        "light": VisionPart("light", "Light", "yolov10n_gestures.onnx",
+                            "748b2f34f8bb45ea078c52ebc2c1344b1f1a6709e3b6104759c6f9a383b3d9f4", 0.4),
+        "accurate": VisionPart("accurate", "Accurate", "yolov10x_gestures.onnx",
+                               "cab82c898c5ddf7a20c5120d5b190de669df71e47431f98266118be7aa1f85f0", 0.4),
+    },
+    "recognition": {
+        # On kiosk-sized faces these let 0.1% of strangers through, and
+        # families look more alike than strangers.
+        "light": VisionPart("light", "Light", "arcface_w600k_mbf.onnx",
+                            "9cc6e4a75f0e2bf0b1aed94578f144d15175f357bdc05e815e5c4a02b319eb4f", 0.35),
+        "accurate": VisionPart("accurate", "Accurate", "arcface_w600k_r50.onnx",
+                               "3a728e738b4c0c802d3f2315ca877e76387f4fee9f240d4ae49e8da371dab25c", 0.3),
+    },
 }
 
 
-def default_vision_key(cuda: bool) -> str:
-    """Accurate on an NVIDIA GPU, Light everywhere else."""
-    return "accurate" if cuda else "light"
+def default_vision_keys(machine: str, cuda: bool = False, apple: bool = False) -> dict[str, str]:
+    """Each feature's model by default. Everything Accurate on an NVIDIA GPU.
+    On a CPU, Face Recognition is Accurate on x86 and Apple M-series chips:
+    a known face is checked every 2 seconds, so even an N100's 173 ms a face
+    leaves plenty of room. Face Detection stays Light, since Accurate found
+    the same faces on the test set at 3 times the cost, and so does Hand
+    Gestures, which runs on every look (1.8 s a look on an N100, 0.25 to
+    0.35 s on an M5 or an i9-13900H). A Raspberry Pi or another ARM CPU takes
+    0.8 s a face with Accurate, so it gets Light everywhere."""
+    if cuda:
+        return {f: "accurate" for f in VISION_FEATURES}
+    x86 = machine.lower() in ("x86_64", "amd64", "i686", "i386")
+    return {"face": "light", "hands": "light", "recognition": "accurate" if x86 or apple else "light"}
 
 
 def apple_silicon(cpuinfo: Path = Path("/proc/cpuinfo")) -> bool:
