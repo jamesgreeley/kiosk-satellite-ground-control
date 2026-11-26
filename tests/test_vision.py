@@ -165,7 +165,7 @@ def test_apple_silicon_uses_coreml_for_supported_face_models(light):
     if not apple_neural_engine_available():
         pytest.skip("native Apple Silicon Core ML is unavailable")
     assert light.face.on_coreml and light.recognizer.on_coreml
-    assert not light.hand.on_coreml
+    assert light.hand.on_coreml
 
 
 def test_a_portrait_frame_and_a_single_look(light):
@@ -575,7 +575,7 @@ def test_fixed_coreml_detector_reuses_fallback_after_failed_compile(light, monke
         pytest.skip("native Apple Silicon Core ML is unavailable")
     calls = []
 
-    def fail(path, shape):
+    def fail(path, shape, *, prefer_gpu):
         calls.append(shape)
         raise RuntimeError("conversion unavailable")
 
@@ -585,3 +585,30 @@ def test_fixed_coreml_detector_reuses_fallback_after_failed_compile(light, monke
     for _ in range(2):
         assert len(light.face._run(x)) == 9
     assert calls == [(384, 640)]
+
+
+def test_coreml_hand_prediction_retries_same_frame_on_cpu(light, monkeypatch):
+    from ground_control import vision
+
+    class BrokenCoreML:
+        def run(self, *args):
+            raise RuntimeError("Core ML could not predict")
+
+        def get_providers(self):
+            return ["CoreMLExecutionProvider", "CPUExecutionProvider"]
+
+    hand = light.hand
+    frame = np.zeros((480, 640, 3), np.uint8)
+    cpu = vision.open_session(hand._path, vision.session_options(1), False)
+    opens = []
+    monkeypatch.setattr(hand, "session", BrokenCoreML())
+    monkeypatch.setattr(hand, "on_coreml", True)
+
+    def fallback(*args):
+        opens.append(args)
+        return cpu
+
+    monkeypatch.setattr(vision, "open_session", fallback)
+    assert hand(frame) is None
+    assert hand(frame) is None
+    assert len(opens) == 1 and not hand.on_coreml

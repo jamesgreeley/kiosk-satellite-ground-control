@@ -223,7 +223,7 @@ export async function render({ area } = {}) {
         row("Hand Gestures", `Accurate reads the finger count right more often at 3 m and in dim light. The hand model runs on every look, so on a CPU Accurate lowers the looks a second each kiosk gets.${byDefault("hands")}${measured("hands", "a look")}`, pick("hands")),
         row("Face Recognition", `Accurate recognizes small faces in dim light more often. A recognized face is checked again only every 2 seconds, so Accurate costs little even on a CPU. Faces are rebuilt from their pictures, so nobody has to enroll again.${byDefault("recognition")}${measured("recognition", "a face")}`, pick("recognition")),
         row("Runs on", s.vision_on_coreml
-          ? "Face Detection and Face Recognition use Core ML on supported frames. Hand Gestures uses the CPU."
+          ? "Face Detection, Face Recognition and Hand Gestures use Core ML where supported."
           : "Set by the CUDA or OpenVINO option.", where),
         row("Looks a second", "For one kiosk, measured on this machine when the models load. Kiosks look at most 2 times a second for faces and 4 for hands.", looks),
         s.vision_error ? hint(s.vision_error)

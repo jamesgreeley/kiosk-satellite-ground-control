@@ -227,7 +227,7 @@ def _r(v: float) -> float:
 _COREML_FRAME_SIZES = {(480, 640), (384, 640), (640, 480)}
 
 
-def fixed_scrfd_session(path: Path, shape: tuple[int, int]):
+def fixed_scrfd_session(path: Path, shape: tuple[int, int], *, prefer_gpu: bool = False):
     """Specialize SCRFD's input and all nine anchor outputs for Core ML."""
     import onnx
     import onnxruntime as ort
@@ -240,7 +240,8 @@ def fixed_scrfd_session(path: Path, shape: tuple[int, int]):
     for i, output in enumerate(graph.graph.output):
         stride = (8, 16, 32)[i % 3]
         output.type.tensor_type.shape.dim[0].dim_value = 2 * (height // stride) * (width // stride)
-    opts = {"ModelFormat": "NeuralNetwork", "MLComputeUnits": "CPUAndNeuralEngine"}
+    opts = ({"ModelFormat": "MLProgram", "MLComputeUnits": "CPUAndGPU"} if prefer_gpu else
+            {"ModelFormat": "NeuralNetwork", "MLComputeUnits": "CPUAndNeuralEngine"})
     return ort.InferenceSession(graph.SerializeToString(), session_options(1),
                                 providers=[("CoreMLExecutionProvider", opts), "CPUExecutionProvider"])
 
@@ -249,7 +250,8 @@ class FaceModel:
     """SCRFD with five face points."""
 
     def __init__(self, path: Path, threshold: float, threads: int, use_cuda: bool, gpu: GpuThread,
-                 keep_memory: bool = False, openvino: Any = None, use_coreml: bool = False) -> None:
+                 keep_memory: bool = False, openvino: Any = None, use_coreml: bool = False,
+                 prefer_coreml_gpu: bool = False) -> None:
         """``openvino``: the Intel GPU to run on in the OpenVINO image (``ov.Gpu``)."""
         self.threshold = threshold
         self._gpu = gpu
@@ -267,6 +269,7 @@ class FaceModel:
         # one thread was consistently as fast or faster in the M1 Pro sweep.
         self._fixed = {} if use_coreml and not use_cuda else None
         self._fixed_lock = threading.Lock()
+        self._prefer_coreml_gpu = prefer_coreml_gpu
         dynamic_coreml = use_coreml and path.stem == "scrfd_2.5g"
         self._path, self._options = path, session_options(1 if dynamic_coreml else threads)
         self.session = gpu(open_session, path, self._options, use_cuda, LEAN_CUDA, dynamic_coreml)
@@ -294,7 +297,10 @@ class FaceModel:
                 with self._fixed_lock:
                     if shape not in self._fixed:
                         try:
-                            self._fixed[shape] = fixed_scrfd_session(self._path, shape)
+                            # The GPU policy won both full-request sweeps at 640x480
+                            # with the Accurate hand model running alongside SCRFD.
+                            self._fixed[shape] = fixed_scrfd_session(
+                                self._path, shape, prefer_gpu=self._prefer_coreml_gpu and shape == (480, 640))
                         except Exception as err:
                             _LOG.warning("Core ML specialization failed for %s: %s", shape, err)
                             self._fixed[shape] = None
@@ -381,7 +387,7 @@ class HandModel:
     """YOLOv10 trained on HaGRIDv2's gestures. Its class names come from the model file."""
 
     def __init__(self, path: Path, threshold: float, threads: int, use_cuda: bool, gpu: GpuThread,
-                 keep_memory: bool = False, openvino: Any = None) -> None:
+                 keep_memory: bool = False, openvino: Any = None, use_coreml: bool = False) -> None:
         self.threshold = threshold
         self._gpu = gpu
         self._ov = openvino.model(path) if openvino is not None else None
@@ -390,9 +396,12 @@ class HandModel:
             self.on_coreml = False
             names = ast.literal_eval(self._ov.metadata("names") or "{}")
         else:
-            self.session = gpu(open_session, path, session_options(threads), use_cuda, LEAN_CUDA)
+            self._path, self._threads = path, threads
+            self._fallback_lock = threading.Lock()
+            self.session = gpu(open_session, path, session_options(threads), use_cuda, LEAN_CUDA,
+                               use_coreml, {"MLComputeUnits": "ALL"})
             self.on_gpu = self.session.get_providers()[0] == "CUDAExecutionProvider"
-            self.on_coreml = False
+            self.on_coreml = "CoreMLExecutionProvider" in self.session.get_providers()
             self._input = self.session.get_inputs()[0].name
             self._after_run = run_options(self.on_gpu and not keep_memory)
             names = ast.literal_eval(self.session.get_modelmeta().custom_metadata_map.get("names", "{}"))
@@ -419,7 +428,19 @@ class HandModel:
         if self._ov is not None:
             out = self._gpu(self._ov.run, {self._input: x})[0][0]
         else:
-            out = self._gpu(self.session.run, None, {self._input: x}, self._after_run)[0][0]  # (4 + classes, places)
+            session = self.session
+            try:
+                outputs = self._gpu(session.run, None, {self._input: x}, self._after_run)
+            except Exception:
+                if "CoreMLExecutionProvider" not in session.get_providers():
+                    raise
+                with self._fallback_lock:
+                    if self.session is session:
+                        _LOG.warning("Core ML gesture prediction failed; switching to CPU", exc_info=True)
+                        self.session = open_session(self._path, session_options(self._threads), False)
+                        self.on_coreml = False
+                outputs = self.session.run(None, {self._input: x})
+            out = outputs[0][0]  # (4 + classes, places)
         scores = out[4:]
         shown = scores.copy()
         shown[self._none] = 0
@@ -470,9 +491,10 @@ class Vision:
         try:
             self.face = FaceModel(verified_path(models_dir, face.file, face.sha256),
                                   face.threshold, threads, use_cuda, self._gpu, keep_memory, openvino,
-                                  use_coreml=apple_neural_engine_available())
+                                  use_coreml=apple_neural_engine_available(), prefer_coreml_gpu=hand.key == "accurate")
             self.hand = HandModel(verified_path(models_dir, hand.file, hand.sha256),
-                                  hand.threshold, threads, use_cuda, self._gpu_hands, keep_memory, openvino)
+                                  hand.threshold, threads, use_cuda, self._gpu_hands, keep_memory, openvino,
+                                  use_coreml=apple_neural_engine_available())
             from .faces import FaceEmbedder
 
             self.recognizer = FaceEmbedder(verified_path(models_dir, rec.file, rec.sha256),
@@ -492,7 +514,7 @@ class Vision:
 
     @property
     def on_coreml(self) -> bool:
-        return self.face.on_coreml or self.recognizer.on_coreml
+        return self.face.on_coreml or self.hand.on_coreml or self.recognizer.on_coreml
 
     @property
     def rec_key(self) -> str:

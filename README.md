@@ -24,7 +24,7 @@
 <a href="https://buymeacoffee.com/jxlarrea"><img src="https://img.shields.io/badge/Buy%20Me%20A%20Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black" alt="Buy Me A Coffee"></a>
 </p>
 
-Ground Control is a companion service for [Kiosk Satellite](https://github.com/jxlarrea/kiosk-satellite). It runs on a computer or server in your home and handles the voice and vision processing that kiosks don't have the computing power for. Install it as a Home Assistant app, run it in Docker on a CPU or an NVIDIA GPU, or run it natively on Apple Silicon for Core ML acceleration of supported face models.
+Ground Control is a companion service for [Kiosk Satellite](https://github.com/jxlarrea/kiosk-satellite). It runs on a computer or server in your home and handles the voice and vision processing that kiosks don't have the computing power for. Install it as a Home Assistant app, run it in Docker on a CPU or an NVIDIA GPU, or run it natively on Apple Silicon for Core ML acceleration of vision and tuned speaker models.
 
 Kiosk Satellite Ground Control currently has two components. **Voice Match** handles speaker voice recognition, trimming, wake word alignment and isolation. **Vision Match** handles face detection, hand gestures and face recognition.
 
@@ -200,7 +200,9 @@ On native macOS, both SCRFD face detectors specialize their input and nine outpu
 
 A repeated thread-count sweep (1, 2, 4, 8 and 16 ONNX Runtime intra-op threads) found no gain from a larger CPU pool on the Core ML paths. Light detection and recognition use one thread; Accurate recognition uses two. For the Light recognition graph, an interleaved eight-run comparison measured 0.817 ms with `CPUAndNeuralEngine` and 0.824 ms with `ALL`, so it keeps the Neural Engine-specific setting.
 
-Voice Match can use Core ML for half-second increments from 0.5 to 4 seconds. Run the local tuner once after installing the Apple tuning dependencies. It simplifies the speaker graph for each length and saves only configurations with at least 10% lower median latency, equal or lower p95, and embedding cosine similarity of at least 0.999 on its test signals. Restart Ground Control to load the selected windows. Other lengths use the CPU. On the M1 Pro, the Accurate 2 s window fell from 42.3 to 18.6 ms. Voice isolation still performed best on CPU.
+Both gesture models use Core ML MLProgram with all compute units available. On an M1 Pro, 27 alternating CPU/Core ML comparisons used JPEG crops from two HaGRID example images and the scikit-image astronaut photograph. Each request ran Light face detection, Accurate face recognition and gestures together. Moving Light gestures to Core ML reduced median request latency from 32.0 to 24.1 ms. With Accurate gestures, the median fell from 440.1 to 32.4 ms and p95 from 488.6 to 44.2 ms. A second comparison with Accurate gestures put the fixed 640×480 face detector on Core ML’s CPU/GPU policy. With Light face detection, this reduced median time from 31.8 to 28.0 ms, and from 30.8 to 29.2 ms when the frame order was reversed. Ground Control selects that policy when Accurate gestures are configured. Both backends returned the same gesture or absence of a hand on all 27 frames for each model. To compare isolated gesture inference on another Mac, run `python tools/benchmark_apple_silicon.py --suite hands --tune-compute-units`. For complete requests, run `python tools/benchmark_camera.py --hands accurate frame1.jpg frame2.jpg` with representative kiosk frames.
+
+Voice Match can use Core ML for half-second increments from 0.5 to 4 seconds. Run the local tuner once after installing the Apple tuning dependencies. It simplifies the speaker graph for each length and saves only configurations with at least 10% lower median latency, equal or lower p95, and embedding cosine similarity of at least 0.999 on its test signals. Restart Ground Control to load the selected windows. Other lengths use the CPU. On the M1 Pro, the Accurate 2 s window fell from 42.3 to 18.6 ms. Voice isolation uses the CPU. Tests of the dynamic Core ML graphs on one-, three- and five-second synthetic speech clips took longer.
 
 ```sh
 python -m pip install '.[apple-tuning]'
@@ -342,7 +344,7 @@ The GPU can be integrated or an Arc card, from the 11th generation of Core proce
 
 #### Mac with Apple Silicon
 
-Run the CPU command above in Docker Desktop or OrbStack. Docker on a Mac can't use the Mac's GPU or Neural Engine, so every feature including Isolation runs on the CPU of an M-series chip. Native macOS installs use Core ML for supported face models; Voice Match still runs on the CPU. Ground Control on a Mac isn't discovered automatically, so enter the Mac's address in each kiosk. See [Mac with Apple Silicon](docs/installation.md#mac-with-apple-silicon).
+Run the CPU command above in Docker Desktop or OrbStack. Docker on a Mac can't use the Mac's GPU or Neural Engine, so every feature including Isolation runs on the CPU of an M-series chip. Native macOS installs use Core ML for supported vision models and locally tuned speaker windows. Ground Control on a Mac isn't discovered automatically, so enter the Mac's address in each kiosk. See [Mac with Apple Silicon](docs/installation.md#mac-with-apple-silicon).
 
 ## Getting started
 

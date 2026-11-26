@@ -68,6 +68,11 @@ def cases(suite: str) -> list[tuple[str, dict[str, np.ndarray], bool, bool]]:
             x = rng.uniform(-1, 1, (1, 3, 112, 112)).astype(np.float32)
             add(model, {"input.1": x}, True, True)
 
+    if suite in ("hands", "all"):
+        x = rng.random((1, 3, 480, 640), dtype=np.float32)
+        for model in ("yolov10n_gestures", "yolov10x_gestures"):
+            add(model, {"images": x}, True)
+
     if suite in ("voice", "all"):
         for model in ("redimnet2_b1", "redimnet2_b3_multi"):
             for seconds in (0.5, 1, 2, 4):
@@ -156,7 +161,7 @@ def compare(path: Path, feed: dict[str, np.ndarray], name: str, iterations: int,
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--suite", choices=("face", "voice", "all"), default="face")
+    parser.add_argument("--suite", choices=("face", "hands", "voice", "all"), default="face")
     parser.add_argument("--iterations", type=int, default=40)
     parser.add_argument("--threads", type=int, default=4)
     parser.add_argument("--tune", action="store_true", help="also compare Core ML's NeuralNetwork conversion")
@@ -211,12 +216,16 @@ def main() -> None:
         production_settings = dict(COREML[1])
         if model == "arcface_w600k_mbf":
             production_settings.update(ModelFormat="NeuralNetwork")
+        if model.endswith("_gestures"):
+            production_settings.update(MLComputeUnits="ALL")
         production_options = {**production_settings, "ModelCacheDirectory": model_cache(path)}
         if args.profile_compute_plan:
             production_options["ProfileComputePlan"] = "1"
         # Core ML uses fewer ORT workers for these small graphs; the large
         # Accurate embedding graph measured best with two.
         coreml_threads = 1 if model in ("scrfd_2.5g", "arcface_w600k_mbf") else 2
+        if model.endswith("_gestures"):
+            coreml_threads = args.threads
         candidates = [("CoreML-production-tuned", (COREML[0], production_options), coreml_threads)]
         if args.tune:
             candidates.extend((name, (candidate[0], {
