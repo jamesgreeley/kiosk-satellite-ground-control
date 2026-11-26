@@ -238,7 +238,10 @@ class FaceModel:
             if self._ov.outputs != 9:
                 raise ValueError(f"{path.name} is not a SCRFD model with face points")
             return
-        self._path, self._options = path, session_options(threads)
+        # Core ML handles the convolution-heavy detector outside ORT's CPU
+        # pool. More ORT worker threads add contention at its CPU partitions;
+        # one thread was consistently as fast or faster in the M1 Pro sweep.
+        self._path, self._options = path, session_options(1 if use_coreml else threads)
         self.session = gpu(open_session, path, self._options, use_cuda, LEAN_CUDA, use_coreml)
         self.on_gpu = self.session.get_providers()[0] == "CUDAExecutionProvider"
         self.on_coreml = "CoreMLExecutionProvider" in self.session.get_providers()
@@ -428,7 +431,8 @@ class Vision:
             self.recognizer = FaceEmbedder(verified_path(models_dir, rec.file, rec.sha256),
                                            threads, use_cuda, self._gpu, keep_memory, openvino,
                                            use_coreml=apple_neural_engine_available(),
-                                           coreml_options={"ModelFormat": "NeuralNetwork"} if rec.key == "light" else None)
+                                           coreml_options={"ModelFormat": "NeuralNetwork"} if rec.key == "light" else None,
+                                           coreml_threads=1 if rec.key == "light" else 2)
         except Exception:
             self.close()
             raise

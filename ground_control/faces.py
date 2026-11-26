@@ -80,7 +80,8 @@ class FaceEmbedder:
     """A face crop to a unit-length embedding."""
 
     def __init__(self, path: Path, threads: int, use_cuda: bool, gpu: GpuThread, keep_memory: bool = False,
-                 openvino: Any = None, use_coreml: bool = False, coreml_options: dict | None = None) -> None:
+                 openvino: Any = None, use_coreml: bool = False, coreml_options: dict | None = None,
+                 coreml_threads: int | None = None) -> None:
         """``openvino``: the Intel GPU to run on in the OpenVINO image (``ov.Gpu``)."""
         from .vision import session_options
 
@@ -90,7 +91,8 @@ class FaceEmbedder:
             self.session, self.on_gpu, self._input = None, True, self._ov.inputs[0]
             self.on_coreml = False
             return
-        self.session = gpu(open_session, path, session_options(threads), use_cuda, LEAN_CUDA, use_coreml,
+        session_threads = coreml_threads if use_coreml and coreml_threads is not None else threads
+        self.session = gpu(open_session, path, session_options(session_threads), use_cuda, LEAN_CUDA, use_coreml,
                            coreml_options)
         self.on_gpu = self.session.get_providers()[0] == "CUDAExecutionProvider"
         self.on_coreml = "CoreMLExecutionProvider" in self.session.get_providers()

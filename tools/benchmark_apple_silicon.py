@@ -66,7 +66,7 @@ def cases(suite: str) -> list[tuple[str, dict[str, np.ndarray], bool, bool]]:
         add("scrfd_10g 640x480", {"input.1": x}, False)
         for model in ("arcface_w600k_mbf", "arcface_w600k_r50"):
             x = rng.uniform(-1, 1, (1, 3, 112, 112)).astype(np.float32)
-            add(model, {"input.1": x}, model.endswith("r50"), True)
+            add(model, {"input.1": x}, True, True)
 
     if suite in ("voice", "all"):
         for model in ("redimnet2_b1", "redimnet2_b3_multi"):
@@ -136,6 +136,7 @@ def compare(path: Path, feed: dict[str, np.ndarray], name: str, iterations: int,
     result: dict[str, object] = {
         "case": name,
         "provider": providers[0] if isinstance(providers[0], str) else providers[0][0],
+        "threads": threads,
         "startup_ms": round(startup_ms, 1),
         "median_ms": round(statistics.median(samples), 3),
         "p95_ms": round(float(np.percentile(samples, 95)), 3),
@@ -159,6 +160,8 @@ def main() -> None:
     parser.add_argument("--iterations", type=int, default=40)
     parser.add_argument("--threads", type=int, default=4)
     parser.add_argument("--tune", action="store_true", help="also compare Core ML's NeuralNetwork conversion")
+    parser.add_argument("--tune-compute-units", action="store_true",
+                        help="compare Core ML CPU, GPU, Neural Engine and ALL compute units")
     parser.add_argument("--profile-compute-plan", action="store_true",
                         help="log whether Core ML assigns operators to the Neural Engine")
     args = parser.parse_args()
@@ -182,19 +185,37 @@ def main() -> None:
         print(json.dumps(cpu, sort_keys=True), flush=True)
         if not args.tune and not apple_default:
             continue
-        production_options = {**COREML[1], "ModelCacheDirectory": model_cache(path)}
+        production_settings = dict(COREML[1])
+        if model == "arcface_w600k_mbf":
+            production_settings.update(ModelFormat="NeuralNetwork")
+        production_options = {**production_settings, "ModelCacheDirectory": model_cache(path)}
         if args.profile_compute_plan:
             production_options["ProfileComputePlan"] = "1"
-        candidates = [("CoreML-MLProgram-dynamic", (COREML[0], production_options))]
+        # Core ML uses fewer ORT workers for these small graphs; the large
+        # Accurate embedding graph measured best with two.
+        coreml_threads = 1 if model in ("scrfd_2.5g", "arcface_w600k_mbf") else 2
+        candidates = [("CoreML-production-tuned", (COREML[0], production_options), coreml_threads)]
         if args.tune:
             candidates.extend((name, (candidate[0], {
                 **candidate[1], "ModelCacheDirectory": model_cache(path),
                 **({"ProfileComputePlan": "1"} if args.profile_compute_plan else {}),
-            })) for name, candidate in TUNING_OPTIONS[1:])
-        for candidate_name, candidate in candidates:
+            }), coreml_threads) for name, candidate in TUNING_OPTIONS
+                if any(candidate[1].get(key) != production_settings.get(key)
+                       for key in ("ModelFormat", "MLComputeUnits")))
+        if args.tune_compute_units:
+            for compute_units in ("CPUOnly", "CPUAndGPU", "CPUAndNeuralEngine", "ALL"):
+                if compute_units == production_settings["MLComputeUnits"]:
+                    continue
+                settings = {**production_settings, "MLComputeUnits": compute_units,
+                            "ModelCacheDirectory": model_cache(path)}
+                if args.profile_compute_plan:
+                    settings["ProfileComputePlan"] = "1"
+                candidates.append((f"CoreML-{settings['ModelFormat']}-{compute_units}",
+                                   (COREML[0], settings), coreml_threads))
+        for candidate_name, candidate, candidate_threads in candidates:
             try:
                 result, _ = compare(path, feed, f"{label} / {candidate_name}", args.iterations,
-                                    args.threads, [candidate, "CPUExecutionProvider"], baseline, embedding)
+                                    candidate_threads, [candidate, "CPUExecutionProvider"], baseline, embedding)
                 print(json.dumps(result, sort_keys=True), flush=True)
             except Exception as err:  # record unsupported model/shape combinations for tuning
                 print(json.dumps({"case": label, "provider": candidate_name, "error": str(err)[:500]},
