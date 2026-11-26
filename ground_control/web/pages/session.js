@@ -113,7 +113,11 @@ function steps(record) {
     }
     if (e.type === "turn_start") out.push([e.turn > 1 ? `Turn ${e.turn}` : "The user started talking", "What they say goes to the assistant.", e.t]);
     if (e.type === "turn_end") out.push(["The user stopped", `${e.speech_s ?? 0} s of speech. The command ended here.`, e.t]);
-    if (e.type === "rejected" && e.reason === "wake_word") out.push(["False positive", "The wake word wasn't said, so the session was stopped and nothing went to the assistant.", e.t]);
+    if (e.type === "rejected" && e.reason === "wake_word") {
+      const ahead = (record.timeline || []).some((p) => p.kind === "wake_check" && p.ahead);
+      out.push(["False positive", ahead ? "The wake word wasn't said, so the kiosk started nothing: no chime and nothing on its screen."
+        : "The wake word wasn't said, so the session was stopped and nothing went to the assistant.", e.t]);
+    }
     else if (e.type === "rejected") out.push(["Rejected", "This kiosk answers enrolled voices only.", e.t]);
     if (e.type === "end_of_speech" && e.reason === "silence") out.push(["Speaker stopped", "Silence after the speech.", e.t]);
   }
@@ -139,9 +143,11 @@ function wakeCheckStep(p, word) {
   const name = word ? `"${word}"` : "the wake word";
   const title = "Wake Word Verifier";
   const fit = `It fits what the kiosk heard with a score of ${p.fit}. A wake word that was said scores ${p.needs} or more.`;
-  if (p.known_voice) return [title, `${name[0].toUpperCase()}${name.slice(1)} wasn't clear, but the voice is someone enrolled, so the session went on. ${fit}`, 0];
-  if (p.said) return [title, `${name[0].toUpperCase()}${name.slice(1)} was said. ${fit} The check took ${p.ms} ms.`, 0];
-  return [title, `${name[0].toUpperCase()}${name.slice(1)} wasn't said. ${fit} The check took ${p.ms} ms.`, 0];
+  // Wait for wake word verification: the kiosk asked before it started the session.
+  const waited = p.ahead ? " The kiosk waited for this check before it started the session." : "";
+  if (p.known_voice) return [title, `${name[0].toUpperCase()}${name.slice(1)} wasn't clear, but the voice is someone enrolled, so the session went on. ${fit}${waited}`, 0];
+  if (p.said) return [title, `${name[0].toUpperCase()}${name.slice(1)} was said. ${fit} The check took ${p.ms} ms.${waited}`, 0];
+  return [title, `${name[0].toUpperCase()}${name.slice(1)} wasn't said. ${fit} The check took ${p.ms} ms.${waited}`, 0];
 }
 
 function player(path, title, desc, length) {

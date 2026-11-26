@@ -898,6 +898,46 @@ def test_a_kiosk_can_have_enrolled_voices_checked_too(household, speakers, voice
     assert "known_voice" not in [p for p in f.timeline if p["kind"] == "wake_check"][0]
 
 
+AHEAD = {"fit": -3.1, "needs": -2.2, "phonemes": "heɪdʒɑːɹvɪs", "ms": 3, "ahead": True}
+"""What the Wake Word Verifier found for a kiosk that asked before its session."""
+
+
+def test_a_wake_word_checked_ahead_isnt_checked_again(household, speakers, voice, vad, embedder):
+    """Wait for wake word verification: the kiosk asked before it started the session."""
+    people, _, _ = household
+    guest = held_out(speakers[2])
+    s = Script().add("user", guest[2 * SR:5 * SR]).add("quiet", silence(1.5))
+    seen: list = []
+    found = {**AHEAD, "said": True, "fit": -1.0}
+    f = Follow(FollowConfig(), ACCURATE, embedder, vad, people, anchor=anchor_of(guest),
+               wake_word_check=checked(False, seen), wake_checked=found)
+    events = [e for c in chunks(s.audio) for e in f.feed(c)] + f.finish()
+    assert not seen and not of(events, "rejected") and f.released
+    assert [p for p in f.timeline if p["kind"] == "wake_check"] == [{"t": 0.0, "kind": "wake_check", **found}]
+    assert of(events, "stats")[0]["wake_word_said"] is True
+
+
+def test_a_wake_word_that_failed_ahead_is_a_false_positive_from_the_start(household, speakers, voice, vad, embedder):
+    people, ana, _ = household
+    tv, user = held_out(speakers[2]), held_out(speakers[0])
+    found = {**AHEAD, "said": False}
+    f = Follow(FollowConfig(), ACCURATE, embedder, vad, people, anchor=anchor_of(tv), wake_checked=found)
+    events = f.finish()
+    rejected = of(events, "rejected")
+    assert len(rejected) == 1 and rejected[0]["reason"] == "wake_word" and rejected[0]["t"] == 0
+    stats = of(events, "stats")[0]
+    assert stats["end"] == "false_positive" and stats["wake_word_said"] is False and not f.released
+    # In the voice of someone enrolled it passes, unless the kiosk has Trust enrolled voices off.
+    f = Follow(FollowConfig(), ACCURATE, embedder, vad, people, anchor=anchor_of(user), wake_checked=found)
+    assert f.wake_check["said"] and f.wake_check["known_voice"] and f.wake_check["ahead"]
+    assert not of(f.finish(), "rejected")
+    f = Follow(FollowConfig(wake_check_trusts_known=False), ACCURATE, embedder, vad, people, anchor=anchor_of(user),
+               wake_checked=found)
+    events = f.finish()
+    assert of(events, "speaker")[0]["id"] == ana.id and of(events, "rejected")[0]["reason"] == "wake_word"
+    assert of(events, "stats")[0]["end"] == "false_positive" and "known_voice" not in f.wake_check
+
+
 def test_a_check_that_fails_or_has_nothing_to_go_by_changes_nothing(household, speakers, voice, vad, embedder):
     people, _, _ = household
     guest = held_out(speakers[2])

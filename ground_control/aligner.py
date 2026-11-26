@@ -326,9 +326,12 @@ def stream_start(anchor: np.ndarray, head: np.ndarray, most_s: float = 1.0, leas
     The kiosk's wake clip runs a little past the moment the stream starts, up
     to 0.4 s, so its end and the stream's start are the same audio, sample for
     sample. That is how the two are lined up. With nothing in common, the
-    stream starts where the anchor ends."""
-    most = min(len(anchor), len(head), int(most_s * SR))
-    if most < least:
+    stream starts where the anchor ends.
+
+    ``head`` can be shorter than what the two have in common: the Wake Word
+    Verifier runs with 0.3 s of the stream. All of it is then in the anchor."""
+    most = min(len(anchor), int(most_s * SR))
+    if min(most, len(head)) < least:
         return len(anchor)
     probe = min(16, least)
     region = anchor[len(anchor) - most:]
@@ -338,7 +341,8 @@ def stream_start(anchor: np.ndarray, head: np.ndarray, most_s: float = 1.0, leas
         k = most - int(i)
         if k < least:
             break
-        if np.array_equal(region[i:], head[:k]):
+        n = min(k, len(head))
+        if np.array_equal(region[i:i + n], head[:n]):
             return len(anchor) - k
     return len(anchor)
 
@@ -425,16 +429,19 @@ class Aligner:
                            phonemes="".join(placed.phonemes), ms=round((time.perf_counter() - t0) * 1000))
 
     def check(self, anchor: np.ndarray, head: np.ndarray, phrase: str, language: str | None = None,
-              min_fit: float = VERIFY_MIN_FIT) -> WakeWordCheck | None:
+              min_fit: float = VERIFY_MIN_FIT, fired: int | None = None) -> WakeWordCheck | None:
         """Whether the wake word ``phrase`` was said, from the wake clip
         ``anchor`` and ``head``, the start of the stream that follows it.
         None when there is nothing to judge it by: no pronunciation or too
-        little of the wake clip."""
+        little of the wake clip.
+
+        ``fired``: where in the wake clip the engine fired, in samples, when
+        the kiosk says. Otherwise it is where the stream starts in the clip."""
         t0 = time.perf_counter()
         targets = self.pronunciations(phrase, language)
         if not targets:
             return None
-        start = stream_start(anchor, head)
+        start = stream_start(anchor, head) if fired is None else max(0, min(int(fired), len(anchor)))
         a0 = max(0, start - int(BEFORE_S * SR))
         if start - a0 < MIN_BEFORE_S * SR:
             return None

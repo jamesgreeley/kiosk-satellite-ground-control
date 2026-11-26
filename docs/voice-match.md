@@ -23,6 +23,7 @@ Turn the features on for each kiosk in Kiosk Satellite under **Settings > Ground
 | Enable Trimming | Sends everything the microphone picks up to Ground Control and passes on only the user's speech. |
 | Enable Wake Word Verifier | Stops the session when the kiosk woke up to something that wasn't its wake word. Needs **Use Wake Word Verifier** on in Ground Control. |
 | Trust enrolled voices | A wake word in the voice of someone enrolled always passes the Wake Word Verifier. |
+| Wait for wake word verification | Plays the chime and shows the voice session only after the wake word is verified. Off by default. |
 | Enable Wake Word Aligner | Leaves the end of the wake word out of the command. Needs **Use Wake Word Aligner** on in Ground Control. |
 | Enable Isolation | Removes other voices under the user's words too. Needs **Use Isolation** on in Ground Control. |
 
@@ -104,7 +105,7 @@ A wake word engine now and then wakes a kiosk up to speech that is nothing like 
 - **It runs 0.3 seconds after the kiosk wakes up.** A wake word engine recognizes the word before it is over, so the check waits for the end of the word. It listens to the wake word the kiosk sends and to the 0.3 seconds after it.
 - **It works with every wake word and every wake word engine.** Only the wake word's text is needed. It is pronounced in English and in the kiosk's language, so a custom wake word works too.
 - **A wake word in the voice of someone enrolled always passes,** however unclear it was. A kiosk can turn that off with **Trust enrolled voices** in Kiosk Satellite. That is for someone whose own voice wakes the kiosk up by mistake, like during a conference call.
-- **It doesn't delay anything.** The check takes about as long as the Wake Word Aligner. The wake sound has already played and the command's first audio is still held for its voice check.
+- **It doesn't delay anything.** The check takes about as long as the Wake Word Aligner. The wake sound has already played and the command's first audio is still held for its voice check. To hold the wake sound until the check is done, see [Wait for Wake Word Verification](#wait-for-wake-word-verification).
 - **If the check can't run, the session goes on** as it did before.
 - **The kiosk stops listening without a sound** when a session is stopped. A Kiosk Satellite from before the Wake Word Verifier follows its **Voice not chosen** setting instead, which is quiet by default.
 
@@ -119,6 +120,18 @@ The Wake Word Verifier needs:
 3. Kiosk Satellite 2026.11.30 or later. An older Kiosk Satellite than the one with its own Wake Word Verifier switch is checked whenever it is on in Ground Control.
 
 A session stopped this way shows as **False positive** on the Sessions page. Its page shows the check under **Steps**.
+
+### Wait for Wake Word Verification
+
+A kiosk starts the session the moment it wakes up, so a false positive still plays the wake sound and shows the voice overlay for a moment before it is stopped. With **Wait for wake word verification** on in Kiosk Satellite, the wake word goes to Ground Control first and the session starts only when it was said. A false positive then plays no sound and shows nothing on the screen.
+
+- **It can add a small delay before the voice session starts.** The kiosk waits for the 0.3 seconds the check listens to after the wake word and then for the answer. The answer takes a few milliseconds on a PC and about 40 ms on a Raspberry Pi 4.
+- **What is said during the wait is kept.** With **Talk right after the wake word** on, the command still starts right after the wake word.
+- **Without an answer within 0.3 seconds the session starts** and the wake word is checked in the session instead.
+- **A false positive is still saved** as a session of its own, with the wake word as the kiosk heard it.
+- **A wake word that was said isn't checked again** in its session. The session's page says the kiosk waited for the check.
+
+It is off by default. It needs Kiosk Satellite 2026.11.33 or later, with **Enable Wake Word Verifier** on.
 
 ## Wake Word Aligner
 

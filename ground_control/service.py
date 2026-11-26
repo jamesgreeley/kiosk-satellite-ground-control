@@ -56,6 +56,9 @@ class GroundControl:
         self.people = People(cfg.data_dir, self.vad)
         self.faces = Faces(cfg.data_dir)
         self.at_kiosk: dict[str, str | None] = {}
+        self.wake_passes: dict[str, tuple[float, str, dict]] = {}
+        """Wake words ``verify_ahead`` passed, by the id the kiosk gave: when,
+        the kiosk and what was found. The session that follows takes it."""
         """Who Face Recognition says is at each kiosk now, by device id."""
         self.sessions = SessionStore(cfg.data_dir, keep_days=cfg.keep_days, keep_audio=cfg.keep_audio)
         self.hub = Hub(cfg.data_dir / "kiosks.json")
@@ -423,7 +426,7 @@ class GroundControl:
                    speaker: str | None = None, isolation: bool = True,
                    wake: dict[str, object] | None = None, asked: bool | None = None,
                    face: Callable[[], str | None] | None = None, verify: bool = True, align: bool = True,
-                   trust_known: bool = True) -> "Follow":
+                   trust_known: bool = True, wake_checked: dict[str, object] | None = None) -> "Follow":
         """``isolation``: the kiosk's own switch. Isolation runs when that and
         the service's setting are both on.
 
@@ -441,7 +444,10 @@ class GroundControl:
         ``verify`` and ``align``: the kiosk's own Wake Word Verifier and Wake
         Word Aligner switches. Each runs when that and the service's setting
         are both on. ``trust_known``: the kiosk's Trust enrolled voices
-        (``FollowConfig.wake_check_trusts_known``)."""
+        (``FollowConfig.wake_check_trusts_known``).
+
+        ``wake_checked``: what ``verify_ahead`` found for this wake word. It
+        isn't checked again."""
         from .follow import Follow, FollowConfig
 
         find = check = None
@@ -457,7 +463,7 @@ class GroundControl:
 
         # Only a turn a wake word started has one to check: not a reply to a
         # question, a follow-up or a turn started by hand.
-        if (verify and wake and phrase and anchor is not None and speaker is None
+        if (verify and wake and phrase and anchor is not None and speaker is None and not wake_checked
                 and wake.get("interaction", "wake_word") == "wake_word"):
             verifier = self.verifier()
             if verifier is not None:
@@ -469,7 +475,42 @@ class GroundControl:
                            face=face, wake_check_trusts_known=trust_known)
         return Follow(cfg, self.model, self.active, self.vad, self.people,
                       anchor=anchor, speaker=speaker, isolator=self.isolator() if isolation else None,
-                      wake_word_end=find, wake_word_check=check)
+                      wake_word_end=find, wake_word_check=check, wake_checked=wake_checked)
+
+    def verify_ahead(self, clip, fired: int, wake: dict[str, object], trust_known: bool = True,
+                     policy: str = "anyone", people: tuple[str, ...] = ()):
+        """The Wake Word Verifier for a kiosk with Wait for wake word
+        verification on, which asks before it starts the session.
+
+        ``clip``: the wake clip. ``fired``: where the wake word engine fired
+        in it, in samples. What follows is what the kiosk heard while it waited.
+
+        Returns what was found and, for a wake word that wasn't said, the
+        session that is its record. None and None with nothing to judge it
+        by, where the kiosk starts the session as it would have."""
+        from .follow import Follow, FollowConfig
+
+        phrase = wake.get("wake_word")
+        language = wake.get("language")
+        verifier = self.verifier() if phrase else None
+        if verifier is None:
+            return None, None
+        found = verifier.check(clip, np.zeros(0, dtype=np.float32), str(phrase),
+                               language if isinstance(language, str) else None, fired=fired)
+        if found is None:
+            return None, None
+        verdict = {"said": bool(found.said), "fit": found.fit, "needs": found.needs, "phonemes": found.phonemes,
+                   "ms": found.ms, "ahead": True}
+        if found.said:
+            return verdict, None
+        # Not said: whose voice it is decides, which takes the speaker model.
+        # A wake word that was said never waits for that.
+        cfg = FollowConfig(policy=policy, people=people, wake_check_trusts_known=trust_known)
+        session = Follow(cfg, self.model, self.active, self.vad, self.people, anchor=clip, wake_checked=verdict)
+        if session.wake_check is None:
+            # Someone enrolled this kiosk doesn't answer: the session says so.
+            return None, None
+        return session.wake_check, None if session.wake_check["said"] else session
 
     async def run(self, fn, *args):
         return await asyncio.get_running_loop().run_in_executor(self.pool, fn, *args)

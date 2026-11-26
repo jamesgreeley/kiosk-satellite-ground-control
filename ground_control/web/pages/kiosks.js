@@ -73,9 +73,10 @@ function featureRows(kiosk, lastSession, people, status) {
             chip("Choose again", "c-warn"))
       : row("Recognition", `Answers: ${kioskAnswers(kiosk, lastSession, people) || "Anyone"}.`, onOff(true)),
     row("Trimming", "Other voices cut out between the user's words.", onOff(f.trimming)),
-    row("Wake Word Verifier", f.verifier_trusts_enrolled === false
+    row("Wake Word Verifier", (f.verifier_trusts_enrolled === false
       ? "False positives are stopped, also in the voice of someone enrolled."
-      : "False positives are stopped. A wake word in the voice of someone enrolled always passes.", beside(f.wake_word_verifier, status.verifier)),
+      : "False positives are stopped. A wake word in the voice of someone enrolled always passes.")
+      + (f.verifier_waits ? " The kiosk waits for the check before it starts a session." : ""), beside(f.wake_word_verifier, status.verifier)),
     row("Wake Word Aligner", "The end of the wake word left out of the command.", beside(f.wake_word_aligner, status.aligner)),
     row("Isolation", "Other voices removed under the user's words.", isolation),
     row("Speaker sensor", "Shows who is talking in Home Assistant.", onOff(f.speaker_sensor)),

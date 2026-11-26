@@ -128,7 +128,7 @@ def test_a_kiosks_wake_word_switches_are_kept():
     from ground_control.server import _features
 
     said = {"voice_match": True, "trimming": True, "wake_word_verifier": True, "verifier_trusts_enrolled": False,
-            "wake_word_aligner": False}
+            "verifier_waits": True, "wake_word_aligner": False}
     assert _features(said) == said
     # A kiosk from before these switches says nothing about them, which the Kiosks page reads as on.
     assert "wake_word_verifier" not in _features({"voice_match": True, "trimming": True})

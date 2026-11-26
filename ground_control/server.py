@@ -145,7 +145,7 @@ def _features(value: Any) -> dict[str, Any] | None:
         return None
     out: dict[str, Any] = {k: value[k] is True for k in
                            ("voice_match", "trimming", "isolation", "wake_word_verifier", "verifier_trusts_enrolled",
-                            "wake_word_aligner", "speaker_sensor", "show_speaker",
+                            "verifier_waits", "wake_word_aligner", "speaker_sensor", "show_speaker",
                             "vision_match", "face_detection", "hand_gestures", "face_recognition",
                             "dismiss_on_face", "postpone_on_face", "face_confirms_voice") if k in value}
     gestures = value.get("finger_gestures")
@@ -410,8 +410,11 @@ async def session_ws(request: web.Request) -> web.WebSocketResponse:
         verify = start.get("wake_word_verifier") is not False
         align = start.get("wake_word_aligner") is not False
         trust_known = start.get("verifier_trusts_enrolled") is not False
+        # Wait for wake word verification: the wake word was checked before
+        # the kiosk started this session.
+        checked = _wake_pass(vm, start.get("wake_verified"), device) if first and verify else None
         session = await vm.run(vm.new_follow, policy, anchor, people, speaker, isolation, wake if first else None,
-                               asked, face, verify, align, trust_known)
+                               asked, face, verify, align, trust_known, checked)
     else:
         session = vm.new_session(mode=mode, policy=policy, people=people, learn=start.get("learn"))
     device_id = start.get("device_id")
@@ -1135,7 +1138,10 @@ async def _people(vm: GroundControl) -> dict[str, Any]:
             "version": __version__, "app_path": vm.app_path,
             **describe_install(bool(vm.cfg.supervisor_token), vm.active.on_gpu),
             # Whether the Wake Word Verifier is on here, for the kiosks' analytics.
-            "wake_word_verifier": vm.verify and vm._aligner_missing() is None}
+            "wake_word_verifier": vm.verify and vm._aligner_missing() is None,
+            # Whether a kiosk can ask about a wake word before it starts the
+            # session (a "verify" message), for Wait for wake word verification.
+            "wake_word_verify": vm.verify and vm._aligner_missing() is None}
 
 
 def _from_kiosk(vm: GroundControl, device_id: str, data: str) -> None:
@@ -1159,6 +1165,94 @@ def _from_kiosk(vm: GroundControl, device_id: str, data: str) -> None:
         # The kiosk couldn't start: the web UI waiting on it hears why.
         vm.hub.publish({"type": "enroll_error", "person_id": msg.get("person_id"), "device_id": device_id,
                         "code": str(msg.get("code") or "refused"), "message": str(msg.get("message") or "")})
+    elif msg.get("type") == "verify":
+        task = asyncio.ensure_future(_verify_wake_word(vm, device_id, msg))
+        _VERIFYING.add(task)
+        task.add_done_callback(_VERIFYING.discard)
+
+
+_VERIFYING: set[asyncio.Future] = set()
+"""The wake word checks under way, kept so they aren't dropped half done."""
+
+WAKE_PASS_S = 30.0
+"""How long a wake word that passed waits for its session."""
+
+
+def _wake_pass(vm: GroundControl, verified: Any, device_id: Any) -> dict[str, Any] | None:
+    """What the Wake Word Verifier found for the wake word a session starts
+    with, when its kiosk asked ahead (``wake_verified``: the id it asked with)."""
+    now = time.time()
+    for key in [k for k, (at, _, _) in vm.wake_passes.items() if now - at > WAKE_PASS_S]:
+        del vm.wake_passes[key]
+    found = vm.wake_passes.pop(verified, None) if isinstance(verified, str) else None
+    return found[2] if found and found[1] == device_id else None
+
+
+async def _verify_wake_word(vm: GroundControl, device_id: str, msg: dict[str, Any]) -> None:
+    """A kiosk with Wait for wake word verification on asks whether the wake
+    word was said, before it shows, chimes or starts anything:
+
+        {"type": "verify", "id": "...", "clip": "<base64 PCM16>", "tail_ms": 300,
+         "wake_word": "Okay Nabu", "language": "en", "trusts_enrolled": true,
+         "policy": "anyone", "people": []}
+
+    ``clip``: the wake clip, 16 kHz mono. ``tail_ms``: how much of its end
+    came after the wake word engine fired. The answer:
+
+        {"type": "verified", "id": "...", "said": true}
+
+    ``said`` is null with nothing to judge it by, and the kiosk starts the
+    session as it would have. A wake word that wasn't said is kept as a
+    session of its own, a false positive. One that was said is remembered
+    for the session that follows, which says ``wake_verified`` with the id."""
+    ask = msg.get("id")
+    kiosk = vm.hub.kiosks.get(device_id)
+    if not isinstance(ask, str) or not ask or len(ask) > 64 or kiosk is None or kiosk.access != "approved":
+        return
+    started = time.time()
+    verdict = session = clip = None
+    wake = {**wake_details(msg), "interaction": "wake_word"}
+    policy = msg.get("policy") if msg.get("policy") in ("anyone", "enrolled", "people") else "anyone"
+    people = msg.get("people") if policy == "people" else []
+    people = tuple(p for p in people if isinstance(p, str)) if isinstance(people, list) else ()
+    try:
+        tail = msg.get("tail_ms")
+        raw = msg.get("clip")
+        if isinstance(raw, str) and len(raw) <= 200_000 and isinstance(tail, (int, float)) and not isinstance(tail, bool):
+            clip = pcm16_to_float(base64.b64decode(raw))
+            fired = len(clip) - int(max(0.0, float(tail)) * 16)
+            verdict, session = await vm.run(vm.verify_ahead, clip, fired, wake,
+                                            msg.get("trusts_enrolled") is not False, policy, people)
+    except Exception:  # noqa: BLE001 - the kiosk starts the session as it would have
+        _LOG.exception("checking the wake word for %s failed", kiosk.name)
+        verdict = session = None
+    said = verdict["said"] if verdict else None
+    await vm.hub.send(device_id, {"type": "verified", "id": ask, "said": said})
+    if verdict is None:
+        _LOG.debug("wake word from %s: nothing to check it by", kiosk.name)
+        return
+    if said:
+        vm.wake_passes[ask] = (time.time(), device_id, verdict)
+        _LOG.debug("wake word from %s: said (fit %s, needs %s, %s ms)", kiosk.name, verdict["fit"], verdict["needs"],
+                   verdict["ms"])
+        return
+    # A false positive: the kiosk starts nothing, so this is its session.
+    sid = new_id()
+    kiosk.sessions += 1
+    vm.status.sessions_total += 1
+    vm.hub.publish({"type": "session_start", "session": sid, "device_id": device_id, "mode": "follow"})
+    kept = await vm.run(session.finish)
+    stats = next((e for e in kept if e["type"] == "stats"), {})
+    for e in kept:
+        vm.hub.publish({**e, "session": sid, "device_id": device_id})
+    _LOG.info("session %s from %s: follow mode, answers %s%s", sid, kiosk.name, policy, _wake_text(wake))
+    _LOG.info("session %s from %s ended: %s", sid, kiosk.name, _session_text(stats, kept))
+    record = {"id": sid, "started": started, "device_id": device_id, "device_name": kiosk.name, "mode": "follow",
+              "policy": policy, "people": list(people), "model": vm.model.key, "threshold": vm.model.threshold,
+              "other_threshold": vm.model.other_threshold, "events": [e for e in kept if e["type"] != "stats"],
+              "timeline": session.timeline, "stats": stats, "wake": wake, "released": []}
+    await vm.run(vm.sessions.save, record, None, None, clip)
+    vm.hub.publish({"type": "session_end", "session": sid, "device_id": device_id, "stats": stats})
 
 
 async def events_ws(request: web.Request) -> web.WebSocketResponse:
