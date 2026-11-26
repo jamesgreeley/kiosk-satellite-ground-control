@@ -269,6 +269,8 @@ Use the Docker container to run Ground Control on a machine other than Home Assi
 
 In every command below, `HA_URL` is your Home Assistant address. Kiosks sign in with the Home Assistant token they already have and Ground Control checks that token against Home Assistant. You also log in through `HA_URL` in your browser, so use an address your browser can open. Avoid one that only works inside Docker.
 
+To skip the login, set `HA_TOKEN` to a long-lived access token from your Home Assistant profile. Anyone who can reach port 10900 can then open Ground Control without logging in. See [Skip the Login](docs/installation.md#skip-the-login).
+
 The commands publish port 10900 with `-p 10900:10900`. That way the service isn't discovered automatically, so enter this machine's address in each kiosk. See [Installation](docs/installation.md#docker) for the host network and for every setting.
 
 #### Docker Compose

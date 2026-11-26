@@ -12,10 +12,12 @@ the browser opened Ground Control at, which Home Assistant accepts because
 the redirect is on the same host and port. PKCE ties the code to this
 service.
 
-The browser keeps the tokens and sends the access token like any other
-Home Assistant token. Home Assistant gives out access tokens for 30 minutes,
-so the web UI asks for a new one with the refresh token through
-``/auth/refresh``. Signing out revokes the refresh token.
+The refresh token stays in an HttpOnly cookie that only Ground Control reads,
+so Safari's 7-day wipe of what pages store doesn't sign the browser out. The
+web UI keeps the access token in the page and sends it like any other Home
+Assistant token. Home Assistant gives out access tokens for 30 minutes, so the
+web UI asks ``/auth/refresh`` for a new one with the cookie. Signing out
+revokes the refresh token and drops the cookie.
 """
 
 from __future__ import annotations
@@ -129,7 +131,11 @@ class HomeAssistantLogin:
                 body = await r.json(content_type=None)
                 if r.status != 200 or not isinstance(body, dict) or "access_token" not in body:
                     reason = body.get("error_description") or body.get("error") if isinstance(body, dict) else None
-                    raise LoginError(f"Home Assistant refused: {reason or r.status}", refused=r.status < 500)
+                    # Only Home Assistant's own OAuth error is a refusal. Any other answer, such as
+                    # a proxy's while Home Assistant restarts, keeps the browser's tokens.
+                    refused = r.status < 500 and isinstance(body, dict) and "error" in body
+                    raise LoginError(f"Home Assistant refused: {reason or r.status}" if refused
+                                     else f"Home Assistant at {self.ha_url} answered {r.status}", refused=refused)
                 return body
         except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as err:
             raise LoginError(f"couldn't reach Home Assistant at {self.ha_url}: {err}", refused=False) from err

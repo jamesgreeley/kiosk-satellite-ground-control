@@ -2,6 +2,8 @@
 
 Everything but ``/health`` and ``/auth`` needs a Home Assistant token. As a
 Home Assistant app the panel needs none, since ingress has signed the user in.
+With ``HA_TOKEN`` set and taken by Home Assistant, the web UI needs none
+either. The kiosk sockets still need the kiosk's own token.
 The kiosk sockets are for Kiosk Satellite only (ground_control.clients).
 """
 
@@ -68,12 +70,30 @@ def _once_a_minute(*key: str) -> bool:
     return True
 
 
-async def _signed_in(request: web.Request, token: str | None = None) -> bool:
+async def _web_token(request: web.Request) -> bool | None:
+    """Whether Home Assistant takes ``HA_TOKEN``: None when it isn't set or couldn't be asked."""
+    token = request.app[VM].cfg.ha_token
+    return await request.app[AUTH].check(token) if token else None
+
+
+def _ha_token(request: web.Request) -> str | None:
+    """The token to ask Home Assistant with for the web UI: its own, or ``HA_TOKEN``."""
+    return bearer(request.headers.get("Authorization")) or request.app[VM].cfg.ha_token
+
+
+async def _signed_in(request: web.Request, token: str | None = None, web_ui: bool = True) -> bool | None:
+    """Whether the request is signed in. None when Home Assistant couldn't be asked, so the
+    web UI waits for it instead of asking to log in again."""
     if request.app[OPEN] or _from_ingress(request):
         return True
+    web_token = await _web_token(request) if web_ui else None
+    if web_token is True:
+        return True
     token = token or bearer(request.headers.get("Authorization"))
-    ok = await request.app[AUTH].valid(token)
-    if not ok and _once_a_minute(request.remote or "?", request.path):
+    ok = await request.app[AUTH].check(token)
+    if ok is False and web_ui and web_token is None and request.app[VM].cfg.ha_token:
+        ok = None  # HA_TOKEN not checked yet and no token of its own
+    if ok is False and _once_a_minute(request.remote or "?", request.path):
         _LOG.warning("sign-in refused for %s from %s: %s", request.path, request.remote or "?",
                      "no token" if not token else "Home Assistant did not accept the token")
     return ok
@@ -82,14 +102,20 @@ async def _signed_in(request: web.Request, token: str | None = None) -> bool:
 @web.middleware
 async def require_token(request: web.Request, handler):
     public = request.path in ("/", "/health") or request.path.startswith(("/static/", "/auth/"))
-    if public or request.path in SOCKETS or await _signed_in(request):
+    if public or request.path in SOCKETS:
         return await handler(request)
+    ok = await _signed_in(request)
+    if ok:
+        return await handler(request)
+    if ok is None:
+        raise web.HTTPServiceUnavailable(text=f"Home Assistant at {request.app[AUTH].ha_url} can't be reached")
     raise web.HTTPUnauthorized(text="sign in with a Home Assistant token")
 
 
-async def _open_socket(request: web.Request, first_type: str,
-                       nonce: str | None = None) -> tuple[web.WebSocketResponse, dict[str, Any] | None]:
-    """Accept a socket and check its first message and token, after sending ``nonce`` to sign."""
+async def _open_socket(request: web.Request, first_type: str, nonce: str | None = None,
+                       web_ui: bool = False) -> tuple[web.WebSocketResponse, dict[str, Any] | None]:
+    """Accept a socket and check its first message and token, after sending ``nonce`` to sign.
+    A kiosk's socket always needs its token, ``HA_TOKEN`` only signs in the web UI's."""
     ws = web.WebSocketResponse(heartbeat=20, max_msg_size=1 << 20)
     await ws.prepare(request)
     if nonce is not None:
@@ -109,7 +135,12 @@ async def _open_socket(request: web.Request, first_type: str,
                else f"the first message was not a {first_type}")
         await _refuse(request, ws, f"no_{first_type}", why, close_code=4400)
         return ws, None
-    if not await _signed_in(request, start.get("token")):
+    ok = await _signed_in(request, start.get("token"), web_ui=web_ui)
+    if ok is None and web_ui:
+        await ws.send_json({"type": "error", "code": "home_assistant_unreachable"})
+        await ws.close(code=4503, message=b"home_assistant_unreachable")
+        return ws, None
+    if not ok:
         await ws.send_json({"type": "error", "code": "unauthorized"})
         await ws.close(code=4401, message=b"unauthorized")
         return ws, None
@@ -175,7 +206,7 @@ async def person_picture(request: web.Request) -> web.Response:
     vm = request.app[VM]
     person = vm.people.get(request.match_info["id"])
     entity = (person.things or {}).get("person") if person else None
-    found = await request.app[PICTURES].get(entity or "", bearer(request.headers.get("Authorization")))
+    found = await request.app[PICTURES].get(entity or "", _ha_token(request))
     if found is None:
         raise web.HTTPNotFound(text="no picture")
     body, ctype = found
@@ -184,7 +215,7 @@ async def person_picture(request: web.Request) -> web.Response:
 
 async def suggestions(request: web.Request) -> web.Response:
     """What a person's things can be, from Home Assistant, for the People page."""
-    return web.json_response(await request.app[SUGGESTIONS].get(bearer(request.headers.get("Authorization"))))
+    return web.json_response(await request.app[SUGGESTIONS].get(_ha_token(request)))
 
 
 def _source(vm: GroundControl, device_id: str | None, name: str | None = None, model: str | None = None) -> dict[str, Any]:
@@ -233,8 +264,11 @@ def _page(title: str, body: str) -> web.Response:
 
 async def auth_info(request: web.Request) -> web.Response:
     login = request.app[LOGIN]
+    token = None
+    if request.app[VM].cfg.ha_token and not request.app[OPEN]:
+        token = {True: "good", False: "refused", None: "unreachable"}[await _web_token(request)]
     return web.json_response({"login": login.available and not request.app[OPEN],
-                              "ha_url": login.ha_url if login.available else None})
+                              "ha_url": login.ha_url if login.available else None, "token": token})
 
 
 async def auth_login(request: web.Request) -> web.Response:
@@ -242,6 +276,26 @@ async def auth_login(request: web.Request) -> web.Response:
     if not login.available:
         raise web.HTTPNotFound(text="open Ground Control from the Home Assistant sidebar")
     raise web.HTTPFound(login.start(_origin(request), request.query.get("next", "")))
+
+
+REFRESH_COOKIE = "gc_refresh"
+CLIENT_COOKIE = "gc_client"
+COOKIE_DAYS = 90
+"""As long as Home Assistant keeps a refresh token that isn't used. Each refresh starts it again."""
+
+
+def _keep_login(request: web.Request, response: web.StreamResponse, refresh_token: str, client_id: str) -> None:
+    """The login in cookies only Ground Control reads: Safari wipes what a page script stores
+    after 7 days without a visit, but not these."""
+    secure = _origin(request).startswith("https:")
+    for name, value in ((REFRESH_COOKIE, refresh_token), (CLIENT_COOKIE, client_id)):
+        response.set_cookie(name, value, max_age=COOKIE_DAYS * 86400, path="/auth/", httponly=True,
+                            samesite="Lax", secure=secure)
+
+
+def _drop_login(response: web.StreamResponse) -> None:
+    for name in (REFRESH_COOKIE, CLIENT_COOKIE):
+        response.del_cookie(name, path="/auth/")
 
 
 async def auth_callback(request: web.Request) -> web.Response:
@@ -256,35 +310,45 @@ async def auth_callback(request: web.Request) -> web.Response:
         return _page("Not signed in", f"<h1>Not signed in</h1><p>{html.escape(str(err))}</p>"
                      '<p><a href="../">Try again</a></p>')
     _LOG.info("signed in with Home Assistant from %s", request.remote)
-    # The web UI keeps the tokens in this browser, then goes back to where it was.
-    data = json.dumps({**tokens, "expires": None}).replace("</", "<\\/")
-    return _page("Signing in", "<p>Signing in…</p><script>"
-                 f"const t={data};t.expires=Date.now()+t.expires_in*1000;delete t.expires_in;"
-                 'try{localStorage.setItem("ground-control-auth",JSON.stringify(t))}catch(e){}'
-                 f"location.replace({json.dumps('../' + back)});</script>")
+    # Back to where the browser was. The web UI gets its access token from /auth/refresh.
+    response = web.Response(status=302, headers={"Location": "../" + back, "Cache-Control": "no-store"})
+    _keep_login(request, response, tokens["refresh_token"], tokens["client_id"])
+    return response
 
 
 async def auth_refresh(request: web.Request) -> web.Response:
-    body = await _json(request)
-    token, client_id = body.get("refresh_token"), body.get("client_id")
-    if not isinstance(token, str) or not isinstance(client_id, str):
-        raise web.HTTPBadRequest(text="refresh_token and client_id are needed")
+    """A new access token from the login cookie. A browser that logged in before the cookie
+    sends its refresh token once and gets the cookie for it."""
+    token, client_id = request.cookies.get(REFRESH_COOKIE), request.cookies.get(CLIENT_COOKIE)
+    if not token or not client_id:
+        body = await _json(request) if request.can_read_body else {}
+        token, client_id = body.get("refresh_token"), body.get("client_id")
+    if not isinstance(token, str) or not isinstance(client_id, str) or not token or not client_id:
+        raise web.HTTPUnauthorized(text="not logged in")
     try:
-        return web.json_response(await request.app[LOGIN].refresh(token, client_id))
+        response = web.json_response(await request.app[LOGIN].refresh(token, client_id),
+                                     headers={"Cache-Control": "no-store"})
     except LoginError as err:
-        if err.refused:
-            raise web.HTTPUnauthorized(text=str(err)) from err
-        raise web.HTTPBadGateway(text=str(err)) from err
+        if not err.refused:
+            raise web.HTTPBadGateway(text=str(err)) from err
+        response = web.Response(status=401, text=str(err))
+        _drop_login(response)
+        return response
+    _keep_login(request, response, token, client_id)
+    return response
 
 
 async def auth_logout(request: web.Request) -> web.Response:
-    body = await _json(request)
+    body = await _json(request) if request.can_read_body else {}
     if isinstance(body.get("access_token"), str):
         request.app[AUTH].forget(body["access_token"])
-    if isinstance(body.get("refresh_token"), str):
-        await request.app[LOGIN].revoke(body["refresh_token"])
+    for token in {request.cookies.get(REFRESH_COOKIE), body.get("refresh_token")}:
+        if isinstance(token, str) and token:
+            await request.app[LOGIN].revoke(token)
     _LOG.info("signed out from %s", request.remote)
-    return web.json_response({"signed_out": True})
+    response = web.json_response({"signed_out": True})
+    _drop_login(response)
+    return response
 
 
 async def health(request: web.Request) -> web.Response:
@@ -1156,7 +1220,7 @@ def _from_kiosk(vm: GroundControl, device_id: str, data: str) -> None:
 
 async def events_ws(request: web.Request) -> web.WebSocketResponse:
     vm = request.app[VM]
-    ws, start = await _open_socket(request, "listen")
+    ws, start = await _open_socket(request, "listen", web_ui=True)
     if start is None:
         return ws
     vm.hub.listen(ws)
@@ -1490,6 +1554,20 @@ async def _find_app_path(vm: GroundControl, supervisor_token: str) -> None:
         _LOG.warning("could not read this app's slug from the Supervisor: %s", err)
 
 
+async def _check_web_token(app: web.Application) -> None:
+    """Say at the start whether ``HA_TOKEN`` opens the web UI."""
+    vm = app[VM]
+    ok = await app[AUTH].check(vm.cfg.ha_token)
+    if ok:
+        _LOG.warning("HA_TOKEN signs in the web UI: anyone who can reach port %s opens Ground Control "
+                     "without logging in", vm.cfg.port)
+    elif ok is False:
+        _LOG.warning("Home Assistant refused HA_TOKEN: the web UI asks to log in with Home Assistant")
+    else:
+        _LOG.warning("could not reach Home Assistant at %s to check HA_TOKEN: the web UI waits for it",
+                     app[AUTH].ha_url)
+
+
 def build_app(vm: GroundControl, token_check: TokenCheck | None = None, mdns: bool = False,
               clients: ClientCheck | None = None) -> web.Application:
     app = web.Application(middlewares=[require_token], client_max_size=512 << 20)
@@ -1567,6 +1645,8 @@ def build_app(vm: GroundControl, token_check: TokenCheck | None = None, mdns: bo
             app[UPDATES].start()
         if vm.cfg.supervisor_token:
             await _find_app_path(vm, vm.cfg.supervisor_token)
+        if vm.cfg.ha_token and not app[OPEN]:
+            loop.create_task(_check_web_token(app))
         if mdns:
             from .mdns import Advertiser
 

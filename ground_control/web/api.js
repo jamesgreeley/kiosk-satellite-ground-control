@@ -1,24 +1,30 @@
 // The service's API. Every URL is relative, so the UI works behind Home
 // Assistant ingress (its own path prefix) and standalone alike.
 
-// Standalone, the web UI logs in with Home Assistant: /auth/callback leaves
-// the tokens here. As a Home Assistant app none are needed, since ingress
+// Standalone, the web UI logs in with Home Assistant. The login is a refresh
+// token in a cookie only Ground Control reads, so Safari's 7-day wipe of what
+// pages store leaves it alone. The access token lives in this page and comes
+// from /auth/refresh. As a Home Assistant app none are needed, since ingress
 // has signed the user in.
-const AUTH_KEY = "ground-control-auth";
+const OLD_AUTH_KEY = "ground-control-auth";
 try { localStorage.removeItem("ground-control-token"); } catch { /* storage blocked */ }
 
 export class SignInNeeded extends Error {}
 
-let auth = (() => {
-  try { return JSON.parse(localStorage.getItem(AUTH_KEY)); } catch { return null; }
-})();
+/** Ground Control couldn't ask Home Assistant about the sign-in: wait for it, the login is kept. */
+export class HomeAssistantDown extends Error {}
 
-function keep(value) {
-  auth = value;
-  try {
-    if (value) localStorage.setItem(AUTH_KEY, JSON.stringify(value));
-    else localStorage.removeItem(AUTH_KEY);
-  } catch { /* private window: the sign-in lasts for this page only */ }
+let auth = null; // { access_token, expires }
+let noLogin = false; // /auth/refresh found no login: don't ask again until one
+let haDown = false; // the last refresh couldn't reach Home Assistant
+
+/** A login kept in this browser before the cookie: handed over once. */
+function oldLogin() {
+  try { return JSON.parse(localStorage.getItem(OLD_AUTH_KEY)); } catch { return null; }
+}
+
+function dropOldLogin() {
+  try { localStorage.removeItem(OLD_AUTH_KEY); } catch { /* storage blocked */ }
 }
 
 /** Whether this browser logged in with Home Assistant, so it can sign out. */
@@ -30,21 +36,28 @@ let refreshing = null;
 
 /** The access token, renewed a minute before Home Assistant lets it expire. */
 async function accessToken(renew = false) {
-  if (!auth) return null;
-  if (!renew && auth.expires - Date.now() > 60000) return auth.access_token;
+  if (!renew && auth && auth.expires - Date.now() > 60000) return auth.access_token;
+  if (noLogin) return null;
   refreshing ??= (async () => {
     try {
+      const old = oldLogin();
       const r = await fetch("auth/refresh", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refresh_token: auth.refresh_token, client_id: auth.client_id }),
+        method: "POST", credentials: "same-origin",
+        ...(old ? {
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ refresh_token: old.refresh_token, client_id: old.client_id }),
+        } : {}),
       });
-      if (r.status === 401 || r.status === 400) { keep(null); return null; }
-      if (!r.ok) return auth.access_token;
+      if (old && (r.ok || r.status === 401)) dropOldLogin();
+      haDown = !r.ok && r.status !== 401;
+      if (r.status === 401) { auth = null; noLogin = true; return null; }
+      if (!r.ok) return auth?.access_token ?? null;
       const got = await r.json();
-      keep({ ...auth, access_token: got.access_token, expires: Date.now() + got.expires_in * 1000 });
+      auth = { access_token: got.access_token, expires: Date.now() + got.expires_in * 1000 };
       return auth.access_token;
     } catch {
       // Ground Control restarting: keep what there is and try again later.
+      haDown = true;
       return auth?.access_token ?? null;
     } finally {
       refreshing = null;
@@ -75,13 +88,14 @@ export function logIn() {
 
 export async function logOut() {
   const was = auth;
-  keep(null);
-  if (was) {
-    await fetch("auth/logout", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refresh_token: was.refresh_token, access_token: was.access_token }),
-    }).catch(() => {});
-  }
+  auth = null;
+  noLogin = true;
+  const old = oldLogin();
+  dropOldLogin();
+  await fetch("auth/logout", {
+    method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ access_token: was?.access_token, refresh_token: old?.refresh_token }),
+  }).catch(() => {});
   location.reload();
 }
 
@@ -95,7 +109,9 @@ export async function api(path, { method = "GET", json, body, type } = {}) {
     if (type) init.headers["Content-Type"] = type;
   }
   const r = await signedFetch(path, init);
+  if (r.status === 401 && haDown) throw new HomeAssistantDown("Home Assistant can't be reached");
   if (r.status === 401) throw new SignInNeeded();
+  if (r.status === 503) throw new HomeAssistantDown(await r.text());
   if (!r.ok) throw new Error((await r.text()) || r.statusText);
   if (r.status === 204) return null;
   const ct = r.headers.get("Content-Type") || "";

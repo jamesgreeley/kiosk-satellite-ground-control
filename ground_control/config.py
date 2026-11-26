@@ -22,6 +22,9 @@ Variable             Meaning                                      Default
                      for a second one
 ``HA_URL``           Home Assistant: kiosk tokens and the web     ``http://homeassistant:8123``, or
                      UI's login, so a browser must reach it too   ``auto`` (from the Supervisor) as an app
+``HA_TOKEN``         a long-lived Home Assistant token that       none
+                     signs in the web UI, so it opens with no
+                     login for anyone who can reach the port
 ``PORT``             the service port                             ``10900``
 ``LEARN``            learn from confident commands                ``true``
 ``AUTH``             ``homeassistant`` or ``none`` (testing)      ``homeassistant``
@@ -67,6 +70,7 @@ class Config:
     keep_gpu_memory: bool = False
     openvino: bool = False
     openvino_device: str = "GPU"
+    ha_token: str | None = None
 
 
 def _bool(value: object) -> bool:
@@ -122,4 +126,5 @@ def load() -> Config:
         keep_gpu_memory=_bool(get("KEEP_GPU_MEMORY", "false")),
         openvino=openvino,
         openvino_device=str(get("OPENVINO_DEVICE", "GPU")).strip() or "GPU",
+        ha_token=str(get("HA_TOKEN", "") or "").strip() or None,
     )

@@ -165,11 +165,22 @@ Ground Control on a Mac isn't discovered automatically. Docker runs it in a smal
 
 Ground Control picks the Accurate speaker model and the Accurate Face Recognition model automatically on an Apple chip. Keep the Mac from sleeping. On a Mac mini, the setting is under **System Settings > Energy**. On a MacBook, it is under **Battery > Options**. While the Mac sleeps, the kiosks use their own microphone and Voice Match is unavailable. The Vision Match features on Ground Control wait until it answers again.
 
+### Skip the Login
+
+Set `HA_TOKEN` to a long-lived access token to open the web app without logging in with Home Assistant. Create one in Home Assistant under your profile, on the **Security** tab, under **Long-lived access tokens**. The token stays in Ground Control and is never sent to the browser. If Home Assistant refuses the token, the Sign in page says so and shows **Log in with Home Assistant** instead.
+
+```bash
+  -e HA_TOKEN=YOUR_LONG_LIVED_TOKEN \
+```
+
+> **Warning:** With `HA_TOKEN` set, anyone who can reach port 10900 can open Ground Control and change its people, kiosks and settings without logging in. Only set it on a network you trust. Kiosks still sign in with their own token.
+
 ### Environment Variables
 
 | Variable | Default | What it does |
 | --- | --- | --- |
 | `HA_URL` | `http://homeassistant:8123` | Your Home Assistant address. Kiosk tokens are checked there and you log in to the web app there. |
+| `HA_TOKEN` | none | A long-lived Home Assistant access token. The web app opens without logging in for anyone who can reach the port. See [Skip the Login](#skip-the-login). |
 | `MODEL` | `auto` | The speaker model: `accurate`, `light` or `auto`. `auto` picks Accurate on an NVIDIA GPU, an Apple M-series chip or an x86 CPU with more than 4 cores and Light otherwise. The Vision Match models are chosen in the app under **Settings > Vision Match**. |
 | `THREADS` | half the CPUs, 1 to 4 | Threads per check. |
 | `LEARN` | `true` | Fold confident commands into each person's voiceprint. |

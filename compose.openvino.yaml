@@ -20,6 +20,9 @@ services:
       # Your Home Assistant. Kiosk tokens are checked there and your browser
       # goes there to log in, so use an address the browser can open too.
       HA_URL: http://homeassistant.local:8123
+      # A long-lived Home Assistant token opens the web UI without logging in.
+      # Anyone who can reach port 10900 can then open Ground Control.
+      # HA_TOKEN: YOUR_LONG_LIVED_TOKEN
       # Optional, with their defaults:
       # MODEL: auto          # accurate, light or auto (Accurate on a CPU with more than 4 cores)
       # THREADS: 0           # threads per check, 0 is half the CPUs up to 4
