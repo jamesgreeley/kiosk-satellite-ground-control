@@ -150,6 +150,7 @@ class GroundControl:
                                    for f, keys in self.vision_choices().items()},
                 "vision_loaded": self._vision is not None,
                 "vision_on_gpu": self._vision.on_gpu if self._vision is not None else None,
+                "vision_on_coreml": self._vision.on_coreml if self._vision is not None else None,
                 "vision_max_looks": self._vision.max_looks if self._vision is not None else None,
                 "vision_ms": self._vision.ms if self._vision is not None else None,
                 "vision_error": self._vision_error,
@@ -322,7 +323,9 @@ class GroundControl:
                     return None
                 ms = self._vision.ms
                 _LOG.info("Vision Match models loaded on %s (%s): face look %s ms, hand look %s ms, "
-                          "%s ms a face recognized%s", "the GPU" if self._vision.on_gpu else "the CPU", names,
+                          "%s ms a face recognized%s",
+                          "the GPU" if self._vision.on_gpu else
+                          "Apple's Neural Engine through Core ML" if self._vision.on_coreml else "the CPU", names,
                           ms["face"], ms["hands"], ms["recognition"],
                           ". They keep their GPU memory between looks" if self._vision.keeps_memory else "")
                 people = [p.id for p in self.people.all()]

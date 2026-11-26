@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import contextlib
 import ctypes
+import hashlib
 import io
 import logging
 import platform
@@ -74,7 +75,22 @@ def _preload_cuda() -> None:
             _LOG.debug("CUDA preload: %s", line.strip())
 
 
-def providers(use_cuda: bool, cuda_options: dict | None = None) -> list:
+COREML_OPTIONS = {
+    "ModelFormat": "MLProgram",
+    "MLComputeUnits": "CPUAndNeuralEngine",
+    "RequireStaticInputShapes": "0",
+}
+"""Core ML settings tuned for variable-size camera frames and low latency."""
+
+
+def apple_neural_engine_available() -> bool:
+    """Whether this native Apple Silicon process can use ONNX Runtime's Core ML EP."""
+    return (platform.system() == "Darwin" and platform.machine().lower() in ("arm64", "aarch64")
+            and "CoreMLExecutionProvider" in ort.get_available_providers())
+
+
+def providers(use_cuda: bool, cuda_options: dict | None = None, use_coreml: bool = False,
+              coreml_options: dict | None = None) -> list:
     available = ort.get_available_providers()
     if use_cuda and "CUDAExecutionProvider" in available:
         _preload_cuda()
@@ -83,7 +99,19 @@ def providers(use_cuda: bool, cuda_options: dict | None = None) -> list:
         return [("CUDAExecutionProvider", options), "CPUExecutionProvider"]
     if use_cuda:
         _LOG.warning("CUDA asked for but not available, running on CPU")
+    if use_coreml and apple_neural_engine_available():
+        return [("CoreMLExecutionProvider", {**COREML_OPTIONS, **(coreml_options or {})}), "CPUExecutionProvider"]
     return ["CPUExecutionProvider"]
+
+
+def _coreml_cache(path: Path) -> str:
+    """A versioned per-model cache so Core ML compilation survives restarts safely."""
+    digest = hashlib.sha256()
+    with path.open("rb") as model:
+        for block in iter(lambda: model.read(1 << 20), b""):
+            digest.update(block)
+    return str(Path.home() / "Library" / "Caches" / "kiosk-satellite-ground-control" / "coreml"
+               / ort.__version__ / digest.hexdigest())
 
 
 class CudaUnavailable(RuntimeError):
@@ -109,11 +137,34 @@ def _reason(text: str) -> str:
 
 
 def open_session(path: Path, so: ort.SessionOptions, use_cuda: bool,
-                 cuda_options: dict | None = None) -> ort.InferenceSession:
-    """An onnxruntime session on the GPU when ``use_cuda``, else on the CPU.
+                 cuda_options: dict | None = None, use_coreml: bool = False,
+                 coreml_options: dict | None = None) -> ort.InferenceSession:
+    """An ONNX Runtime session on CUDA, Core ML when requested, or the CPU.
     With ``use_cuda``, a model that can't run on the GPU raises
     CudaUnavailable with the reason and what the image needs."""
     if not use_cuda:
+        if use_coreml and apple_neural_engine_available():
+            try:
+                coreml_providers = providers(False, use_coreml=True, coreml_options=coreml_options)
+                coreml_providers[0][1]["ModelCacheDirectory"] = _coreml_cache(path)
+                session = ort.InferenceSession(str(path), so,
+                                               providers=coreml_providers)
+            except Exception as err:  # Core ML conversion support varies by ONNX graph and OS release.
+                if "modelcachedirectory" not in str(err).lower():
+                    _LOG.warning("Core ML could not load %s; using CPU: %s", path.name, err)
+                else:
+                    # Older Core ML provider builds may accelerate inference but lack its disk-cache option.
+                    _LOG.debug("Core ML model cache is unavailable for %s; retrying without it", path.name)
+                    try:
+                        session = ort.InferenceSession(
+                            str(path), so, providers=providers(False, use_coreml=True,
+                                                               coreml_options=coreml_options))
+                    except Exception as retry_err:  # noqa: BLE001 - return to the portable CPU path
+                        _LOG.warning("Core ML could not load %s; using CPU: %s", path.name, retry_err)
+                    else:
+                        return session
+            else:
+                return session
         return ort.InferenceSession(str(path), so, providers=["CPUExecutionProvider"])
     if "CUDAExecutionProvider" not in ort.get_available_providers():
         reason = "this image has no CUDA support"

@@ -11,6 +11,7 @@ import pytest
 from PIL import Image
 
 from ground_control.auth import TokenCheck
+from ground_control.engine import apple_neural_engine_available
 from ground_control.models import VISION_FEATURES, default_vision_keys
 from ground_control.server import VM, build_app
 from ground_control.service import GroundControl
@@ -158,6 +159,13 @@ def test_the_light_models_see_nothing_in_an_empty_frame(light):
     assert look.ms["total"] >= max(look.ms["face"], look.ms["hands"])
     assert light.max_looks["face"] > 0 and light.max_looks["hands"] > 0
     assert set(light.ms) == {"face", "hands", "recognition"} and light.label == "light"
+
+
+def test_apple_silicon_uses_coreml_for_supported_face_models(light):
+    if not apple_neural_engine_available():
+        pytest.skip("native Apple Silicon Core ML is unavailable")
+    assert light.face.on_coreml and light.recognizer.on_coreml
+    assert not light.hand.on_coreml
 
 
 def test_a_portrait_frame_and_a_single_look(light):

@@ -5,6 +5,7 @@ from __future__ import annotations
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
+from ground_control import engine
 from ground_control.engine import GpuThread, session_options
 
 
@@ -44,3 +45,56 @@ def test_a_gpu_run_that_fails_raises_where_it_was_called():
         assert gpu(lambda: 7) == 7
     finally:
         gpu.close()
+
+
+def test_coreml_provider_is_opt_in_to_apple_vision_models(monkeypatch):
+    monkeypatch.setattr(engine, "apple_neural_engine_available", lambda: True)
+    selected = engine.providers(False, use_coreml=True)
+    assert selected[0] == ("CoreMLExecutionProvider", engine.COREML_OPTIONS)
+    assert selected[1] == "CPUExecutionProvider"
+    assert engine.providers(False) == ["CPUExecutionProvider"]
+
+
+def test_coreml_session_creation_failure_uses_cpu(monkeypatch, tmp_path):
+    calls = []
+    model = tmp_path / "model.onnx"
+    model.write_bytes(b"model")
+
+    class Session:
+        pass
+
+    def create(path, options, providers):
+        calls.append(providers)
+        if providers[0][0] == "CoreMLExecutionProvider":
+            raise RuntimeError("unsupported Core ML graph")
+        return Session()
+
+    monkeypatch.setattr(engine, "apple_neural_engine_available", lambda: True)
+    monkeypatch.setattr(engine.ort, "InferenceSession", create)
+    result = engine.open_session(model, session_options(1), False, use_coreml=True)
+    assert isinstance(result, Session)
+    assert calls[0][0][0] == "CoreMLExecutionProvider"
+    assert calls[0][0][1] == engine.COREML_OPTIONS | {"ModelCacheDirectory": engine._coreml_cache(model)}
+    assert calls[0][1] == "CPUExecutionProvider" and calls[1] == ["CPUExecutionProvider"]
+
+
+def test_coreml_without_cache_option_retries_without_disk_cache(monkeypatch, tmp_path):
+    model = tmp_path / "model.onnx"
+    model.write_bytes(b"model")
+    calls = []
+
+    class Session:
+        pass
+
+    def create(path, options, providers):
+        calls.append(providers)
+        if "ModelCacheDirectory" in providers[0][1]:
+            raise RuntimeError("unsupported option: ModelCacheDirectory")
+        return Session()
+
+    monkeypatch.setattr(engine, "apple_neural_engine_available", lambda: True)
+    monkeypatch.setattr(engine.ort, "InferenceSession", create)
+    result = engine.open_session(model, session_options(1), False, use_coreml=True)
+    assert isinstance(result, Session)
+    assert "ModelCacheDirectory" in calls[0][0][1]
+    assert calls[1][0] == ("CoreMLExecutionProvider", engine.COREML_OPTIONS)

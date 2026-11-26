@@ -196,7 +196,8 @@ export async function render({ area } = {}) {
     };
     const byDefault = (feature) => defaultText(s.vision_defaults[feature]);
     const where = !s.vision_loaded ? h("span", { class: "val" }, "Loads with the first look")
-      : chip(s.vision_on_gpu ? (s.openvino ? "Intel GPU (OpenVINO)" : "NVIDIA GPU (CUDA)") : "CPU", s.vision_on_gpu ? "c-ok" : "");
+      : chip(s.vision_on_gpu ? (s.openvino ? "Intel GPU (OpenVINO)" : "NVIDIA GPU (CUDA)")
+        : s.vision_on_coreml ? "Apple Neural Engine (Core ML)" : "CPU", s.vision_on_gpu || s.vision_on_coreml ? "c-ok" : "");
     const looks = s.vision_max_looks
       ? h("span", { class: "val" }, `${s.vision_max_looks.face} face, ${s.vision_max_looks.hands} hand`)
       : h("span", { class: "val" }, "Measured when they load");
@@ -221,7 +222,9 @@ export async function render({ area } = {}) {
         row("Face Detection", `Both models found every face looking at the kiosk on the test set and let the same turned heads through. Accurate takes about 3 times as long.${byDefault("face")}${measured("face", "a look")}`, pick("face")),
         row("Hand Gestures", `Accurate reads the finger count right more often at 3 m and in dim light. The hand model runs on every look, so on a CPU Accurate lowers the looks a second each kiosk gets.${byDefault("hands")}${measured("hands", "a look")}`, pick("hands")),
         row("Face Recognition", `Accurate recognizes small faces in dim light more often. A recognized face is checked again only every 2 seconds, so Accurate costs little even on a CPU. Faces are rebuilt from their pictures, so nobody has to enroll again.${byDefault("recognition")}${measured("recognition", "a face")}`, pick("recognition")),
-        row("Runs on", "Set by the CUDA option in the same way as the speaker model.", where),
+        row("Runs on", s.vision_on_coreml
+          ? "Light Face Detection and Face Recognition use Core ML with Apple Neural Engine acceleration when supported; Accurate Face Detection and Hand Gestures use the CPU."
+          : "Set by the CUDA or OpenVINO option.", where),
         row("Looks a second", "For one kiosk, measured on this machine when the models load. Kiosks look at most 2 times a second for faces and 4 for hands.", looks),
         s.vision_error ? hint(s.vision_error)
           : hint("Turn Vision Match on for each kiosk in Kiosk Satellite under Ground Control > Vision Match.")),

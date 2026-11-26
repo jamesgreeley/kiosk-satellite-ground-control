@@ -24,7 +24,7 @@
 <a href="https://buymeacoffee.com/jxlarrea"><img src="https://img.shields.io/badge/Buy%20Me%20A%20Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black" alt="Buy Me A Coffee"></a>
 </p>
 
-Ground Control is a companion service for [Kiosk Satellite](https://github.com/jxlarrea/kiosk-satellite). It runs on a computer or server in your home and handles the voice and vision processing that kiosks don't have the computing power for. Install it as a Home Assistant app or run it in Docker on a CPU or an NVIDIA GPU.
+Ground Control is a companion service for [Kiosk Satellite](https://github.com/jxlarrea/kiosk-satellite). It runs on a computer or server in your home and handles the voice and vision processing that kiosks don't have the computing power for. Install it as a Home Assistant app, run it in Docker on a CPU or an NVIDIA GPU, or run it natively on Apple Silicon for Core ML acceleration of supported face models.
 
 Kiosk Satellite Ground Control currently has two components. **Voice Match** handles speaker voice recognition, trimming, wake word alignment and isolation. **Vision Match** handles face detection, hand gestures and face recognition.
 
@@ -186,6 +186,23 @@ These tables show how long Ground Control takes for one camera look.
 
 These numbers use the CPU image with Ground Control's default threads. That is 2 threads on the Pi and the N100 and 4 on the others. The MacBook Pro runs it in Docker Desktop. Each column uses that machine's default models. Accurate Hand Gestures is too slow on a CPU: 1.8 s a look on the N100, 352 ms on the i9 and 256 ms on the MacBook Pro.
 
+#### Apple Silicon (Core ML)
+
+On native macOS, Ground Control uses ONNX Runtime's Core ML provider for Light Face Detection and Face Recognition. The Light recognition model uses Core ML's NeuralNetwork conversion; the larger Accurate model uses MLProgram. Core ML's compute plan confirmed that supported convolution layers run on the Apple Neural Engine, with unsupported nodes on the CPU. Accurate Face Detection stays on the CPU because its dynamic outputs fail Core ML shape validation; the Accurate speaker model and Isolation also stay on the CPU because their variable audio windows were slower on Core ML in these measurements.
+
+| Vision stage (model-level) | CPU | Core ML | Change |
+|---|---:|---:|---:|
+| Light Face Detection, 640×480 | 23.3 ms | 11.7 ms | 2.0× faster |
+| Light Face Detection, 640×384 | 19.2 ms | 9.7 ms | 2.0× faster |
+| Light Face Recognition, one 112×112 crop | 6.3 ms | 0.8 ms | 7.5× faster |
+| Accurate Face Recognition, one 112×112 crop | 58.8 ms | 3.6 ms | 16.5× faster |
+
+Voice Match did not benefit from the same change. Across 0.5, 1, 2 and 4 s windows, both speaker models were slower with Core ML. For the Accurate model's 2 s window, the median was 52.1 ms on CPU and 83.4 ms with Core ML's NeuralNetwork conversion; MLProgram returned non-finite embeddings on the sampled input. The CPU Isolation model took 547.6 ms for 5 s of audio, compared with 876.0 ms on Core ML MLProgram and 1,327.6 ms on Core ML NeuralNetwork. Voice Match and Isolation therefore remain on CPU.
+
+An end-to-end Vision Match startup and warm-up run on an M1 Pro measured Light Face Detection at 45.8 ms on CPU and 16.6 ms with Core ML, and Accurate Face Recognition at 84.3 ms and 4.7 ms. These are model-stage timings from a blank test frame, not a rerun of the 64-frame kiosk benchmark above. The model-level run used macOS 27.2.1, ONNX Runtime 1.32.0 and 4 threads; it profiles random deterministic tensors, so it measures latency and numeric output agreement rather than face-recognition accuracy on people. Embedding cosine similarity between CPU and Core ML was 0.99998 for the Light model and 0.99540 for Accurate on those synthetic inputs. Please validate match rates with enrolled faces before relying on that accuracy-sensitive stage.
+
+Core ML's first model load compiles the graph and took about 5 seconds for both models together on this M1 Pro; a later load from the compiled-model cache took about 3 seconds. Compiled graphs are cached under the user's macOS Caches folder, keyed by the ONNX file hash and ONNX Runtime version. To rerun the model-level comparison on an Apple Silicon Mac, use `python tools/benchmark_apple_silicon.py --suite face --iterations 40`; add `--tune` to compare Core ML's NeuralNetwork conversion too, or `--profile-compute-plan` to log hardware assignment. Use `--suite voice --tune` to compare variable speaker-model windows and CPU isolation. These voice tests use deterministic synthetic audio, so they measure inference timing and basic output agreement, not speaker identification quality on recordings.
+
 #### NVIDIA GPU (CUDA)
 
 | | RTX 3050 | RTX 4000 SFF Ada | GB10 |
@@ -315,7 +332,7 @@ The GPU can be integrated or an Arc card, from the 11th generation of Core proce
 
 #### Mac with Apple Silicon
 
-Run the CPU command above in Docker Desktop or OrbStack. Docker on a Mac can't use the Mac's GPU, but every feature including Isolation runs on the CPU of an M-series chip. Ground Control on a Mac isn't discovered automatically, so enter the Mac's address in each kiosk. See [Mac with Apple Silicon](docs/installation.md#mac-with-apple-silicon).
+Run the CPU command above in Docker Desktop or OrbStack. Docker on a Mac can't use the Mac's GPU or Neural Engine, so every feature including Isolation runs on the CPU of an M-series chip. Native macOS installs use Core ML for supported face models; Voice Match still runs on the CPU. Ground Control on a Mac isn't discovered automatically, so enter the Mac's address in each kiosk. See [Mac with Apple Silicon](docs/installation.md#mac-with-apple-silicon).
 
 ## Getting started
 

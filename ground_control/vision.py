@@ -35,7 +35,8 @@ from typing import Any
 import numpy as np
 from PIL import Image
 
-from .engine import LEAN_CUDA, GpuThread, open_session, run_options, session_options as _session_options
+from .engine import (LEAN_CUDA, GpuThread, apple_neural_engine_available, open_session, run_options,
+                    session_options as _session_options)
 from .models import VISION_MODELS, verified_path
 
 _LOG = logging.getLogger(__name__)
@@ -224,7 +225,7 @@ class FaceModel:
     """SCRFD with five face points."""
 
     def __init__(self, path: Path, threshold: float, threads: int, use_cuda: bool, gpu: GpuThread,
-                 keep_memory: bool = False, openvino: Any = None) -> None:
+                 keep_memory: bool = False, openvino: Any = None, use_coreml: bool = False) -> None:
         """``openvino``: the Intel GPU to run on in the OpenVINO image (``ov.Gpu``)."""
         self.threshold = threshold
         self._gpu = gpu
@@ -233,12 +234,14 @@ class FaceModel:
             # Compiled for each frame shape, as many as a CUDA GPU has sessions for.
             self._ov = openvino.model(path, shapes=FACE_SHAPES)
             self.session, self.on_gpu, self._input = None, True, self._ov.inputs[0]
+            self.on_coreml = False
             if self._ov.outputs != 9:
                 raise ValueError(f"{path.name} is not a SCRFD model with face points")
             return
         self._path, self._options = path, session_options(threads)
-        self.session = gpu(open_session, path, self._options, use_cuda, LEAN_CUDA)
+        self.session = gpu(open_session, path, self._options, use_cuda, LEAN_CUDA, use_coreml)
         self.on_gpu = self.session.get_providers()[0] == "CUDAExecutionProvider"
+        self.on_coreml = "CoreMLExecutionProvider" in self.session.get_providers()
         self._input = self.session.get_inputs()[0].name
         if len(self.session.get_outputs()) != 9:
             raise ValueError(f"{path.name} is not a SCRFD model with face points")
@@ -334,10 +337,12 @@ class HandModel:
         self._ov = openvino.model(path) if openvino is not None else None
         if self._ov is not None:
             self.session, self.on_gpu, self._input = None, True, self._ov.inputs[0]
+            self.on_coreml = False
             names = ast.literal_eval(self._ov.metadata("names") or "{}")
         else:
             self.session = gpu(open_session, path, session_options(threads), use_cuda, LEAN_CUDA)
             self.on_gpu = self.session.get_providers()[0] == "CUDAExecutionProvider"
+            self.on_coreml = False
             self._input = self.session.get_inputs()[0].name
             self._after_run = run_options(self.on_gpu and not keep_memory)
             names = ast.literal_eval(self.session.get_modelmeta().custom_metadata_map.get("names", "{}"))
@@ -414,17 +419,21 @@ class Vision:
         self._beside = ThreadPoolExecutor(AT_ONCE, thread_name_prefix="vision-hands")
         try:
             self.face = FaceModel(verified_path(models_dir, face.file, face.sha256),
-                                  face.threshold, threads, use_cuda, self._gpu, keep_memory, openvino)
+                                  face.threshold, threads, use_cuda, self._gpu, keep_memory, openvino,
+                                  use_coreml=apple_neural_engine_available() and face.key == "light")
             self.hand = HandModel(verified_path(models_dir, hand.file, hand.sha256),
                                   hand.threshold, threads, use_cuda, self._gpu_hands, keep_memory, openvino)
             from .faces import FaceEmbedder
 
             self.recognizer = FaceEmbedder(verified_path(models_dir, rec.file, rec.sha256),
-                                           threads, use_cuda, self._gpu, keep_memory, openvino)
+                                           threads, use_cuda, self._gpu, keep_memory, openvino,
+                                           use_coreml=apple_neural_engine_available(),
+                                           coreml_options={"ModelFormat": "NeuralNetwork"} if rec.key == "light" else None)
         except Exception:
             self.close()
             raise
         self.on_gpu = self.face.on_gpu and self.hand.on_gpu and self.recognizer.on_gpu
+        self.on_coreml = self.face.on_coreml or self.recognizer.on_coreml
         self.keeps_memory = self.on_gpu and keep_memory and openvino is None
         self.ms: dict[str, float] = {}
         """Each feature's model time on this machine, in ms: a face look, a

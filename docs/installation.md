@@ -147,7 +147,7 @@ The OpenVINO image runs Vision Match on the GPU or not at all. If it can't use t
 
 ### Mac with Apple Silicon
 
-Ground Control runs with the CPU image in [Docker Desktop](https://www.docker.com/products/docker-desktop/) or [OrbStack](https://orbstack.dev) on a Mac with an Apple M-series chip. Docker on a Mac can't use the Mac's GPU, so everything runs on the CPU. An M-series chip is fast enough for every feature. On a MacBook Pro M5, all Voice Match features together add about 0.8 s to a 5 s command. A look with every Vision Match feature takes 70 ms.
+Ground Control runs with the CPU image in [Docker Desktop](https://www.docker.com/products/docker-desktop/) or [OrbStack](https://orbstack.dev) on a Mac with an Apple M-series chip. Docker on a Mac can't use the Mac's GPU or Neural Engine, so everything runs on the CPU. An M-series chip is fast enough for every feature. On a MacBook Pro M5, all Voice Match features together add about 0.8 s to a 5 s command. A look with every Vision Match feature takes 70 ms.
 
 1. Install Docker Desktop or OrbStack.
 2. Start Ground Control with its port published:
@@ -161,7 +161,23 @@ Ground Control runs with the CPU image in [Docker Desktop](https://www.docker.co
 3. Open `http://localhost:10900` and choose **Log in with Home Assistant**.
 4. In Kiosk Satellite's Ground Control settings on each kiosk, enter the Mac's address (for example `192.168.1.20:10900`) under **Address**.
 
-Ground Control on a Mac isn't discovered automatically. Docker runs it in a small Linux VM, so its mDNS announcement doesn't reach your network. Docker Desktop's host network option doesn't change that. Give the Mac a fixed address in your router so the address in each kiosk keeps working.
+#### Run natively for Core ML
+
+To use Apple's Neural Engine for supported face models, run Ground Control directly on macOS instead of in Docker. Use Python 3.12 and a checkout of this repository:
+
+```bash
+python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install .
+DATA_DIR="$HOME/Library/Application Support/Ground Control" \
+MODELS_DIR="$PWD/models" \
+HA_URL="http://homeassistant.local:8123" \
+ground-control
+```
+
+Replace `HA_URL` with the address of your Home Assistant. Core ML is selected automatically for Light Face Detection and Accurate Face Recognition when the macOS ONNX Runtime package includes its Core ML provider. Voice Match and Isolation stay on the CPU. See [Apple Silicon Core ML benchmarks](../README.md#apple-silicon-core-ml).
+
+With this Docker install, Ground Control on a Mac isn't discovered automatically. Docker runs it in a small Linux VM, so its mDNS announcement doesn't reach your network. Docker Desktop's host network option doesn't change that. Give the Mac a fixed address in your router so the address in each kiosk keeps working.
 
 Ground Control picks the Accurate speaker model and the Accurate Face Recognition model automatically on an Apple chip. Keep the Mac from sleeping. On a Mac mini, the setting is under **System Settings > Energy**. On a MacBook, it is under **Battery > Options**. While the Mac sleeps, the kiosks use their own microphone and Voice Match is unavailable. The Vision Match features on Ground Control wait until it answers again.
 
