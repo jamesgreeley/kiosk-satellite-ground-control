@@ -255,11 +255,23 @@ The app needs Home Assistant OS or a Supervised install. For Isolation on an NVI
 
 ### Standalone Docker Container
 
-Use the Docker container to run Ground Control on a machine other than Home Assistant's, on an NVIDIA GPU or on an Intel GPU.
+Use the Docker container to run Ground Control on a machine other than Home Assistant's, on an NVIDIA GPU or on an Intel GPU. There is an image for each:
 
-**Docker Compose:** [compose.yaml](compose.yaml) for the CPU, [compose.cuda.yaml](compose.cuda.yaml) for an NVIDIA GPU and [compose.openvino.yaml](compose.openvino.yaml) for an Intel GPU. Set `HA_URL` in the file, then run `docker compose up -d` (or `docker compose -f compose.cuda.yaml up -d`). All three use the host network, so the service is discovered automatically on the same network.
+| Image | Tag | Runs |
+|---|---|---|
+| CPU | `latest` | Everything on the CPU of an amd64 or arm64 machine. |
+| NVIDIA GPU (CUDA) | `cuda` | Everything on an NVIDIA GPU. |
+| Intel GPU (OpenVINO) | `openvino` | Vision Match on an Intel GPU and Voice Match on the CPU. |
 
-**Docker, CPU:**
+In every command below, `HA_URL` is your Home Assistant address. Kiosks sign in with the Home Assistant token they already have and Ground Control checks that token against Home Assistant. You also log in through `HA_URL` in your browser, so use an address your browser can open. Avoid one that only works inside Docker.
+
+The commands publish port 10900 with `-p 10900:10900`. That way the service isn't discovered automatically, so enter this machine's address in each kiosk. See [Installation](docs/installation.md#docker) for the host network and for every setting.
+
+#### Docker Compose
+
+Use [compose.yaml](compose.yaml) for the CPU, [compose.cuda.yaml](compose.cuda.yaml) for an NVIDIA GPU or [compose.openvino.yaml](compose.openvino.yaml) for an Intel GPU. Set `HA_URL` in the file, then run `docker compose up -d`. For a GPU, name the file, as in `docker compose -f compose.cuda.yaml up -d`. All three use the host network, so the service is discovered automatically on the same network.
+
+#### CPU
 
 ```bash
 docker run -d --name ground-control -p 10900:10900 \
@@ -267,7 +279,7 @@ docker run -d --name ground-control -p 10900:10900 \
   -v ground-control:/data ghcr.io/jxlarrea/kiosk-satellite-ground-control
 ```
 
-**Docker, NVIDIA GPU (CUDA):**
+#### NVIDIA GPU (CUDA)
 
 ```bash
 docker run -d --name ground-control --gpus all -p 10900:10900 \
@@ -275,7 +287,15 @@ docker run -d --name ground-control --gpus all -p 10900:10900 \
   -v ground-control:/data ghcr.io/jxlarrea/kiosk-satellite-ground-control:cuda
 ```
 
-**Docker, Intel GPU (OpenVINO):**
+The GPU needs to be from the GTX 10 series or newer. The host needs an NVIDIA driver from the 570 series or newer (580 or newer on arm64) and the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html). See [NVIDIA GPU](docs/installation.md#nvidia-gpu).
+
+If Docker runs inside an LXC container (Proxmox), set `nvidia-ctk config --set nvidia-container-cli.no-cgroups --in-place` and also pass the devices. Otherwise `nvidia-smi` fails with "Failed to initialize NVML: Unknown Error":
+
+```bash
+  --device /dev/nvidia0 --device /dev/nvidiactl --device /dev/nvidia-uvm --device /dev/nvidia-uvm-tools
+```
+
+#### Intel GPU (OpenVINO)
 
 ```bash
 docker run -d --name ground-control --device /dev/dri -p 10900:10900 \
@@ -283,19 +303,11 @@ docker run -d --name ground-control --device /dev/dri -p 10900:10900 \
   -v ground-control:/data ghcr.io/jxlarrea/kiosk-satellite-ground-control:openvino
 ```
 
-The OpenVINO image runs Vision Match on an Intel GPU, integrated or Arc, from the 11th generation of Core processors or newer. Voice Match runs on the CPU there as in the CPU image. See [Intel GPU](docs/installation.md#intel-gpu).
+The GPU can be integrated or an Arc card, from the 11th generation of Core processors or newer. That includes the Intel N100. See [Intel GPU](docs/installation.md#intel-gpu).
 
-If you use `-p 10900:10900` instead of the host network, the service isn't discovered automatically. Enter this machine's address in each kiosk.
+#### Mac with Apple Silicon
 
-**Mac with Apple silicon:** run the CPU command above in Docker Desktop or OrbStack. Docker on a Mac can't use the Mac's GPU, but every feature including Isolation runs on the CPU of an M-series chip. Ground Control on a Mac isn't discovered automatically, so enter the Mac's address in each kiosk. See [Mac with Apple Silicon](docs/installation.md#mac-with-apple-silicon).
-
-The GPU needs to be from the GTX 10 series or newer. The host needs an NVIDIA driver from the 570 series or newer (580 or newer on arm64) and the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html). If Docker runs inside an LXC container (Proxmox), set `nvidia-ctk config --set nvidia-container-cli.no-cgroups --in-place` and also pass the devices. Otherwise `nvidia-smi` fails with "Failed to initialize NVML: Unknown Error":
-
-```bash
-  --device /dev/nvidia0 --device /dev/nvidiactl --device /dev/nvidia-uvm --device /dev/nvidia-uvm-tools
-```
-
-`HA_URL` is your Home Assistant address. Kiosks sign in with the Home Assistant token they already have. Ground Control checks that token against Home Assistant. You also log in through `HA_URL` in your browser, so use an address your browser can open. Avoid one that only works inside Docker. See [Installation](docs/installation.md#environment-variables) for every setting.
+Run the CPU command above in Docker Desktop or OrbStack. Docker on a Mac can't use the Mac's GPU, but every feature including Isolation runs on the CPU of an M-series chip. Ground Control on a Mac isn't discovered automatically, so enter the Mac's address in each kiosk. See [Mac with Apple Silicon](docs/installation.md#mac-with-apple-silicon).
 
 ## Getting started
 

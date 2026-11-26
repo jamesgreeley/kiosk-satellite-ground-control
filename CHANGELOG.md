@@ -5,6 +5,7 @@ All notable changes to Kiosk Satellite Ground Control are documented here.
 ## Unreleased
 
 ### Changed
+- **Install instructions grouped by image.** The README's Docker section and the Docker part of the installation page now start with a table of the three images. The CPU, the NVIDIA GPU and the Intel GPU each have a section with the command and what that image needs. GPU Memory sits under NVIDIA GPU.
 - **README badges.** The NVIDIA badge now reads CUDA without its versions. An Intel OpenVINO badge links to the Intel GPU section of the installation page. The Docker badge is purple.
 
 ## v2026.11.15 - 2026-11-25
