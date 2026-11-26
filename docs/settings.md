@@ -4,7 +4,7 @@ Navigate to **Settings** in the Ground Control app.
 
 Settings has three areas. Pick one from the list on the left:
 
-- **Voice Match:** Recognition, Trimming, the Wake Word Aligner and Isolation. See [Voice Match](voice-match.md#settings).
+- **Voice Match:** Recognition, Trimming, the Wake Word Verifier, the Wake Word Aligner and Isolation. See [Voice Match](voice-match.md#settings).
 - **Vision Match:** the vision models, Hand sensitivity, Face Recognition and the frames kept with vision sessions. See [Vision Match](vision-match.md#settings).
 - **General:** the engine, sessions, conversation agents and kiosks.
 

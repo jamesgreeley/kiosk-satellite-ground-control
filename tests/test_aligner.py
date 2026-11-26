@@ -212,3 +212,84 @@ def test_without_espeak_nothing_is_looked_for(model, monkeypatch):
         assert model.find(np.zeros(2 * SR, dtype=np.float32), np.zeros(SR, dtype=np.float32), "Alexa") is None
     finally:
         aligner._ipa.cache_clear()
+
+
+# ── the Wake Word Verifier ────────────────────────────────────────────────
+
+@needs_espeak
+def test_a_wake_word_that_was_said_passes_the_check(model):
+    # The engine fired 0.12 s before the word was over, with the command right behind it or after a pause.
+    for gap in (0.0, 0.5):
+        anchor, head = heard(say("Alexa"), say("what time is it"), gap, 0.12)
+        check = model.check(anchor, head, "Alexa")
+        assert check is not None and check.said and check.fit >= check.needs == aligner.VERIFY_MIN_FIT
+        assert check.phonemes == "ɐlɛksə" and check.ms >= 0
+
+
+@needs_espeak
+def test_other_speech_fails_the_check(model):
+    # An engine that fired on something else: the wake clip holds other words.
+    anchor, head = heard(say("the weather tomorrow"), say("looks fine"), 0.0, 0.12)
+    check = model.check(anchor, head, "Alexa")
+    assert check is not None and not check.said and check.fit < aligner.VERIFY_MIN_FIT
+
+
+@needs_espeak
+def test_the_check_only_hears_a_little_after_the_engine_fired(model, monkeypatch):
+    lengths = []
+    real = model.log_probs
+    monkeypatch.setattr(model, "log_probs", lambda audio: lengths.append(len(audio)) or real(audio))
+    anchor, head = heard(say("Alexa"), say("what time is it"), 0.0, 0.12)
+    model.check(anchor, head, "Alexa")
+    # What the wake clip has before the engine fired, 1.4 s at most, and 0.3 s after it.
+    before = min(stream_start(anchor, head), int(aligner.BEFORE_S * SR))
+    assert lengths == [before + int(aligner.VERIFY_AFTER_S * SR)]
+
+
+def test_with_too_little_of_the_wake_clip_there_is_nothing_to_check(model):
+    assert model.check(np.zeros(int(0.2 * SR), np.float32), np.zeros(SR, np.float32), "Alexa") is None
+
+
+def test_without_espeak_nothing_is_checked(model, monkeypatch):
+    monkeypatch.setattr(aligner, "espeak", lambda: None)
+    aligner._ipa.cache_clear()
+    try:
+        assert model.check(np.zeros(2 * SR, np.float32), np.zeros(SR, np.float32), "Alexa") is None
+    finally:
+        aligner._ipa.cache_clear()
+
+
+@needs_espeak
+def test_only_a_turn_a_wake_word_started_is_checked(cfg):
+    from ground_control.service import GroundControl
+
+    vm = GroundControl(cfg)
+    clip = np.zeros(2 * SR, np.float32)
+    wake = {"wake_word": "Alexa", "language": "en"}
+    assert vm.settings()["verifier"] is True
+    assert vm.new_follow(anchor=clip, wake=wake)._check_wake is not None
+    assert vm.new_follow(anchor=clip, wake={**wake, "interaction": "wake_word"})._check_wake is not None
+    # A reply to a question, a follow-up and a turn started by hand have no wake word.
+    for how in ("question", "ask_question", "follow_up", "manual"):
+        assert vm.new_follow(anchor=clip, wake={**wake, "interaction": how})._check_wake is None
+    assert vm.new_follow(anchor=clip, wake=None)._check_wake is None
+    assert vm.new_follow(anchor=clip, wake=wake, speaker="someone")._check_wake is None
+    # Nothing to check without the wake clip or the wake word's text (an older Kiosk Satellite).
+    assert vm.new_follow(anchor=None, wake=wake)._check_wake is None
+    assert vm.new_follow(anchor=clip, wake={"language": "en"})._check_wake is None
+    # The kiosk's own switches: each feature needs its own and the service's.
+    session = vm.new_follow(anchor=clip, wake={**wake, "seamless": True}, verify=False)
+    assert session._check_wake is None and session._find_end is not None
+    session = vm.new_follow(anchor=clip, wake={**wake, "seamless": True}, align=False)
+    assert session._check_wake is not None and session._find_end is None
+    assert vm.new_follow(anchor=clip, wake=wake).cfg.wake_check_trusts_known is True
+    assert vm.new_follow(anchor=clip, wake=wake, trust_known=False).cfg.wake_check_trusts_known is False
+    # Its own switch, apart from the Wake Word Aligner's.
+    seamless = {**wake, "seamless": True}
+    vm.update_settings({"verifier": False})
+    session = vm.new_follow(anchor=clip, wake=seamless)
+    assert session._check_wake is None and session._find_end is not None
+    vm.update_settings({"verifier": True, "aligner": False})
+    session = vm.new_follow(anchor=clip, wake=seamless)
+    assert session._check_wake is not None and session._find_end is None
+    assert vm.settings()["verifier"] is True and vm.settings()["aligner"] is False

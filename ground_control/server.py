@@ -144,7 +144,8 @@ def _features(value: Any) -> dict[str, Any] | None:
     if not isinstance(value, dict):
         return None
     out: dict[str, Any] = {k: value[k] is True for k in
-                           ("voice_match", "trimming", "isolation", "speaker_sensor", "show_speaker",
+                           ("voice_match", "trimming", "isolation", "wake_word_verifier", "verifier_trusts_enrolled",
+                            "wake_word_aligner", "speaker_sensor", "show_speaker",
                             "vision_match", "face_detection", "hand_gestures", "face_recognition",
                             "dismiss_on_face", "postpone_on_face", "face_confirms_voice") if k in value}
     gestures = value.get("finger_gestures")
@@ -299,6 +300,9 @@ async def status(request: web.Request) -> web.Response:
                               "on_gpu": vm.active.on_gpu, "threads": vm.cfg.threads,
                               "kiosks": sum(k.connected for k in vm.hub.kiosks.values()),
                               "isolation": vm.isolator() is not None,
+                              # Whether each runs here, for the kiosks' own switches on the Kiosks page.
+                              "verifier": vm.verify and vm._aligner_missing() is None,
+                              "aligner": vm.align and vm._aligner_missing() is None,
                               "isolation_on_gpu": bool(vm.isolator() and vm.isolator().on_gpu),
                               "update": request.app[UPDATES].available() if UPDATES in request.app else None})
 
@@ -401,8 +405,13 @@ async def session_ws(request: web.Request) -> web.WebSocketResponse:
         feats = (known.features or {}) if known else {}
         face = (lambda: vm.at_kiosk.get(device)) if feats.get("face_confirms_voice") and feats.get("face_recognition") \
             else None
+        # The kiosk's own switches. A kiosk that doesn't say (an older Kiosk
+        # Satellite) has them on.
+        verify = start.get("wake_word_verifier") is not False
+        align = start.get("wake_word_aligner") is not False
+        trust_known = start.get("verifier_trusts_enrolled") is not False
         session = await vm.run(vm.new_follow, policy, anchor, people, speaker, isolation, wake if first else None,
-                               asked, face)
+                               asked, face, verify, align, trust_known)
     else:
         session = vm.new_session(mode=mode, policy=policy, people=people, learn=start.get("learn"))
     device_id = start.get("device_id")
@@ -1124,7 +1133,9 @@ async def _people(vm: GroundControl) -> dict[str, Any]:
         p["has_face"] = vm.faces.has_face(str(p["id"]))
     return {"type": "people", "people": people, "model": vm.model.key,
             "version": __version__, "app_path": vm.app_path,
-            **describe_install(bool(vm.cfg.supervisor_token), vm.active.on_gpu)}
+            **describe_install(bool(vm.cfg.supervisor_token), vm.active.on_gpu),
+            # Whether the Wake Word Verifier is on here, for the kiosks' analytics.
+            "wake_word_verifier": vm.verify and vm._aligner_missing() is None}
 
 
 def _from_kiosk(vm: GroundControl, device_id: str, data: str) -> None:
@@ -1374,7 +1385,9 @@ def _wake_text(wake: dict[str, Any]) -> str:
 def _session_text(stats: dict[str, Any], events: list[dict[str, Any]]) -> str:
     """How a session went, in one line: who, why it ended and how much audio."""
     speaker = stats.get("speaker") or {}
-    if stats.get("rejected"):
+    if stats.get("end") == "false_positive":
+        who = "a false positive, the wake word wasn't said"
+    elif stats.get("rejected"):
         who = (f"rejected {speaker['name']}, not one of the people this kiosk answers" if speaker.get("name")
                else "rejected an unknown voice")
     elif speaker.get("name"):

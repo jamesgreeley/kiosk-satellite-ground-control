@@ -4,6 +4,11 @@ All notable changes to Kiosk Satellite Ground Control are documented here.
 
 ## Unreleased
 
+### Added
+- **Wake Word Verifier.** A wake word engine now and then wakes a kiosk up to speech that is nothing like its wake word, most often a TV across the room. Ground Control now checks that the wake word was really said, 0.3 seconds after the kiosk woke up. If it wasn't, the session is stopped and nothing reaches the assistant. It works with any wake word and any wake word engine, runs on the Wake Word Aligner's model in a few milliseconds and never stops a wake word in the voice of someone enrolled. **Use Wake Word Verifier** under **Settings > Voice Match** is on by default and applies to kiosks with Trimming on. Each kiosk can turn it off for itself in Kiosk Satellite, and can have the voices of enrolled people checked too with **Trust enrolled voices** off. In our tests it stopped 1 of 114 real wake words and every session where a kiosk had woken up to a TV with no wake word in it. See [Wake Word Verifier](docs/voice-match.md#wake-word-verifier).
+- **False positives in sessions and on Overview.** A session the Wake Word Verifier stopped shows as **False positive** on the Sessions page and under **Rejected** in its filter. Its page shows the check under **Steps**, with the score and what a wake word that was said reaches. Overview counts them in the last 24 hours.
+- **Each kiosk's own Wake Word Verifier and Wake Word Aligner switches.** A Kiosk Satellite that has them sends them with each session. Each feature runs when it is on there and in Ground Control. A kiosk's page shows both under **Voice Match**.
+
 ### Changed
 - **Driver for older Intel GPUs in the OpenVINO image (#25).** The image now also has Intel's driver for the integrated GPUs of 5th to 10th generation Core processors, such as the UHD Graphics 630. Without it the image stopped with `OpenVINO found no Intel GPU` on those machines. These GPUs are not tested yet.
 - **Install instructions grouped by image.** The README's Docker section and the Docker part of the installation page now start with a table of the three images. The CPU, the NVIDIA GPU and the Intel GPU each have a section with the command and what that image needs. GPU Memory sits under NVIDIA GPU.

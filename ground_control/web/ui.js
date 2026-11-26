@@ -279,6 +279,7 @@ export function outcome(stats) {
     case "silence": return name ? `Ended when ${name} stopped talking` : "Ended when the speaker stopped talking";
     case "other_voice": return "Ended when another voice started";
     case "rejected": return "Rejected because this kiosk doesn't answer this voice";
+    case "false_positive": return "False positive: the wake word wasn't said";
     case "max_length": return "Stopped at the 30 s limit";
     default: return "Ended by the kiosk";
   }
@@ -289,6 +290,7 @@ export function outcomeChip(stats) {
   switch (stats?.end) {
     case "other_voice": return chip("Other voice cut", "c-info");
     case "rejected": return chip("Rejected", "c-err");
+    case "false_positive": return chip("False positive", "c-warn");
     case "silence": return stats?.speaker?.name || stats?.speaker?.by === "answer" ? chip("Speaker finished", "c-ok") : chip("Unknown voice", "c-warn");
     default: return chip("Ended", "c-off");
   }

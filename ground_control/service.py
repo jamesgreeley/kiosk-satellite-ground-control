@@ -84,6 +84,9 @@ class GroundControl:
         self._isolator = None
         self._isolator_lock = threading.Lock()
         self.align = bool(saved.get("aligner", True))
+        self.verify = bool(saved.get("verifier", True))
+        """Check that the wake word was said and stop the session when it
+        wasn't (the Wake Word Verifier)."""
         self.short_answers = bool(saved.get("short_answers", True))
         """Take a short reply to a question Home Assistant asked when it
         sounds like one of the people the kiosk answers (``FollowConfig.short_answers``)."""
@@ -139,6 +142,7 @@ class GroundControl:
                 "isolator_model": ISOLATOR_MODEL,
                 "isolator_on_gpu": self._isolator.on_gpu if self._isolator is not None else None,
                 "aligner": self.align, "aligner_missing": self._aligner_missing(),
+                "verifier": self.verify,
                 "short_answers": self.short_answers,
                 "vision_models": dict(self.vision_keys),
                 "vision_defaults": self._vision_defaults(),
@@ -191,6 +195,8 @@ class GroundControl:
                 self.isolator()  # load it now, so the first command doesn't wait
         if "aligner" in values:
             self.align = out["aligner"] = bool(values["aligner"])
+        if "verifier" in values:
+            self.verify = out["verifier"] = bool(values["verifier"])
         if "short_answers" in values:
             self.short_answers = out["short_answers"] = bool(values["short_answers"])
         if "face_threshold" in values:
@@ -234,7 +240,16 @@ class GroundControl:
     def aligner(self):
         """The Wake Word Aligner, loaded with the first command that needs
         it. None when it is off or can't run here."""
-        if not self.align or self._aligner_failed:
+        return self._phoneme_model() if self.align else None
+
+    def verifier(self):
+        """The Wake Word Verifier: the same model, asked whether the wake
+        word was said. None when it is off or can't run here."""
+        return self._phoneme_model() if self.verify else None
+
+    def _phoneme_model(self):
+        """The model the Wake Word Aligner and the Wake Word Verifier share."""
+        if self._aligner_failed:
             return None
         with self._aligner_lock:
             if self._aligner is None and not self._aligner_failed:
@@ -407,7 +422,8 @@ class GroundControl:
     def new_follow(self, policy: str = "anyone", anchor=None, people: tuple[str, ...] = (),
                    speaker: str | None = None, isolation: bool = True,
                    wake: dict[str, object] | None = None, asked: bool | None = None,
-                   face: Callable[[], str | None] | None = None) -> "Follow":
+                   face: Callable[[], str | None] | None = None, verify: bool = True, align: bool = True,
+                   trust_known: bool = True) -> "Follow":
         """``isolation``: the kiosk's own switch. Isolation runs when that and
         the service's setting are both on.
 
@@ -420,24 +436,40 @@ class GroundControl:
         follow-up, as the kiosk says. None when it doesn't say.
 
         ``face``: who is at the kiosk, for a kiosk with Confirm voices with
-        faces on (``FollowConfig.face``)."""
+        faces on (``FollowConfig.face``).
+
+        ``verify`` and ``align``: the kiosk's own Wake Word Verifier and Wake
+        Word Aligner switches. Each runs when that and the service's setting
+        are both on. ``trust_known``: the kiosk's Trust enrolled voices
+        (``FollowConfig.wake_check_trusts_known``)."""
         from .follow import Follow, FollowConfig
 
-        find = None
+        find = check = None
         phrase = (wake or {}).get("wake_word")
-        if wake and wake.get("seamless") and phrase and anchor is not None and speaker is None:
+        language = (wake or {}).get("language")
+        language = language if isinstance(language, str) else None
+        if align and wake and wake.get("seamless") and phrase and anchor is not None and speaker is None:
             aligner = self.aligner()
             if aligner is not None:
-                language = wake.get("language")
 
                 def find(anchor_audio, head):
-                    return aligner.find(anchor_audio, head, str(phrase), language if isinstance(language, str) else None)
+                    return aligner.find(anchor_audio, head, str(phrase), language)
+
+        # Only a turn a wake word started has one to check: not a reply to a
+        # question, a follow-up or a turn started by hand.
+        if (verify and wake and phrase and anchor is not None and speaker is None
+                and wake.get("interaction", "wake_word") == "wake_word"):
+            verifier = self.verifier()
+            if verifier is not None:
+
+                def check(anchor_audio, head):
+                    return verifier.check(anchor_audio, head, str(phrase), language)
 
         cfg = FollowConfig(policy=policy, people=people, short_answers=asked if self.short_answers else False,
-                           face=face)
+                           face=face, wake_check_trusts_known=trust_known)
         return Follow(cfg, self.model, self.active, self.vad, self.people,
                       anchor=anchor, speaker=speaker, isolator=self.isolator() if isolation else None,
-                      wake_word_end=find)
+                      wake_word_end=find, wake_word_check=check)
 
     async def run(self, fn, *args):
         return await asyncio.get_running_loop().run_in_executor(self.pool, fn, *args)

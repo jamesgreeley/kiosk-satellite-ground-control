@@ -8,6 +8,7 @@ Kiosk Satellite Ground Control currently has two components: **Voice Match** whi
 
 - **Recognition:** who is speaking to a Kiosk Satellite, from the voiceprints of the people enrolled.
 - **Trimming:** other voices, like a TV, are cut out between the user's words, so a TV in the background doesn't keep the assistant listening.
+- **Wake Word Verifier:** checks that the wake word was really said and stops the session when a kiosk woke up to something else, like a TV.
 - **Wake Word Aligner:** the end of the wake word is left out of the command when a kiosk has **Talk right after the wake word** on.
 - **Isolation:** other voices talking over the user's words are removed too. Best on an NVIDIA GPU.
 

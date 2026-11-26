@@ -16,6 +16,12 @@ quietest point between the word's last phoneme and the next sound.
 It works for any wake word of any engine: only the word's text is needed.
 Nothing is cut when the word isn't found well enough, so the audio goes on
 as it would have without this.
+
+The Wake Word Verifier uses the same model and the same placing to say
+whether the wake word was said at all (``Aligner.check``). An engine now and
+then fires on speech that is nothing like its wake word, most often a TV
+across the room. The word's phonemes then fit the audio poorly wherever they
+are placed, and the session is stopped before anything reaches the assistant.
 """
 
 from __future__ import annotations
@@ -68,6 +74,17 @@ LAST_AFTER = 13
 frames past the stream's start at most (0.26 s)."""
 MIN_FIT = -4.0
 """A word placed with a lower mean log-probability per phoneme isn't trusted."""
+VERIFY_AFTER_S = 0.3
+"""How much audio after the engine fired the Wake Word Verifier hears. An
+engine fires before the word is over, so the check can't run on the audio
+before it alone: real "Alexa"s scored -1.9 to -2.9 there and -0.4 to -0.9
+with this much more. More than this doesn't help."""
+VERIFY_MIN_FIT = -2.2
+"""The fit under which the wake word wasn't said. On 114 real wake words from
+three kiosks ("Hey Jarvis", "Ok Nova", "Alexa") the median was -1.2 and one
+scored under this. Of 672 stretches of other speech from the same kiosks, one
+scored over it. Six real sessions an engine fired on with no wake word in
+them scored -2.7 to -3.7."""
 NEXT_WITHIN_S = 0.25
 """A next sound this close after the word is the command's first."""
 RISE_DB = 8.0
@@ -340,6 +357,20 @@ class WakeWordEnd:
     """How long finding it took."""
 
 
+@dataclass
+class WakeWordCheck:
+    """Whether the wake word was said, as the Wake Word Verifier found it."""
+
+    said: bool
+    fit: float
+    """The mean log-probability per phoneme of the word placed where it fits best."""
+    needs: float
+    """The fit a wake word that was said reaches."""
+    phonemes: str
+    ms: int
+    """How long the check took."""
+
+
 class Aligner:
     """The Wake Word Aligner model. Thread safe: onnxruntime sessions can run concurrently."""
 
@@ -392,3 +423,34 @@ class Aligner:
         samples = int(round((placed.cut_s - stream_s) * SR))
         return WakeWordEnd(samples=min(max(samples, 0), len(head)), fit=round(placed.fit, 2), rule=placed.rule,
                            phonemes="".join(placed.phonemes), ms=round((time.perf_counter() - t0) * 1000))
+
+    def check(self, anchor: np.ndarray, head: np.ndarray, phrase: str, language: str | None = None,
+              min_fit: float = VERIFY_MIN_FIT) -> WakeWordCheck | None:
+        """Whether the wake word ``phrase`` was said, from the wake clip
+        ``anchor`` and ``head``, the start of the stream that follows it.
+        None when there is nothing to judge it by: no pronunciation or too
+        little of the wake clip."""
+        t0 = time.perf_counter()
+        targets = self.pronunciations(phrase, language)
+        if not targets:
+            return None
+        start = stream_start(anchor, head)
+        a0 = max(0, start - int(BEFORE_S * SR))
+        if start - a0 < MIN_BEFORE_S * SR:
+            return None
+        # What came after the engine fired: the rest of the wake clip, then the stream past it.
+        after = np.concatenate([anchor[start:], head[len(anchor) - start:]])[: int(VERIFY_AFTER_S * SR)]
+        audio = np.concatenate([anchor[a0:start], after]).astype(np.float32)
+        lp = self.log_probs(audio)
+        near = min(len(lp) - 1, int(round(((start - a0) / SR - 0.01) / FRAME_S)))
+        reach = min(LAST_AFTER, int(len(after) / SR / FRAME_S))
+        best: tuple[float, list[str]] | None = None
+        for target in targets:
+            emit = np.stack([np.logaddexp.reduce(lp[:, family(t, self.vocab)], axis=1) for t in target])
+            end, _, fit = align(lp, emit, self.blank, near, after=reach)
+            if end is not None and (best is None or fit > best[0]):
+                best = (fit, target)
+        if best is None:
+            return None
+        return WakeWordCheck(said=best[0] >= min_fit, fit=round(best[0], 2), needs=min_fit,
+                             phonemes="".join(best[1]), ms=round((time.perf_counter() - t0) * 1000))
