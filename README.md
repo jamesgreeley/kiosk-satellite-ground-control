@@ -56,10 +56,6 @@ Trimming doesn't simply end the command when someone else starts talking because
 
 https://github.com/user-attachments/assets/985faf93-9b86-48ce-bbda-41d91d0a1b49
 
-### Wake Word Verifier
-
-A wake word engine now and then wakes a kiosk up to speech that is nothing like its wake word, most often a TV across the room. The Wake Word Verifier checks that the wake word was really said. If it wasn't, the session is stopped 0.3 seconds in and nothing reaches the assistant. It works with any wake word and any wake word engine. It needs Trimming and is on by default. See [Wake Word Verifier](docs/voice-match.md#wake-word-verifier).
-
 ### Wake Word Aligner
 
 If **Talk right after the wake word** is on in Kiosk Satellite, the command's audio starts the moment the wake word is recognized. That happens before the word is over. The end of the wake word then reaches the assistant in front of the command. For example, the "xa" of "Alexa" turns "what time is it" into "So what time is it".
@@ -331,7 +327,7 @@ Run the CPU command above in Docker Desktop or OrbStack. Docker on a Mac can't u
 - [Installation](docs/installation.md): the Home Assistant app, Docker on a CPU, an NVIDIA GPU or an Intel GPU, options and updating.
 - [Kiosks](docs/kiosks.md): connecting and approving kiosks, kiosks on another network and each kiosk's page.
 - [People](docs/people.md): adding people, enrollment and personal commands.
-- [Voice Match](docs/voice-match.md): Recognition, Trimming, the Wake Word Verifier, the Wake Word Aligner, Isolation and the speaker models.
+- [Voice Match](docs/voice-match.md): Recognition, Trimming, the Wake Word Aligner, Isolation and the speaker models.
 - [Vision Match](docs/vision-match.md): Face Detection, Hand Gestures, Face Recognition and the vision models.
 - [Backup and moving](docs/backup.md): backing up the data and moving it to another machine for the app and Docker.
 - [Sessions](docs/sessions.md): what each voice command did, its audio and how to download it for an issue.

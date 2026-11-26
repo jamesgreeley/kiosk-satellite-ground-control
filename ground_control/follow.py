@@ -29,8 +29,7 @@ goes out at ``turn_end``, cleaned of the voices under the user's words. The
 isolator runs once over the turn's continuous audio, the way it was trained,
 and the released stretches are cut from its output.
 - ``rejected``: the device only takes enrolled voices and this isn't one.
-  Nothing more is released. With ``reason`` ``wake_word``, the wake word
-  wasn't said (the Wake Word Verifier).
+  Nothing more is released.
 - ``stats``: from ``finish``.
 
 With "Talk right after the wake word" on, the kiosk's stream starts the
@@ -38,12 +37,6 @@ moment the wake word engine fires, before the word is over, so its end would
 go to the backend in front of the command ("xa turn on the lights"). When
 the kiosk says so, the end of the wake word is found (``aligner``) and the
 user's speech only counts from there.
-
-The Wake Word Verifier (``wake_word_check``) runs once 0.3 s of the stream is
-in. An engine now and then fires on speech that is nothing like its wake
-word. When the word doesn't fit what the kiosk heard, the session is rejected
-before anything is released. A wake clip in the voice of someone enrolled is
-never rejected this way, unless the kiosk has Trust enrolled voices off.
 """
 
 from __future__ import annotations
@@ -170,15 +163,6 @@ class FollowConfig:
     much of the stream is in: the end of the word and the start of the
     command are in it. It costs no time, since a frame is only decided once
     the voice check centered on it is in, which is later than this."""
-    wake_check_trusts_known: bool = True
-    """A wake clip in the voice of someone enrolled passes the Wake Word
-    Verifier whatever the check says. A kiosk turns this off (Trust enrolled
-    voices) when an enrolled person's own talking wakes it up, as on a
-    conference call next to the kiosk."""
-    wake_check_wait_s: float = 0.3
-    """The Wake Word Verifier runs once this much of the stream is in
-    (``aligner.VERIFY_AFTER_S``). Nothing is released before it has: a frame
-    is only decided once the voice check centered on it is in, which is later."""
     wake_tail_s: float = 0.2
     """Speech that runs on from the wake word and stops within this of its
     end is still the wake word: the voice detector holds on for a few frames
@@ -210,21 +194,10 @@ class Follow:
     def __init__(self, cfg: FollowConfig, model: SpeakerModel, embedder: Embedder,
                  vad: VadModel, people: People, anchor: np.ndarray | None = None,
                  speaker: str | None = None, isolator=None,
-                 wake_word_end: Callable[[np.ndarray, np.ndarray], Any] | None = None,
-                 wake_word_check: Callable[[np.ndarray, np.ndarray], Any] | None = None,
-                 wake_checked: dict[str, Any] | None = None) -> None:
+                 wake_word_end: Callable[[np.ndarray, np.ndarray], Any] | None = None) -> None:
         """``wake_word_end``: finds the end of the wake word from the anchor
         and the start of the stream (``Aligner.find``), for a kiosk with "Talk
-        right after the wake word" on. Without it nothing is looked for.
-
-        ``wake_word_check``: says whether the wake word was said, from the
-        same two (``Aligner.check``). Without it every wake word is taken as said.
-
-        ``wake_checked``: what the Wake Word Verifier found when the kiosk
-        asked before it started the session (Wait for wake word
-        verification). The wake word isn't checked again. One that wasn't
-        said, in a voice nobody enrolled has, makes this the record of a
-        false positive: rejected from the start."""
+        right after the wake word" on. Without it nothing is looked for."""
         self.cfg = cfg
         self.isolator = isolator
         """Isolation's model (the Voice Isolator), or None. It needs the Accurate model's voiceprints."""
@@ -306,11 +279,6 @@ class Follow:
         """Set until the end of the wake word has been looked for."""
         self._wake_end = 0
         """How much of the stream's start is still the wake word, in samples."""
-        self._check_wake = wake_word_check if anchor is not None and len(anchor) else None
-        """Set until the Wake Word Verifier has run."""
-        self.wake_check: dict[str, Any] | None = None
-        """What the Wake Word Verifier found, once it has run."""
-        self._false_positive = False
         self._lead_in_due = False
         self.wake_word: dict[str, Any] | None = None
         """What looking for the end of the wake word found, once it has run."""
@@ -318,10 +286,6 @@ class Follow:
         """Silence put in front of the command, at the start of the sent audio."""
         if anchor is not None and len(anchor):
             self._take_anchor(anchor.astype(np.float32))
-        if wake_checked:
-            self._check_wake = None
-            if not self._rejected:
-                self._take_wake_check(dict(wake_checked))
         if speaker and not self._identified:
             self._take_speaker(speaker)
         if self._ref is None and len(self._house_rows):
@@ -400,8 +364,6 @@ class Follow:
             was = self._speech[-1] if self._speech else False
             self._speech.append(p >= cfg.speech_threshold or (was and p >= cfg.speech_release))
             self._maybe_check(len(self._speech) * FRAME)
-        if self._check_wake is not None and self.n >= int(cfg.wake_check_wait_s * SR):
-            self._check_wake_word(events)
         if self._find_end is not None and self.n >= int(cfg.wake_word_wait_s * SR):
             self._find_wake_word_end()
         if self._waiting_for_household(False) and any(self._speech):
@@ -437,8 +399,8 @@ class Follow:
             self._identify_heard(events, self.n, final=True)
         if self.in_turn:
             self._end_turn(events)
-        end = ("false_positive" if self._false_positive else "rejected" if self._rejected
-               else "other_voice" if self.dropped_s > 0 else "silence" if self.turns else None)
+        end = ("rejected" if self._rejected else "other_voice" if self.dropped_s > 0
+               else "silence" if self.turns else None)
         events.append({
             "type": "stats",
             "mode": "follow",
@@ -453,7 +415,6 @@ class Follow:
             "cpu_ms": round(self._cpu * 1000),
             **({"isolated_ms": self.isolated_ms} if self.isolator is not None else {}),
             **({"wake_word_s": round(self._wake_end / SR, 2)} if self.wake_word and self.wake_word["found"] else {}),
-            **({"wake_word_said": self.wake_check["said"]} if self.wake_check else {}),
             "wall_ms": round((time.monotonic() - self._started) * 1000),
             "model": self.model.key,
         })
@@ -471,44 +432,6 @@ class Follow:
             self._checks = [c for c in self._checks if c[0] >= keep_from - self._win]
 
     # ── the end of the wake word ──────────────────────────────────────────
-
-    def _check_wake_word(self, events: list[dict[str, Any]]) -> None:
-        """The Wake Word Verifier, once: was the wake word said at all? When
-        it wasn't, the session is rejected and nothing is released."""
-        check, self._check_wake = self._check_wake, None
-        if self._rejected:
-            return
-        head = self._audio(0, int(self.cfg.wake_check_wait_s * SR)).copy()
-        try:
-            found = check(self.anchor_audio, head)
-        except Exception:  # noqa: BLE001 - the command goes on as it would have without this
-            _LOG.exception("checking the wake word failed")
-            return
-        if found is None:
-            return
-        # The wake clip in the voice of someone enrolled: they called the
-        # kiosk, however the word came out. Unless the kiosk says otherwise.
-        kept = not found.said and self._identified and self.cfg.wake_check_trusts_known
-        self.wake_check = {"said": bool(found.said or kept), "fit": found.fit, "needs": found.needs,
-                           "phonemes": found.phonemes, "ms": found.ms, **({"known_voice": True} if kept else {})}
-        self.timeline.append({"t": 0.0, "kind": "wake_check", **self.wake_check})
-        if found.said or kept:
-            return
-        self._false_positive = True
-        self._find_end = None
-        self._reject(events, self.n, None, reason="wake_word")
-
-    def _take_wake_check(self, found: dict[str, Any]) -> None:
-        """What the Wake Word Verifier found before the session started."""
-        if not found.get("said") and self._identified and self.cfg.wake_check_trusts_known:
-            found = {**found, "said": True, "known_voice": True}
-        self.wake_check = found
-        self.timeline.append({"t": 0.0, "kind": "wake_check", **found})
-        if found.get("said"):
-            return
-        self._false_positive = True
-        self._find_end = None
-        self._reject(self._pending_events, 0, None, reason="wake_word")
 
     def _find_wake_word_end(self) -> None:
         """Looks for the end of the wake word in the anchor and the start of
@@ -1117,10 +1040,10 @@ class Follow:
     def _allowed(self, person_id: str) -> bool:
         return self.cfg.policy != "people" or person_id in self.cfg.people
 
-    def _reject(self, events: list[dict[str, Any]], at: int, score: float | None, reason: str | None = None) -> None:
+    def _reject(self, events: list[dict[str, Any]], at: int, score: float | None) -> None:
         self._rejected = True
         events.append({"type": "rejected", "t": round(at / SR, 3),
-                       "score": None if score is None else round(score, 3), **({"reason": reason} if reason else {})})
+                       "score": None if score is None else round(score, 3)})
 
     def _set_speaker(self, person_id: str | None, score: float | None, by: str | None,
                      events: list[dict[str, Any]], at: int, line: float | None = None) -> None:

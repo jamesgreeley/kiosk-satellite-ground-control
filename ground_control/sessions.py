@@ -243,7 +243,7 @@ class SessionStore:
         if show == "cut":
             sql.append("outcome = 'other_voice'")
         elif show == "rej":
-            sql.append("outcome IN ('rejected', 'false_positive')")
+            sql.append("outcome = 'rejected'")
         if q:
             sql.append("(COALESCE(device_name, device_id, '') || ' ' || COALESCE(speaker_name, "
                        "CASE WHEN kind = 'voice' THEN 'unknown' ELSE 'vision' END)) LIKE ?")

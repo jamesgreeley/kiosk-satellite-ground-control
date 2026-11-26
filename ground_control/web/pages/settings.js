@@ -135,11 +135,6 @@ export async function render({ area } = {}) {
 
     const aligner = toggle(s.aligner && !s.aligner_missing, "Use Wake Word Aligner", (v) => save({ aligner: v }));
     if (s.aligner_missing) aligner.disabled = true;
-    const verifier = toggle(s.verifier && !s.aligner_missing, "Use Wake Word Verifier", (v) => save({ verifier: v }));
-    if (s.aligner_missing) verifier.disabled = true;
-    const verifierNote = s.aligner_missing === "model" ? "The Wake Word Verifier uses the Wake Word Aligner model, which is not in this install."
-      : s.aligner_missing ? "The Wake Word Verifier needs espeak-ng, which is not installed. The Docker images and the Home Assistant app have it."
-      : "It runs 0.3 seconds after the wake word and takes a few milliseconds. A wake word in the voice of someone enrolled always passes, unless the kiosk has Trust enrolled voices off.";
     const alignerNote = s.aligner_missing === "model" ? "The Wake Word Aligner model is not in this install."
       : s.aligner_missing ? "The Wake Word Aligner needs espeak-ng, which is not installed. The Docker images and the Home Assistant app have it."
       : "It works with any wake word and any wake word engine. It doesn't delay the command.";
@@ -161,11 +156,6 @@ export async function render({ area } = {}) {
         row("Other voice threshold", `Two checks in a row under this score mean someone else is talking. ${s.default_other_threshold} by default.`,
           number("oth", s.other_threshold, "other_threshold"), "oth"),
         hint("Turn Trimming on or off for each kiosk in Kiosk Satellite under Ground Control > Voice Match.")),
-
-      section("Wake Word Verifier", "Checks that the wake word was really said. When a kiosk wakes up to something else, like a TV across the room, the session is stopped before anything reaches the assistant."),
-      h("div", { class: "card" },
-        row("Use Wake Word Verifier", "For kiosks with Trimming and the Wake Word Verifier on in Kiosk Satellite.", verifier),
-        hint(verifierNote)),
 
       section("Wake Word Aligner", "The end of the wake word, such as the \"xa\" of \"Alexa\", is left out of the command."),
       h("div", { class: "card" },

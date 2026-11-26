@@ -91,7 +91,6 @@ function chartKey(record, color) {
 function steps(record) {
   // The end of the wake word first: the user's own first word can start right at it.
   const out = (record.timeline || []).filter((p) => p.kind === "wake_word").map((p) => wakeWordStep(p, record.wake?.wake_word));
-  out.push(...(record.timeline || []).filter((p) => p.kind === "wake_check").map((p) => wakeCheckStep(p, record.wake?.wake_word)));
   out.push(...(record.followups || []).map((t) => ["Follow-up", "The assistant asked something and the user answered. This part is the answer.", t]));
   for (const e of record.events || []) {
     if (e.type === "speech_start") out.push(["Speech started", "The voice check starts here.", e.t]);
@@ -113,12 +112,7 @@ function steps(record) {
     }
     if (e.type === "turn_start") out.push([e.turn > 1 ? `Turn ${e.turn}` : "The user started talking", "What they say goes to the assistant.", e.t]);
     if (e.type === "turn_end") out.push(["The user stopped", `${e.speech_s ?? 0} s of speech. The command ended here.`, e.t]);
-    if (e.type === "rejected" && e.reason === "wake_word") {
-      const ahead = (record.timeline || []).some((p) => p.kind === "wake_check" && p.ahead);
-      out.push(["False positive", ahead ? "The wake word wasn't said, so the kiosk started nothing: no chime and nothing on its screen."
-        : "The wake word wasn't said, so the session was stopped and nothing went to the assistant.", e.t]);
-    }
-    else if (e.type === "rejected") out.push(["Rejected", "This kiosk answers enrolled voices only.", e.t]);
+    if (e.type === "rejected") out.push(["Rejected", "This kiosk answers enrolled voices only.", e.t]);
     if (e.type === "end_of_speech" && e.reason === "silence") out.push(["Speaker stopped", "Silence after the speech.", e.t]);
   }
   for (const p of record.timeline || []) {
@@ -137,17 +131,6 @@ function wakeWordStep(p, word) {
   if (!p.t) return [title, `${name[0].toUpperCase()}${name.slice(1)} was over before the command's audio started. Nothing to leave out.`, 0];
   const how = p.rule === "pause" ? "The user paused after it." : "The command started right after it.";
   return [title, `The first ${Number(p.t).toFixed(2)} s was still ${name} and was left out. Finding it took ${p.ms} ms. ${how}`, p.t];
-}
-
-function wakeCheckStep(p, word) {
-  const name = word ? `"${word}"` : "the wake word";
-  const title = "Wake Word Verifier";
-  const fit = `It fits what the kiosk heard with a score of ${p.fit}. A wake word that was said scores ${p.needs} or more.`;
-  // Wait for wake word verification: the kiosk asked before it started the session.
-  const waited = p.ahead ? " The kiosk waited for this check before it started the session." : "";
-  if (p.known_voice) return [title, `${name[0].toUpperCase()}${name.slice(1)} wasn't clear, but the voice is someone enrolled, so the session went on. ${fit}${waited}`, 0];
-  if (p.said) return [title, `${name[0].toUpperCase()}${name.slice(1)} was said. ${fit} The check took ${p.ms} ms.${waited}`, 0];
-  return [title, `${name[0].toUpperCase()}${name.slice(1)} wasn't said. ${fit} The check took ${p.ms} ms.${waited}`, 0];
 }
 
 function player(path, title, desc, length) {

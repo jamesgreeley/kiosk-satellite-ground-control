@@ -124,14 +124,13 @@ def test_the_frame_a_gesture_acted_on_is_kept():
     assert [j for _, j in frames] == [b"a", b"c", b"d"]
 
 
-def test_a_kiosks_wake_word_switches_are_kept():
+def test_a_kiosks_wake_word_aligner_switch_is_kept():
     from ground_control.server import _features
 
-    said = {"voice_match": True, "trimming": True, "wake_word_verifier": True, "verifier_trusts_enrolled": False,
-            "verifier_waits": True, "wake_word_aligner": False}
+    said = {"voice_match": True, "trimming": True, "wake_word_aligner": False}
     assert _features(said) == said
-    # A kiosk from before these switches says nothing about them, which the Kiosks page reads as on.
-    assert "wake_word_verifier" not in _features({"voice_match": True, "trimming": True})
+    # A kiosk from before the switch says nothing about it, which the Kiosks page reads as on.
+    assert "wake_word_aligner" not in _features({"voice_match": True, "trimming": True})
 
 
 def test_a_kiosks_vision_match_features_are_kept():

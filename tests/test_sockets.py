@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import io
 import wave
 
@@ -246,8 +245,6 @@ async def test_a_session_keeps_what_the_kiosk_said_about_the_wake_word(client, s
             return WakeWordEnd(samples=int(0.3 * SR), fit=-0.6, rule="next sound", phonemes="ɐlɛksə", ms=4)
 
     monkeypatch.setattr(vm, "aligner", lambda: Finds())
-    # The wake clip here is other speech, which the Wake Word Verifier would rightly stop.
-    monkeypatch.setattr(vm, "verifier", lambda: None)
     user = voice[speakers[0]]["test"]
     probs = vm.vad.stream().feed(user)
     user = user[next(i for i, p in enumerate(probs) if p >= 0.5) * 512:]
@@ -282,148 +279,7 @@ async def test_a_session_keeps_what_the_kiosk_said_about_the_wake_word(client, s
     assert not sent[: int(0.5 * SR)].any() and sent[int(0.5 * SR) + 400: int(0.5 * SR) + 2000].any()
 
 
-async def test_a_wake_word_that_wasnt_said_stops_the_session_for_the_kiosk(client, speakers, voice, monkeypatch):
-    """The Wake Word Verifier: the kiosk is told the session is rejected 0.3 s
-    in, nothing goes to the assistant and the session is kept as one with no
-    wake word."""
-    import base64
-
-    from ground_control.aligner import WakeWordCheck
-
-    vm = client.app[VM]
-    asked = []
-
-    class Checks:
-        def check(self, anchor, head, phrase, language):
-            asked.append((phrase, language, len(head)))
-            return WakeWordCheck(said=False, fit=-3.1, needs=-2.2, phonemes="heɪdʒɑːɹvɪs", ms=3)
-
-    monkeypatch.setattr(vm, "verifier", lambda: Checks())
-    tv = voice[speakers[2]]["test"]
-    ws = await client.ws_connect("/api/session")
-    await ws.send_json({"type": "start", "token": "good", "ticket": approve(client), "device_id": "k1", "mode": "follow",
-                        "anchor": base64.b64encode(float_to_pcm16(tv[: int(1.2 * SR)])).decode(),
-                        "wake_word": "Hey Jarvis", "wake_word_engine": "vsWakeWord", "language": "en",
-                        "interaction": "wake_word"})
-    sid = (await next_of(ws, "ready"))["session"]
-    for c in chunks(tv[int(1.2 * SR): int(4.2 * SR)]):
-        await ws.send_bytes(float_to_pcm16(c))
-    await ws.send_json({"type": "end"})
-    rejected = stats = None
-    sent_audio = False
-    while stats is None:
-        msg = await asyncio.wait_for(ws.receive(), 10)
-        assert msg.type in (WSMsgType.BINARY, WSMsgType.TEXT), "socket ended before stats"
-        if msg.type == WSMsgType.BINARY:
-            sent_audio = True
-        elif msg.json()["type"] == "rejected":
-            rejected = msg.json()
-        elif msg.json()["type"] == "stats":
-            stats = msg.json()
-    assert rejected and rejected["reason"] == "wake_word" and rejected["t"] <= 0.4 and not sent_audio
-    assert asked == [("Hey Jarvis", "en", int(0.3 * SR))]
-    assert stats["end"] == "false_positive" and stats["rejected"] and stats["wake_word_said"] is False
-    await asyncio.sleep(0.3)
-    record = await (await client.get(f"/api/sessions/{sid}", headers=GOOD)).json()
-    assert [p for p in record["timeline"] if p["kind"] == "wake_check"][0]["said"] is False
-    # It is listed with the rejected sessions and counted on its own.
-    shown = await (await client.get("/api/sessions?show=rej", headers=GOOD)).json()
-    assert sid in json.dumps(shown)
-
-
-async def test_a_kiosk_asks_about_the_wake_word_before_it_starts_a_session(client, speakers, voice, monkeypatch):
-    """Wait for wake word verification: the kiosk asks on its own socket. A
-    wake word that wasn't said is kept as a false positive, with no session
-    from the kiosk. One that was said isn't checked again by its session."""
-    import base64
-
-    from ground_control.aligner import WakeWordCheck
-
-    vm = client.app[VM]
-    asked = []
-    answers = [False, True]
-
-    class Checks:
-        def check(self, anchor, head, phrase, language, fired=None):
-            asked.append((phrase, language, len(anchor), len(head), fired))
-            said = answers.pop(0)
-            return WakeWordCheck(said=said, fit=-1.0 if said else -3.1, needs=-2.2, phonemes="heɪdʒɑːɹvɪs", ms=3)
-
-    monkeypatch.setattr(vm, "verifier", lambda: Checks())
-    kiosk = await client.ws_connect("/api/kiosk")
-    await hello(kiosk, name="Kitchen")
-    await next_of(kiosk, "pending")
-    tv = voice[speakers[2]]["test"]
-    clip = base64.b64encode(float_to_pcm16(tv[: int(1.5 * SR)])).decode()
-    ask = {"type": "verify", "clip": clip, "tail_ms": 300, "wake_word": "Hey Jarvis", "language": "en",
-           "wake_word_engine": "vsWakeWord", "trusts_enrolled": True}
-    # A kiosk that isn't approved gets no answer.
-    await kiosk.send_json({**ask, "id": "v0"})
-    assert (await client.post("/api/kiosks/k1/access", json={"access": "approved"}, headers=GOOD)).status == 200
-    ticket = (await next_of(kiosk, "ticket"))["ticket"]
-    assert (await next_of(kiosk, "people"))["wake_word_verify"] is True
-    assert not asked
-
-    await kiosk.send_json({**ask, "id": "v1"})
-    assert await next_of(kiosk, "verified") == {"type": "verified", "id": "v1", "said": False}
-    # Where the engine fired: 0.3 s before the end of the clip.
-    assert asked == [("Hey Jarvis", "en", int(1.5 * SR), 0, int(1.2 * SR))]
-    await asyncio.sleep(0.3)
-    listed = (await (await client.get("/api/sessions?show=rej", headers=GOOD)).json())["sessions"]
-    assert len(listed) == 1 and listed[0]["device_id"] == "k1"
-    record = await (await client.get(f"/api/sessions/{listed[0]['id']}", headers=GOOD)).json()
-    assert record["stats"]["end"] == "false_positive" and record["mode"] == "follow"
-    assert record["wake"]["wake_word"] == "Hey Jarvis" and record["wake_s"] == 1.5 and not record["has_audio"]
-    check = [p for p in record["timeline"] if p["kind"] == "wake_check"][0]
-    assert check["said"] is False and check["ahead"] is True and check["fit"] == -3.1
-    assert [e["reason"] for e in record["events"] if e["type"] == "rejected"] == ["wake_word"]
-
-    # Said: the session that follows names the check and has it in its record.
-    await kiosk.send_json({**ask, "id": "v2"})
-    assert (await next_of(kiosk, "verified"))["said"] is True
-    ws = await client.ws_connect("/api/session")
-    await ws.send_json({"type": "start", "token": "good", "ticket": ticket, "device_id": "k1", "mode": "follow",
-                        "anchor": clip, "wake_word": "Hey Jarvis", "language": "en", "interaction": "wake_word",
-                        "wake_verified": "v2"})
-    sid = (await next_of(ws, "ready"))["session"]
-    for c in chunks(tv[int(1.5 * SR): int(3.5 * SR)]):
-        await ws.send_bytes(float_to_pcm16(c))
-    await ws.send_json({"type": "end"})
-    stats = None
-    while stats is None:
-        msg = await asyncio.wait_for(ws.receive(), 10)
-        assert msg.type in (WSMsgType.BINARY, WSMsgType.TEXT), "socket ended before stats"
-        if msg.type == WSMsgType.TEXT and msg.json()["type"] == "stats":
-            stats = msg.json()
-    assert stats["wake_word_said"] is True and not stats["rejected"]
-    assert len(asked) == 2 and not vm.wake_passes
-    await asyncio.sleep(0.3)
-    record = await (await client.get(f"/api/sessions/{sid}", headers=GOOD)).json()
-    check = [p for p in record["timeline"] if p["kind"] == "wake_check"][0]
-    assert check["said"] is True and check["ahead"] is True
-
-    # Nothing to judge it by, or a request that makes no sense: the kiosk goes on as it would have.
-    monkeypatch.setattr(vm, "verifier", lambda: None)
-    await kiosk.send_json({**ask, "id": "v3"})
-    assert await next_of(kiosk, "verified") == {"type": "verified", "id": "v3", "said": None}
-    await kiosk.send_json({"type": "verify", "id": "v4", "clip": "not audio", "tail_ms": "soon"})
-    assert await next_of(kiosk, "verified") == {"type": "verified", "id": "v4", "said": None}
-
-
-async def test_a_wake_word_check_belongs_to_the_kiosk_that_asked(client):
-    from ground_control.server import _wake_pass
-
-    vm = client.app[VM]
-    found = {"said": True, "fit": -1.0}
-    vm.wake_passes["v1"] = (__import__("time").time(), "k1", found)
-    assert _wake_pass(vm, "v1", "k2") is None and "v1" not in vm.wake_passes
-    vm.wake_passes["v2"] = (__import__("time").time() - 60, "k1", found)
-    assert _wake_pass(vm, "v2", "k1") is None
-    vm.wake_passes["v3"] = (__import__("time").time(), "k1", found)
-    assert _wake_pass(vm, None, "k1") is None and _wake_pass(vm, "v3", "k1") == found
-
-
-async def test_a_kiosk_turns_the_wake_word_features_on_and_off_for_itself(client, speakers, voice, monkeypatch):
+async def test_a_kiosk_turns_the_wake_word_aligner_on_and_off_for_itself(client, speakers, voice, monkeypatch):
     import base64
 
     vm = client.app[VM]
@@ -431,21 +287,20 @@ async def test_a_kiosk_turns_the_wake_word_features_on_and_off_for_itself(client
     real = vm.new_follow
 
     def new_follow(*args, **kw):
-        made.append(args[8:11] if len(args) > 8 else kw)
+        made.append(args[8] if len(args) > 8 else kw)
         return real(*args, **kw)
 
     monkeypatch.setattr(vm, "new_follow", new_follow)
     anchor = base64.b64encode(float_to_pcm16(voice[speakers[0]]["test"][: int(1.2 * SR)])).decode()
-    for extra in ({}, {"wake_word_verifier": False, "wake_word_aligner": False, "verifier_trusts_enrolled": False}):
+    for extra in ({}, {"wake_word_aligner": False}):
         ws = await client.ws_connect("/api/session")
         await ws.send_json({"type": "start", "token": "good", "ticket": approve(client), "device_id": "k1",
                             "mode": "follow", "anchor": anchor, "wake_word": "Alexa", **extra})
         await next_of(ws, "ready")
         await ws.send_json({"type": "end"})
         await ws.close()
-    # verify, align and trust_known: on for a kiosk that doesn't say, then as it says.
-    assert made == [(True, True, True), (False, False, False)]
-
+    # On for a kiosk that doesn't say, then as it says.
+    assert made == [True, False]
 
 
 async def test_an_older_kiosk_says_nothing_about_the_wake_word(client):
