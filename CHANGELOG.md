@@ -2,6 +2,11 @@
 
 All notable changes to Kiosk Satellite Ground Control are documented here.
 
+## Unreleased
+
+### Changed
+- **README badges.** The NVIDIA badge now reads CUDA without its versions. An Intel OpenVINO badge links to the Intel GPU section of the installation page. The Docker badge is purple.
+
 ## v2026.11.15 - 2026-11-25
 
 ### Added

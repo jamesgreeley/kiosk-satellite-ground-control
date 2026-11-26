@@ -15,8 +15,9 @@
 
 <p align="center">
 <a href="https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fjxlarrea%2Fkiosk-satellite-ground-control"><img src="https://img.shields.io/badge/Home%20Assistant-App-18bcf2?style=for-the-badge&logo=homeassistant&logoColor=white" alt="Home Assistant app"></a>
-<a href="https://github.com/users/jxlarrea/packages/container/package/kiosk-satellite-ground-control"><img src="https://img.shields.io/badge/Docker-amd64%20%7C%20arm64-2496ed?style=for-the-badge&logo=docker&logoColor=white" alt="Docker amd64 and arm64"></a>
-<a href="docs/installation.md#nvidia-gpu"><img src="https://img.shields.io/badge/NVIDIA-CUDA%2012%20%7C%2013-76b900?style=for-the-badge&logo=nvidia&logoColor=white" alt="NVIDIA CUDA 12 and 13"></a>
+<a href="https://github.com/users/jxlarrea/packages/container/package/kiosk-satellite-ground-control"><img src="https://img.shields.io/badge/Docker-amd64%20%7C%20arm64-b39ddb?style=for-the-badge&logo=docker&logoColor=white" alt="Docker amd64 and arm64"></a>
+<a href="docs/installation.md#nvidia-gpu"><img src="https://img.shields.io/badge/NVIDIA-CUDA-76b900?style=for-the-badge&logo=nvidia&logoColor=white" alt="NVIDIA CUDA"></a>
+<a href="docs/installation.md#intel-gpu"><img src="https://img.shields.io/badge/Intel-OpenVINO-0071c5?style=for-the-badge&logo=intel&logoColor=white" alt="Intel OpenVINO"></a>
 </p>
 
 <p align="center">
@@ -266,7 +267,7 @@ docker run -d --name ground-control -p 10900:10900 \
   -v ground-control:/data ghcr.io/jxlarrea/kiosk-satellite-ground-control
 ```
 
-**Docker, NVIDIA GPU:**
+**Docker, NVIDIA GPU (CUDA):**
 
 ```bash
 docker run -d --name ground-control --gpus all -p 10900:10900 \
@@ -274,7 +275,7 @@ docker run -d --name ground-control --gpus all -p 10900:10900 \
   -v ground-control:/data ghcr.io/jxlarrea/kiosk-satellite-ground-control:cuda
 ```
 
-**Docker, Intel GPU:**
+**Docker, Intel GPU (OpenVINO):**
 
 ```bash
 docker run -d --name ground-control --device /dev/dri -p 10900:10900 \
