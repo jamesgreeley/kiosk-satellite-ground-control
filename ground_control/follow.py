@@ -179,6 +179,15 @@ class FollowConfig:
     """The Wake Word Verifier runs once this much of the stream is in
     (``aligner.VERIFY_AFTER_S``). Nothing is released before it has: a frame
     is only decided once the voice check centered on it is in, which is later."""
+    wake_tail_s: float = 0.2
+    """Speech that runs on from the wake word and stops within this of its
+    end is still the wake word: the voice detector holds on for a few frames
+    after a word. It was 0.03 to 0.13 s on real kiosk sessions, and the
+    shortest command said in one breath with the wake word ran 0.54 s past
+    it. Counted as the user's speech, it opened a turn of its own. When the
+    user then paused before the command, that turn ended with nothing in it
+    to recognize anyone by and a kiosk that answers chosen people rejected
+    the session."""
     lead_in_s: float = 0.5
     """A command said in one breath with the wake word starts right where the
     word was cut, with none of the quiet a command has in front of it. Speech
@@ -624,6 +633,22 @@ class Follow:
         line = self._start_line() or self.model.other_threshold - 0.05
         return "user" if score >= line else "other"
 
+    def _wake_word_tail(self, f: int, final: bool) -> bool | None:
+        """Whether the speech at frame ``f`` is still the wake word: a run of
+        speech that began before the word's end and stops within
+        ``wake_tail_s`` of it. None while the run is still going and could
+        be either."""
+        if not self._wake_end:
+            return False
+        r0, r1 = self._run(f)
+        if r0 * FRAME >= self._wake_end:
+            return False
+        if r1 * FRAME - self._wake_end >= self.cfg.wake_tail_s * SR:
+            return False  # it goes on: the command, said in one breath
+        if r1 >= len(self._speech) and not final:
+            return None
+        return True
+
     def _run(self, f: int) -> tuple[int, int]:
         r0 = f
         while r0 > 0 and self._speech[r0 - 1]:
@@ -647,7 +672,10 @@ class Follow:
                 self._decided = len(self._speech)
                 return
             if self._speech[f] and (f + 1) * FRAME > self._wake_end:
-                label = self._label(f, final)
+                tail = self._wake_word_tail(f, final)
+                if tail is None:
+                    return
+                label = "gap" if tail else self._label(f, final)
                 if label is None:
                     return
             else:

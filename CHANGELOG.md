@@ -14,6 +14,9 @@ All notable changes to Kiosk Satellite Ground Control are documented here.
 - **Install instructions grouped by image.** The README's Docker section and the Docker part of the installation page now start with a table of the three images. The CPU, the NVIDIA GPU and the Intel GPU each have a section with the command and what that image needs. GPU Memory sits under NVIDIA GPU.
 - **README badges.** The NVIDIA badge now reads CUDA without its versions. An Intel OpenVINO badge links to the Intel GPU section of the installation page. The Docker badge is purple.
 
+### Fixed
+- **Rejected after a pause with Talk right after the wake word.** With **Talk right after the wake word** on, the last sounds of the wake word were taken for the start of the command. A user who waited a second before talking then had a kiosk that answers chosen people reject the session, since that sliver of speech was too short to recognize anyone by. The end of the wake word no longer counts as speech. In our test sessions this was 14 of 27 commands on one kiosk.
+
 ## v2026.11.15 - 2026-11-25
 
 ### Added

@@ -919,3 +919,52 @@ def test_a_session_without_a_wake_clip_is_not_checked(household, speakers, voice
     seen: list = []
     events, f = follow_with(people, embedder, vad, s, None, checked(False, seen))
     assert seen == [] and not of(events, "rejected")
+
+
+# ── the last sounds of the wake word ──────────────────────────────────────
+
+def ends_at(seconds: float):
+    """Stands in for ``Aligner.find``: the wake word ends this far into the stream."""
+    from ground_control.aligner import WakeWordEnd
+
+    return lambda anchor, head: WakeWordEnd(samples=int(seconds * SR), fit=-1.2, rule="pause", phonemes="heɪdʒɑːɹvɪs", ms=4)
+
+
+def test_the_last_sounds_of_the_wake_word_are_not_the_users_speech(household, speakers, voice, vad, embedder):
+    """Talk right after the wake word: the stream starts before the word is
+    over. The voice detector holds on a little past the word's end, and that
+    was taken for a turn. A user who paused before the command had that turn
+    end with nothing in it, and a kiosk that answers chosen people rejected
+    the session."""
+    people, _, _ = household
+    guest = held_out(speakers[2])
+    # The end of the wake word, a pause of over a second and then the command.
+    s = (Script().add("wake", guest[int(1.0 * SR):int(1.25 * SR)]).add("quiet", silence(1.3))
+         .add("user", guest[2 * SR:5 * SR]).add("quiet", silence(1.5)))
+    f = Follow(FollowConfig(policy="anyone"), ACCURATE, embedder, vad, people, anchor=anchor_of(guest),
+               wake_word_end=ends_at(0.15))
+    events = []
+    for c in chunks(s.audio):
+        events += f.feed(c)
+    events += f.finish()
+    turns = of(events, "turn_start")
+    # One turn, the command: nothing started at the wake word's end.
+    assert len(turns) == 1 and turns[0]["t"] > 1.0
+    assert s.released_from("wake", f.released) == 0
+    assert s.speech_share("user", f.released, vad) >= 0.7
+    assert not of(events, "rejected")
+
+
+def test_a_command_said_in_one_breath_with_the_wake_word_starts_at_its_end(household, speakers, voice, vad, embedder):
+    people, _, _ = household
+    guest = held_out(speakers[2])
+    # No pause: the speech runs on from the wake word into the command.
+    s = Script().add("user", guest[2 * SR:5 * SR]).add("quiet", silence(1.5))
+    f = Follow(FollowConfig(policy="anyone"), ACCURATE, embedder, vad, people, anchor=anchor_of(guest),
+               wake_word_end=ends_at(0.15))
+    events = []
+    for c in chunks(s.audio):
+        events += f.feed(c)
+    events += f.finish()
+    assert of(events, "turn_start")[0]["t"] <= 0.3 and f.released[0][0] == int(0.15 * SR)
+    assert not of(events, "rejected")
