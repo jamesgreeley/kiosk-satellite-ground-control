@@ -8,7 +8,9 @@
 #
 # Ubuntu 26.04 has an Intel compute runtime (intel-opencl-icd) recent enough
 # for the GPUs of Core Ultra processors and Arc cards. Debian's is too old or
-# missing.
+# missing. That runtime starts at the 11th generation of Core processors (Xe
+# graphics). The integrated GPUs of the 5th to the 10th generation are in
+# intel-opencl-icd-legacy, which installs beside it.
 FROM ubuntu:26.04
 
 ARG BUILD_VERSION=dev
@@ -23,7 +25,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 MODELS_DIR=/app/models OPENVINO
     PIP_BREAK_SYSTEM_PACKAGES=1 DEBIAN_FRONTEND=noninteractive
 
 # espeak-ng says how a wake word is pronounced, to find where it ends.
-RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-pip espeak-ng intel-opencl-icd \
+RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-pip espeak-ng \
+        intel-opencl-icd intel-opencl-icd-legacy \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
