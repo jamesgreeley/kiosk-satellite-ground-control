@@ -76,14 +76,6 @@ https://github.com/user-attachments/assets/4485f1fc-af2a-4d17-a7de-2b0b3ebe7f3f
 
 Vision Match runs Kiosk Satellite's camera features on Ground Control. The camera and motion detection stay on the kiosk. When something moves, the kiosk sends a camera frame to Ground Control and gets back what is in it. A kiosk that is too slow for these models or can't run them, like an Echo Show 5 or an Android 7 tablet, gets the same features as a fast one. Turn it on for each kiosk in Kiosk Satellite under **Settings > Ground Control > Vision Match**. See [Vision Match](docs/vision-match.md).
 
-### Face Detection
-
-The faces looking at the kiosk are found on Ground Control, so a face can dismiss or postpone the screensaver. A face looking at the screen is told apart from a head turned away. On kiosk frames from 1 to 3 m, a head turned away passed as a face looking at the screen in 10% of frames. With the models on the kiosk it was 82%.
-
-### Hand Gestures
-
-For Show fingers gestures, the fingers held up on a raised hand are counted on Ground Control. On the same frames the finger count was right in 91 to 96% of frames, compared to 28% with the models on the kiosk. **Hand sensitivity** under **Settings > Vision Match** sets the smallest hand that counts, so a hand cut off at the edge of the frame doesn't trigger a gesture.
-
 ### Face Recognition
 
 Enroll each person's face once on the People page with a guided capture of about half a minute through a kiosk's camera. After that, the kiosk's **Face** sensor in Home Assistant shows who is at the kiosk and its **People in view** sensor lists everyone recognized. With Kiosk Satellite's settings you can then:
@@ -93,6 +85,18 @@ Enroll each person's face once on the People page with a guided capture of about
 - Accept a voice that is close to someone's voiceprint when their face is at the kiosk.
 
 Cards on the kiosk screen show who was recognized and what happened because of it. A Face event in Home Assistant fires when someone arrives at the kiosk and when they leave. Ground Control keeps only small pictures of each enrolled face.
+
+<p align="center">
+  <a href="assets/videos/vision-match-demo-lossy.gif"><img src="assets/videos/vision-match-demo-lossy.gif" alt="Ground Control Vision Match" width="650" /></a>
+</p>
+
+### Face Detection
+
+The faces looking at the kiosk are found on Ground Control, so a face can dismiss or postpone the screensaver. A face looking at the screen is told apart from a head turned away. On kiosk frames from 1 to 3 m, a head turned away passed as a face looking at the screen in 10% of frames. With the models on the kiosk it was 82%.
+
+### Hand Gestures
+
+For Show fingers gestures, the fingers held up on a raised hand are counted on Ground Control. On the same frames the finger count was right in 91 to 96% of frames, compared to 28% with the models on the kiosk. **Hand sensitivity** under **Settings > Vision Match** sets the smallest hand that counts, so a hand cut off at the edge of the frame doesn't trigger a gesture.
 
 ## Performance Benchmarks
 
