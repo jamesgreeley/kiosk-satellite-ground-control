@@ -1,6 +1,6 @@
 # Installation
 
-Kiosk Satellite Ground Control runs on a CPU or an NVIDIA GPU as a Home Assistant app or a Docker container. Kiosks running [Kiosk Satellite](https://github.com/jxlarrea/kiosk-satellite) connect to it over the network.
+Kiosk Satellite Ground Control runs on a CPU or GPU accelerated (CUDA and  OpenVINO) as a Home Assistant app or a Docker container. Kiosks running [Kiosk Satellite](https://github.com/jxlarrea/kiosk-satellite) connect to it over the network.
 
 ## Choosing a Machine
 
