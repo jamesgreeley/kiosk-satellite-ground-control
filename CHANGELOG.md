@@ -2,11 +2,10 @@
 
 All notable changes to Kiosk Satellite Ground Control are documented here.
 
-## Unreleased
+## v2026.11.16 - 2026-11-26
 
 ### Added
 - **Each kiosk's own Wake Word Aligner switch.** A Kiosk Satellite that has **Enable Wake Word Aligner** sends it with each session. The Wake Word Aligner runs when it is on there and in Ground Control. A kiosk's page shows it under **Voice Match**.
-
 - **HA_TOKEN (#28).** Set `HA_TOKEN` to a long-lived Home Assistant access token and the web UI opens without logging in with Home Assistant, so there is no login and no two-factor code each time. Anyone who can reach port 10900 can then open Ground Control, and the installation page warns about it. Kiosks still sign in with their own token. If Home Assistant refuses the token, the Sign in page says so and shows **Log in with Home Assistant** instead. Ground Control's log says at the start whether the token opens the web UI. See [Skip the Login](docs/installation.md#skip-the-login).
 
 ### Changed
