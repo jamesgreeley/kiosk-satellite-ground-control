@@ -70,6 +70,51 @@ def test_a_turn_goes_out_cleaned_when_it_ends(household, speakers, voice, vad, e
     assert np.allclose(f.cleaned_audio(), expected)
 
 
+class Absent:
+    """An isolator that takes the user for absent in some turns: near silence
+    for those, as the real model answers a voiceprint it doesn't hear."""
+
+    def __init__(self, turns: set[int], level: float = 0.005) -> None:
+        self.turns, self.level, self.calls = turns, level, 0
+
+    def clean(self, audio: np.ndarray, voiceprint: np.ndarray) -> np.ndarray:
+        self.calls += 1
+        return audio * (self.level if self.calls in self.turns else 0.5)
+
+
+def test_a_turn_isolation_returns_as_near_silence_goes_on_as_it_was(household, speakers, voice, vad, embedder):
+    """The Voice Isolator now and then takes the user for absent in a short
+    command and returns it 40 dB quieter. Trimming already took those words
+    for the user's, so they reach the assistant as Trimming left them."""
+    people, _, _ = household
+    user, tv = held_out(speakers[0]), voice[speakers[2]]["test"]
+    s = (Script().add("quiet", silence(0.3)).add("user", user[2 * SR:5 * SR]).add("tv", tv[:2 * SR])
+         .add("user", user[6 * SR:8 * SR]).add("quiet", silence(1.5)))
+    f = Follow(FollowConfig(), ACCURATE, embedder, vad, people, anchor=user[: int(1.2 * SR)], isolator=Absent({1}))
+    events = []
+    for c in chunks(s.audio):
+        events += f.feed(c)
+    events += f.finish()
+    steps = [p for p in f.timeline if p["kind"] == "isolated"]
+    assert len(steps) >= 2
+    # The first turn came back 46 dB quieter: not used, and the session says so.
+    assert steps[0]["skipped"] is True and steps[0]["kept_db"] == -46
+    assert all("skipped" not in p for p in steps[1:])
+    assert of(events, "stats")[0]["isolation_skipped"] == 1 and f.isolation_skipped == 1
+    sent = np.concatenate([e["audio"] for e in of(events, "audio") if not e.get("keepalive")])
+    raw = np.concatenate([s.audio[a:b] for a, b in f.released])
+    first = int(round(of(events, "turn_end")[0]["t"] * SR)) - f.released[0][0]
+    turn1 = sum(b - a for a, b in f.released if b <= f.released[0][0] + first + 1)
+    assert np.allclose(sent[:turn1], raw[:turn1])              # as Trimming left it
+    assert np.allclose(sent[turn1:], raw[turn1:] * 0.5)        # the next turn: Isolation's output
+    # A turn that is only a little quieter is Isolation doing its work.
+    f = Follow(FollowConfig(), ACCURATE, embedder, vad, people, anchor=user[: int(1.2 * SR)],
+               isolator=Absent({1}, level=0.15))
+    events = [e for c in chunks(s.audio) for e in f.feed(c)] + f.finish()
+    assert "isolation_skipped" not in of(events, "stats")[0]
+    assert not [p for p in f.timeline if p["kind"] == "isolated" and p.get("skipped")]
+
+
 def test_a_held_turn_keeps_the_stream_open(household, speakers, voice, vad, embedder):
     """Home Assistant Cloud's speech-to-text gives up on a stream that gets
     nothing for about 6 s, so a held turn sends a little silence as it goes."""

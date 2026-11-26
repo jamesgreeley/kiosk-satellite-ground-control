@@ -80,6 +80,13 @@ class FollowConfig:
     second after the last one that the end of the turn waits for, it tells
     better what isn't the user: 2 to 2.5 dB more of the TV goes, measured on
     Echo Show 8 sessions."""
+    isolation_floor_db: float = -20.0
+    """A turn the Voice Isolator returns quieter than this, against what went
+    in, isn't used: the turn goes on as Trimming left it. The model answers a
+    voiceprint it doesn't hear with near silence, and now and then takes the
+    user for absent in a command of about a second. Trimming had already
+    judged those words the user's. In saved sessions a turn came back within
+    2 dB of what went in, or 28 to 49 dB under it."""
     tail_keep_s: float = 0.25
     """When another voice starts right as the user finishes, with no pause
     between, the check straddling the two is mostly the other voice and
@@ -261,6 +268,8 @@ class Follow:
         """Where in the stream audio last went out, for the keepalive."""
         """With Isolation on: this turn's released ranges, sent when it ends."""
         self.isolated_ms = 0
+        self.isolation_skipped = 0
+        """Turns sent as Trimming left them, since Isolation returned near silence."""
         self.dropped_s = 0.0
         self._raw: list[np.ndarray] = []
         self._raw_n = 0
@@ -414,6 +423,7 @@ class Follow:
             "checks": sum(1 for x in self.timeline if x["kind"] == "check"),
             "cpu_ms": round(self._cpu * 1000),
             **({"isolated_ms": self.isolated_ms} if self.isolator is not None else {}),
+            **({"isolation_skipped": self.isolation_skipped} if self.isolation_skipped else {}),
             **({"wake_word_s": round(self._wake_end / SR, 2)} if self.wake_word and self.wake_word["found"] else {}),
             "wall_ms": round((time.monotonic() - self._started) * 1000),
             "model": self.model.key,
@@ -769,10 +779,22 @@ class Follow:
             # The isolator hears everything kept around the turn, up to now.
             ctx = max(self._base, start - int(self.cfg.isolation_context_s * SR))
             around = self.isolator.clean(self._audio(ctx, self.n).copy(), voiceprint)
-            span = around[start - ctx:end - ctx]
+            cleaned_span = around[start - ctx:end - ctx]
             ms = round((time.perf_counter() - t0) * 1000)
             self.isolated_ms += ms
-            self.timeline.append({"t": round(end / SR, 3), "kind": "isolated", "ms": ms, "turn": self.turns})
+            step = {"t": round(end / SR, 3), "kind": "isolated", "ms": ms, "turn": self.turns}
+            # How much of the turn came back, over the pieces that go on.
+            went_in = np.concatenate([span[a - start:b - start] for a, b in held])
+            came_back = np.concatenate([cleaned_span[a - start:b - start] for a, b in held])
+            kept_db = 20 * np.log10((float(np.sqrt(np.mean(came_back ** 2))) + 1e-9)
+                                    / (float(np.sqrt(np.mean(went_in ** 2))) + 1e-9))
+            if kept_db < self.cfg.isolation_floor_db:
+                # Near silence for words Trimming took for the user's: not used.
+                self.isolation_skipped += 1
+                step.update(skipped=True, kept_db=round(kept_db))
+            else:
+                span = cleaned_span
+            self.timeline.append(step)
         cleaned = self._after_wake_word(np.concatenate([span[a - start:b - start] for a, b in held]), start, events)
         # In pieces no bigger than the stream's own, so a whole turn doesn't
         # reach Home Assistant as one message.

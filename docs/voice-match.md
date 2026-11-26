@@ -141,6 +141,8 @@ Isolation needs:
 2. **Use Isolation** is on in Ground Control under **Settings > Voice Match**.
 3. **Enable Trimming** and **Enable Isolation** on in Kiosk Satellite on each kiosk that uses it. Turn it off on a kiosk where the short wait matters more.
 
+Isolation answers a voiceprint it doesn't hear with near silence. Now and then it takes the user for absent in a command of about a second. A turn that comes back more than 20 dB quieter than it went in is therefore not used: the turn goes to the assistant as Trimming left it, with other voices still under the user's words. The session's page shows **Isolation not used** under **Steps** when that happens.
+
 While a turn is held for Isolation, a little silence is sent to keep the audio stream to Home Assistant open. This way speech-to-text that times out on a quiet stream, like Home Assistant Cloud's, still gets the command.
 
 ## Speaker Models

@@ -1395,6 +1395,9 @@ def _session_text(stats: dict[str, Any], events: list[dict[str, Any]]) -> str:
         parts.append(f"{stats['turns']} turns, {stats.get('released_s', 0)} s to the assistant")
     if stats.get("dropped_s"):
         parts.append(f"{stats['dropped_s']} s of other voices left out")
+    if stats.get("isolation_skipped"):
+        n = stats["isolation_skipped"]
+        parts.append(f"Isolation not used for {n} turn{'s' if n != 1 else ''}, which it returned as near silence")
     if stats.get("wake_word_s"):
         parts.append(f"{stats['wake_word_s']} s of the wake word left out")
     if stats.get("cpu_ms") is not None:

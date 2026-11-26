@@ -116,7 +116,8 @@ function steps(record) {
     if (e.type === "end_of_speech" && e.reason === "silence") out.push(["Speaker stopped", "Silence after the speech.", e.t]);
   }
   for (const p of record.timeline || []) {
-    if (p.kind === "isolated") out.push(["Isolation", `Other voices under the user's words were removed in ${p.ms} ms. The command went to the assistant after that.`, p.t]);
+    if (p.kind === "isolated" && p.skipped) out.push(["Isolation not used", `Isolation returned this part ${Math.abs(p.kept_db)} dB quieter, as if the user wasn't talking in it. It went to the assistant as Trimming left it, with other voices still under the user's words. Isolation took ${p.ms} ms.`, p.t]);
+    else if (p.kind === "isolated") out.push(["Isolation", `Other voices under the user's words were removed in ${p.ms} ms. The command went to the assistant after that.`, p.t]);
   }
   return out.sort((a, b) => a[2] - b[2]).map(([title, desc, t]) => h("div", { class: "row" },
     h("div", { class: "grow" }, h("div", { class: "rt" }, title), h("div", { class: "rd" }, desc)),
@@ -330,7 +331,8 @@ export async function render({ id }) {
     const lead = record.lead_in_s ? ` ${record.lead_in_s} s of silence was put in front of it because the command started right after the wake word.` : "";
     const [cleanRow, cleanAudio, cleanSpec] = follow
       ? player(`api/sessions/${id}/audio/clean`, "Sent to the assistant",
-        (stats.isolated_ms !== undefined ? "Only the user's speech: other voices left out between their words and removed under them."
+        (stats.isolation_skipped ? "Only the user's speech: other voices left out between their words. Isolation wasn't used for all of it, see Steps."
+          : stats.isolated_ms !== undefined ? "Only the user's speech: other voices left out between their words and removed under them."
           : "Only the user's speech without the other voices.") + lead,
         secs((stats.released_s ?? 0) + (record.lead_in_s || 0)))
       : player(`api/sessions/${id}/audio/clean`, record.mode === "gated" ? "Sent to the assistant" : "Cleaned",
