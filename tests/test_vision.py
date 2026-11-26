@@ -176,7 +176,7 @@ def test_a_portrait_frame_and_a_single_look(light):
 def test_a_look_for_both_reads_the_same_as_a_look_for_each(light):
     """Face Detection and Hand Gestures run at the same time in a look for both."""
     rng = np.random.default_rng(3)
-    for shape in ((480, 640, 3), (640, 480, 3), (360, 640, 3)):
+    for shape in ((480, 640, 3), (640, 480, 3), (360, 640, 3), (719, 1281, 3)):
         frame = jpeg(rng.integers(0, 255, shape, dtype=np.uint8))
         both = light.look(frame)
         face, hands = light.look(frame, want=("face",)), light.look(frame, want=("hands",))
@@ -612,3 +612,25 @@ def test_coreml_hand_prediction_retries_same_frame_on_cpu(light, monkeypatch):
     assert hand(frame) is None
     assert hand(frame) is None
     assert len(opens) == 1 and not hand.on_coreml
+
+
+def test_parallel_recognition_keeps_each_embedding_with_its_box(light, monkeypatch):
+    from ground_control.faces import TEMPLATE
+
+    class ColorEmbedder:
+        on_coreml = True
+
+        def __call__(self, crop):
+            return crop[56, 56].copy()
+
+    pixels = np.zeros((112, 336, 3), np.uint8)
+    faces = []
+    for i in range(3):
+        pixels[:, 112*i:112*(i+1), i] = 255
+        points = (TEMPLATE + [i*112, 0]) / [336, 112]
+        faces.append({"box": [i/3, 0, 1/3, 1], "points": points.tolist()})
+    monkeypatch.setitem(light.keys, "recognition", "accurate")
+    monkeypatch.setattr(light, "recognizer", ColorEmbedder())
+    result = light._recognize_faces(Image.fromarray(pixels), faces)
+    assert [box for box, _ in result] == [face["box"] for face in faces]
+    np.testing.assert_array_equal([embedding for _, embedding in result], np.eye(3)*255)

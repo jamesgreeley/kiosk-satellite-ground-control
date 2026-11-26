@@ -57,11 +57,12 @@ def similarity(src: np.ndarray, dst: np.ndarray) -> np.ndarray:
     return np.hstack([scale * r, (dm - scale * r @ sm)[:, None]])
 
 
-def align(rgb: np.ndarray, points_px: Any) -> np.ndarray:
+def align(rgb: np.ndarray | Image.Image, points_px: Any) -> np.ndarray:
     """The face lined up in a 112x112 RGB crop, from its five points in pixels."""
     m = np.vstack([similarity(np.asarray(points_px, np.float64), TEMPLATE), [0, 0, 1]])
     inv = np.linalg.inv(m)[:2]
-    img = Image.fromarray(rgb).transform((CROP, CROP), Image.AFFINE, tuple(inv.ravel()), resample=Image.BILINEAR)
+    source = rgb if isinstance(rgb, Image.Image) else Image.fromarray(rgb)
+    img = source.transform((CROP, CROP), Image.AFFINE, tuple(inv.ravel()), resample=Image.BILINEAR)
     return np.asarray(img)
 
 

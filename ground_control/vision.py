@@ -95,8 +95,8 @@ class BadFrame(ValueError):
     """The frame isn't a JPEG this service can read."""
 
 
-def decode(jpeg: bytes, rotation: int = 0) -> np.ndarray:
-    """An RGB array of the frame, turned upright: ``rotation`` is clockwise, 0, 90, 180 or 270."""
+def _decode_image(jpeg: bytes, rotation: int) -> Image.Image:
+    """Decode once and keep the upright image available for face alignment."""
     if rotation not in (0, 90, 180, 270):
         raise BadFrame("rotation must be 0, 90, 180 or 270")
     try:
@@ -105,14 +105,37 @@ def decode(jpeg: bytes, rotation: int = 0) -> np.ndarray:
                 raise BadFrame("not a JPEG")
             if img.width * img.height > MAX_PIXELS:
                 raise BadFrame("larger than 1920x1080")
-            rgb = np.asarray(img.convert("RGB"))
+            rgb = img.convert("RGB")
     except BadFrame:
         raise
     except Exception as err:  # noqa: BLE001 - anything Pillow can't read
         raise BadFrame(f"can't read the frame: {err}") from err
     if rotation:
-        rgb = np.rot90(rgb, k=-(rotation // 90))
-    return np.ascontiguousarray(rgb)
+        operation = {90: Image.Transpose.ROTATE_270, 180: Image.Transpose.ROTATE_180,
+                     270: Image.Transpose.ROTATE_90}[rotation]
+        rgb = rgb.transpose(operation)
+    return rgb
+
+
+def decode(jpeg: bytes, rotation: int = 0) -> np.ndarray:
+    """Return a contiguous upright RGB array."""
+    return np.asarray(_decode_image(jpeg, rotation))
+
+
+def _model_frame(image: Image.Image, want: tuple[str, ...]) -> tuple[np.ndarray, tuple[int, int] | None]:
+    """Resize directly from the decoded image when the requested models agree on a scale."""
+    w, h = image.size
+    scales = set()
+    if "face" in want:
+        scales.add(min(1.0, FACE_SIDE / max(h, w)))
+    if "hands" in want:
+        scales.add(min(HAND_SIZE[0] / w, HAND_SIZE[1] / h))
+    if len(scales) == 1:
+        scale = scales.pop()
+        if scale < 1:
+            size = (round(w * scale), round(h * scale))
+            return np.asarray(image.resize(size, Image.BILINEAR)), image.size
+    return np.asarray(image), None
 
 
 def turn_of(eye_a: np.ndarray, eye_b: np.ndarray, nose: np.ndarray) -> float:
@@ -331,11 +354,11 @@ class FaceModel:
             self._others.move_to_end(shape)
         return session.run(None, {self._input: x}, self._hand_back)
 
-    def __call__(self, rgb: np.ndarray) -> list[dict[str, Any]]:
-        h, w = rgb.shape[:2]
+    def __call__(self, rgb: np.ndarray, source_size: tuple[int, int] | None = None) -> list[dict[str, Any]]:
+        w, h = source_size or rgb.shape[1::-1]
         scale = min(1.0, FACE_SIDE / max(h, w))
         img = rgb
-        if scale < 1.0:
+        if scale < 1.0 and source_size is None:
             img = np.asarray(Image.fromarray(rgb).resize((round(w * scale), round(h * scale)), Image.BILINEAR))
         ih, iw = img.shape[:2]
         ph, pw = -(-ih // 32) * 32, -(-iw // 32) * 32
@@ -410,13 +433,13 @@ class HandModel:
             raise ValueError(f"{path.name} is not a HaGRIDv2 gesture model")
         self._none = self.names.index(NO_GESTURE)
 
-    def __call__(self, rgb: np.ndarray) -> dict[str, Any] | None:
-        h, w = rgb.shape[:2]
+    def __call__(self, rgb: np.ndarray, source_size: tuple[int, int] | None = None) -> dict[str, Any] | None:
+        w, h = source_size or rgb.shape[1::-1]
         tw, th = HAND_SIZE
         r = min(tw / w, th / h)
         nw, nh = round(w * r), round(h * r)
         px, py = (tw - nw) // 2, (th - nh) // 2
-        img = rgb if (nw, nh) == (w, h) else np.asarray(Image.fromarray(rgb).resize((nw, nh), Image.BILINEAR))
+        img = rgb if (nw, nh) == rgb.shape[1::-1] else np.asarray(Image.fromarray(rgb).resize((nw, nh), Image.BILINEAR))
         # Straight into the layout the model takes, scaled in place. A frame
         # of another shape sits in the middle of a gray one.
         if (nw, nh) == (tw, th):
@@ -534,17 +557,18 @@ class Vision:
         smaller than ``hand_min`` of the frame on its longer side counts as no
         hand (Hand sensitivity)."""
         t0 = time.perf_counter()
-        rgb = decode(jpeg, rotation)
+        image = _decode_image(jpeg, rotation)
+        rgb, source_size = _model_frame(image, want)
         t1 = time.perf_counter()
         ms = {"decode": round((t1 - t0) * 1000, 1)}
         faces = hand = embeddings = None
         # A look for both runs the hand model beside the face model: neither
         # needs the other's result, and one after the other took the sum of
         # the two.
-        beside = self._beside.submit(self._hand, rgb, hand_min) if "hands" in want and "face" in want else None
+        beside = self._beside.submit(self._hand, rgb, hand_min, source_size) if "hands" in want and "face" in want else None
         try:
             if "face" in want:
-                faces = self.face(rgb)
+                faces = self.face(rgb, source_size) if source_size is not None else self.face(rgb)
                 t2 = time.perf_counter()
                 ms["face"] = round((t2 - t1) * 1000, 1)
                 t1 = t2
@@ -553,7 +577,7 @@ class Vision:
                     from .faces import MAX_FACES
 
                     big = sorted(facing, key=lambda f: -f["box"][2])[:MAX_FACES]
-                    embeddings = [(f["box"], self.embed(rgb, f)) for f in big]
+                    embeddings = self._recognize_faces(image, big)
                     ms["recognize"] = round((time.perf_counter() - t1) * 1000, 1)
         except BaseException:
             if beside is not None:
@@ -562,18 +586,32 @@ class Vision:
         if beside is not None:
             hand, ms["hands"] = beside.result()
         elif "hands" in want:
-            hand, ms["hands"] = self._hand(rgb, hand_min)
+            hand, ms["hands"] = self._hand(rgb, hand_min, source_size)
         # The stages overlap in a look for both, so their times no longer add up to the look's.
         ms["total"] = round((time.perf_counter() - t0) * 1000, 1)
         return Look(faces, hand, ms, embeddings)
 
-    def _hand(self, rgb: np.ndarray, hand_min: float) -> tuple[dict[str, Any] | None, float]:
+    def _hand(self, rgb: np.ndarray, hand_min: float, source_size: tuple[int, int] | None = None) -> tuple[dict[str, Any] | None, float]:
         """The shown hand and the hand model's own time in ms."""
         t = time.perf_counter()
-        hand = self.hand(rgb)
+        hand = self.hand(rgb, source_size) if source_size is not None else self.hand(rgb)
         if hand is not None and max(hand["box"][2], hand["box"][3]) < hand_min:
             hand = None
         return hand, round((time.perf_counter() - t) * 1000, 1)
+
+    def _recognize_faces(self, image: Image.Image, faces: list[dict]) -> list[tuple[list[float], np.ndarray]]:
+        from .faces import align, points_px
+
+        def recognize(face):
+            crop = align(image, points_px(face, *image.size))
+            return face["box"], self.recognizer(crop)
+
+        if len(faces) > 1 and self.recognizer.on_coreml and self.rec_key == "accurate":
+            # Submit at most two crops; the requesting thread handles the largest.
+            # Keep the original order for the matcher's box/embedding association.
+            pending = [self._beside.submit(recognize, face) for face in faces[1:]]
+            return [recognize(faces[0])] + [job.result() for job in pending]
+        return [recognize(face) for face in faces]
 
     def embed(self, rgb: np.ndarray, face: dict[str, Any]) -> np.ndarray:
         from .faces import align, points_px
