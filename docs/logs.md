@@ -18,12 +18,14 @@ Useful lines to look for:
 | `session … ended: …` | One voice command: who talked and their score, why it ended, how much audio and how long it took. |
 | `rejected …, not one of the people this kiosk answers` | The voice was recognized but the kiosk is set to answer other people. |
 | `answers … Ground Control doesn't have` | The kiosk's chosen people aren't here. See [Chosen People Ground Control Doesn't Have](kiosks.md#chosen-people-ground-control-doesnt-have). |
-| `Isolation runs on the CPU` | Isolation adds about a second to each command. |
+| `Isolation runs on the CPU` | Isolation adds half a second or more to each command. |
 | `vision from …: face and hands with Face Recognition` | A kiosk started sending camera frames. The line lists the features it asked for. `ended after … looks` follows when it stops. |
 | `Vision Match models loaded on …` | The vision models loaded with the first look. The line gives each model and its time on this machine. |
 | `Vision Match can't run: …` or `Vision Match's models (…) failed to load` | Vision Match is off for every kiosk. The first line means the models aren't in this install. The second gives the error. |
 | `face enrollment for … not saved: …` | A face capture ended without enough good pictures. The line says why. |
 | `CUDA can't start: …` | The CUDA image can't use the GPU, so it stopped. The line says why and what the image needs. See [NVIDIA GPU](installation.md#nvidia-gpu). |
+| `OpenVINO on …` | The OpenVINO image found its Intel GPU. The line gives the GPU's name. |
+| `OpenVINO can't start: …` | The OpenVINO image can't use an Intel GPU, so it stopped. The line says why and what the image needs. See [Intel GPU](installation.md#intel-gpu). |
 
 If you run the Home Assistant app, the same log is also on the app's **Log** tab. With Docker, use `docker logs`.
 

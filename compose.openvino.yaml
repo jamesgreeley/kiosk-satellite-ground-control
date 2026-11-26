@@ -1,0 +1,40 @@
+# Kiosk Satellite Ground Control with Vision Match on an Intel GPU.
+#
+#   docker compose -f compose.openvino.yaml up -d
+#
+# The GPU can be integrated or an Arc card, from the 11th generation of Core
+# processors (Xe graphics) or newer. That includes the Intel N100. Then open
+# http://THIS_MACHINE:10900 and select Log in with Home Assistant.
+# Test builds are tagged "edge-openvino" instead of "openvino".
+
+services:
+  ground-control:
+    image: ghcr.io/jxlarrea/kiosk-satellite-ground-control:openvino
+    container_name: ground-control
+    restart: unless-stopped
+    # The host network lets kiosks on the same network find the service on
+    # their own (mDNS). Without it, publish port 10900 and enter this
+    # machine's address in each kiosk.
+    network_mode: host
+    environment:
+      # Your Home Assistant. Kiosk tokens are checked there and your browser
+      # goes there to log in, so use an address the browser can open too.
+      HA_URL: http://homeassistant.local:8123
+      # Optional, with their defaults:
+      # MODEL: auto          # accurate, light or auto (Accurate on a CPU with more than 4 cores)
+      # THREADS: 0           # threads per check, 0 is half the CPUs up to 4
+      # LEARN: "true"        # fold confident commands into each voiceprint
+      # KEEP_DAYS: 7         # days saved sessions are kept
+      # KEEP_AUDIO: "true"   # keep each session's audio
+      # PORT: 10900
+      # MDNS_ADDRESS: 192.168.1.20  # advertise this address instead of the main network's
+      # OPENVINO_DEVICE: GPU        # the GPU to use, GPU.1 for a second one
+    volumes:
+      - ground-control:/data
+    # The GPU. With more than one GPU in the machine, pass only the Intel
+    # one's render device, such as /dev/dri/renderD128.
+    devices:
+      - /dev/dri:/dev/dri
+
+volumes:
+  ground-control:

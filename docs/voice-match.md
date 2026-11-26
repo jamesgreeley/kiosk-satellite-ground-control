@@ -127,9 +127,9 @@ Trimming cuts other voices out between the user's words. Isolation uses the user
 
 | Machine | Wait per command |
 | --- | --- |
-| NVIDIA GPU | About a tenth of a second |
-| Fast x86 CPU | About a second |
-| Intel N100 | About 6 seconds |
+| NVIDIA GPU | Under a tenth of a second |
+| Fast x86 CPU | About half a second |
+| Intel N100 | About 3 seconds |
 | Raspberry Pi 4 | Too slow |
 
 On a CPU, Isolation uses a version of the model made for the CPU. It is twice as fast and gives nearly identical results.

@@ -131,7 +131,7 @@ export async function render({ area } = {}) {
     if (!usable) isolation.disabled = true;
     const isolationNote = !s.isolator_available ? "The isolation model is not in this image."
       : s.model !== s.isolator_model ? "Isolation needs the Accurate speaker model."
-      : "Each command waits for Isolation once the user stops talking: about a tenth of a second on an NVIDIA GPU and about a second on a fast x86 CPU. It is too slow on a Raspberry Pi.";
+      : "Each command waits for Isolation once the user stops talking: under a tenth of a second on an NVIDIA GPU and about half a second on a fast x86 CPU. It is too slow on a Raspberry Pi.";
 
     const aligner = toggle(s.aligner && !s.aligner_missing, "Use Wake Word Aligner", (v) => save({ aligner: v }));
     if (s.aligner_missing) aligner.disabled = true;
@@ -186,7 +186,7 @@ export async function render({ area } = {}) {
     };
     const byDefault = (feature) => defaultText(s.vision_defaults[feature]);
     const where = !s.vision_loaded ? h("span", { class: "val" }, "Loads with the first look")
-      : chip(s.vision_on_gpu ? "NVIDIA GPU (CUDA)" : "CPU", s.vision_on_gpu ? "c-ok" : "");
+      : chip(s.vision_on_gpu ? (s.openvino ? "Intel GPU (OpenVINO)" : "NVIDIA GPU (CUDA)") : "CPU", s.vision_on_gpu ? "c-ok" : "");
     const looks = s.vision_max_looks
       ? h("span", { class: "val" }, `${s.vision_max_looks.face} face, ${s.vision_max_looks.hands} hand`)
       : h("span", { class: "val" }, "Measured when they load");
@@ -243,7 +243,8 @@ export async function render({ area } = {}) {
   const general = () => [
     section("Engine", "Where voices are checked."),
     h("div", { class: "card" },
-      row("Runs on", s.cuda && !s.on_gpu ? "CUDA is on but no GPU is usable, so the CPU is used." : "Set by the CUDA option.",
+      row("Runs on", s.cuda && !s.on_gpu ? "CUDA is on but no GPU is usable, so the CPU is used."
+        : s.openvino ? `Voices are checked on the CPU in the OpenVINO image. Vision Match runs on ${s.openvino}.` : "Set by the CUDA option.",
         chip(s.on_gpu ? "NVIDIA GPU (CUDA)" : "CPU", s.on_gpu ? "c-ok" : "")),
       row("Threads", "Threads per check. Set in the app's options.", h("span", { class: "val" }, String(s.threads))),
       hint("CUDA is available in the Docker image on a machine with an NVIDIA GPU.")),

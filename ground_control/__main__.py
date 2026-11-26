@@ -9,6 +9,7 @@ from aiohttp import web
 
 from . import __version__, config, logs
 from .engine import CudaUnavailable
+from .ov import Unavailable as OpenVinoUnavailable
 from .server import build_app
 from .service import GroundControl
 
@@ -19,13 +20,13 @@ def main() -> None:
     cfg = config.load()
     log = logging.getLogger("ground_control")
     # The model chosen on the Settings page, if any, is logged once it loads.
-    log.info("Kiosk Satellite Ground Control %s: %d threads, CUDA %s, default model %s", __version__,
-             cfg.threads, "on" if cfg.cuda else "off", cfg.model)
+    log.info("Kiosk Satellite Ground Control %s: %d threads, CUDA %s%s, default model %s", __version__,
+             cfg.threads, "on" if cfg.cuda else "off", ", OpenVINO on" if cfg.openvino else "", cfg.model)
     if cfg.auth == "none":
         log.warning("AUTH=none: anyone who can reach port %d can use the service", cfg.port)
     try:
         vm = GroundControl(cfg)
-    except CudaUnavailable as err:
+    except (CudaUnavailable, OpenVinoUnavailable) as err:
         log.error("%s", err)
         sys.exit(1)
     web.run_app(build_app(vm, mdns=cfg.mdns), port=cfg.port, print=None)

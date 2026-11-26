@@ -15,6 +15,7 @@ Ground Control keeps all of its data in one folder. Back it up or copy it to ano
 | `settings.json` | The settings changed in the app, such as the speaker model, the vision models, the thresholds and Isolation. |
 | `sessions.db` | Saved sessions and each kiosk's look counts. You don't need to keep it because sessions expire after a few days anyway. |
 | `sessions/` | The audio and frames of saved sessions. Like `sessions.db`, you don't need to keep it. |
+| `openvino/` | OpenVINO image only. The models compiled for the Intel GPU. You don't need to keep it because it is built again when it is missing. |
 
 The folder's location depends on the installation:
 

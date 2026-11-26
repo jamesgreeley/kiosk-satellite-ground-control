@@ -65,7 +65,7 @@ With the Wake Word Aligner, the command starts where the wake word ends. It work
 
 Trimming leaves other voices out between the user's words. Isolation uses the user's voiceprint to also remove other voices where they overlap the user's. Turn it on under **Settings > Voice Match > Isolation**. It needs the Accurate speaker model. To turn it off for one kiosk, use **Enable Isolation** in Kiosk Satellite.
 
-Isolation processes a whole turn at once, so it adds a delay after the user stops talking. The delay is about a tenth of a second on an NVIDIA GPU (see [Performance Benchmarks](#performance-benchmarks)).
+Isolation processes a whole turn at once, so it adds a delay after the user stops talking. The delay is under a tenth of a second on an NVIDIA GPU (see [Performance Benchmarks](#performance-benchmarks)).
 
 <video src="assets/videos/voice-match-isolation.mp4" controls width="100%"></video>
 
@@ -109,8 +109,8 @@ These tables show how much latency each feature adds to a 5-second command.
 | Recognition | 0.11 s | 0.02 s | 0.27 s | 0.04 s | 0.02 s |
 | Trimming | <0.01 s | <0.01 s | 0.14 s | 0.02 s | 0.01 s |
 | Wake Word Aligner | 0.05 s | 0.02 s | 0.02 s | <0.01 s | 0.01 s |
-| Isolation | Too slow | Needs Accurate | 5.71 s | 1.21 s | 0.78 s |
-| **All features** | **<0.01 s** (no Isolation) | **<0.01 s** (no Isolation) | **5.85 s** | **1.23 s** | **0.79 s** |
+| Isolation | Too slow | Needs Accurate | 2.68 s | 0.57 s | 0.37 s |
+| **All features** | **<0.01 s** (no Isolation) | **<0.01 s** (no Isolation) | **2.82 s** | **0.59 s** | **0.38 s** |
 
 These numbers use the CPU image with Ground Control's default threads. That is 2 threads on the Pi and the N100 and 4 on the others. The MacBook Pro runs it in Docker Desktop.
 
@@ -122,10 +122,10 @@ These numbers use the CPU image with Ground Control's default threads. That is 2
 | Recognition | 0.02 s | 0.01 s | 0.01 s |
 | Trimming | 0.01 s | <0.01 s | <0.01 s |
 | Wake Word Aligner | 0.01 s | <0.01 s | 0.01 s |
-| Isolation | 0.23 s | 0.11 s | 0.11 s |
-| **All features** | **0.24 s** | **0.12 s** | **0.12 s** |
+| Isolation | 0.12 s | 0.06 s | 0.06 s |
+| **All features** | **0.13 s** | **0.07 s** | **0.07 s** |
 
-These numbers use the CUDA image with CUDA 12 on the RTX 3050 and the RTX 4000 and CUDA 13 on the GB10. Isolation's time depends on the GPU's compute, so a GPU with about half the compute takes about twice as long. `KEEP_GPU_MEMORY` is on for the GB10. It keeps Isolation's GPU memory between commands (see [GPU Memory](docs/installation.md#gpu-memory)). Without it, Isolation takes 0.16 s there. The Wake Word Aligner runs on the machine's CPU even in the CUDA image.
+These numbers use the CUDA image with CUDA 12 on the RTX 3050 and the RTX 4000 and CUDA 13 on the GB10. Isolation's time depends on the GPU's compute, so a GPU with about half the compute takes about twice as long. `KEEP_GPU_MEMORY` is on for the GB10. It keeps Isolation's GPU memory between commands (see [GPU Memory](docs/installation.md#gpu-memory)). Without it, Isolation takes 0.09 s there. The Wake Word Aligner runs on the machine's CPU even in the CUDA image.
 
 #### GPU Memory
 
@@ -136,7 +136,7 @@ This table shows how much GPU memory the CUDA image uses with the Accurate speak
 | Kept, Recognition and Trimming | 0.6 GB | 0.7 GB |
 | Kept, with Isolation | 0.8 GB | 0.9 GB |
 | Most during a command | 0.9 GB | 0.9 GB |
-| Most during a command, with Isolation | 2.3 GB | 2.4 GB |
+| Most during a command, with Isolation | 1.6 GB | 1.7 GB |
 
 Ground Control keeps the first two amounts for as long as it runs. The memory a command adds is freed once the command is done. See [GPU Memory](docs/installation.md#gpu-memory).
 
@@ -149,12 +149,12 @@ Each test sends a 5 s command between stretches of TV through Ground Control's o
 - **Wake Word Aligner** is the time to find where the wake word ends. It runs once about a second into the command while the command's first audio is still held for the voice check. It adds nothing at the end of the command.
 - **Isolation** runs once the command ends. On a CPU it uses a version of the model made for the CPU (LSTMs in 8 bits). That version is twice as fast and gives nearly identical results.
 - **All features** is the delay at the end of each command from Trimming and then Isolation.
-- On an N100, Ground Control uses the Light model by default. Accurate keeps up with one kiosk at a time, but Isolation takes about 6 s with it.
-- On a Pi 4, use the Light model. Accurate needs more CPU than a Pi 4 has, so everything runs late. Isolation needs Accurate and takes about 25 s there.
+- On an N100, Ground Control uses the Light model by default. Accurate keeps up with one kiosk at a time, but Isolation takes about 3 s with it.
+- On a Pi 4, use the Light model. Accurate needs more CPU than a Pi 4 has, so everything runs late. Isolation needs Accurate and takes about 13 s there.
 
 The Accurate model makes the fewest mix-ups between people and with TV voices. The Light model uses about a third of the CPU. With Light, a TV voice cutting in ends the command about a second later. Ground Control picks Accurate on an NVIDIA GPU, an Apple M-series chip or an x86 CPU with more than 4 cores. It picks Light on other ARM CPUs and smaller x86 CPUs like the N100. You can change it under **Settings > Voice Match** without re-enrolling anyone.
 
-On amd64, the CUDA image works with NVIDIA GPUs from the GTX 10 series (Pascal) to the RTX 50 series (Blackwell). On arm64, it works with the GB10 and other Blackwell boards. It needs 1 GB of free GPU memory or 2.5 GB with Isolation. Vision Match needs about 0.5 GB more.
+On amd64, the CUDA image works with NVIDIA GPUs from the GTX 10 series (Pascal) to the RTX 50 series (Blackwell). On arm64, it works with the GB10 and other Blackwell boards. It needs 1 GB of free GPU memory or 2 GB with Isolation. Vision Match needs about 0.5 GB more.
 
 </details>
 <p></p>
@@ -189,6 +189,20 @@ These numbers use the CPU image with Ground Control's default threads. That is 2
 | Looks a second | 29.1 | 58.7 | 58.7 |
 
 These numbers use the CUDA image with CUDA 12 on the RTX 3050 and the RTX 4000 and CUDA 13 on the GB10. The vision models' time depends on the GPU's compute, so a GPU with about half the compute takes about twice as long for them. Reading the JPEG and the rest of a look's work run on the machine's CPU even in the CUDA image, so that part doesn't change with the GPU. `KEEP_GPU_MEMORY` is on for the RTX 4000 and the GB10. It keeps the vision models' GPU memory between looks (see [GPU Memory](docs/installation.md#gpu-memory)). Without it, a look with every feature takes 21 ms on the RTX 4000 and 31 ms on the GB10.
+
+#### Intel GPU (OpenVINO)
+
+| | Intel N100 | i9-13900H |
+|---|---|---|
+| GPU | UHD Graphics | Iris Xe |
+| Vision models | Light, Accurate recognition | Light, Accurate recognition |
+| Face Detection | 29 ms | 10 ms |
+| Hand Gestures | 26 ms | 9 ms |
+| Face Recognition | 37 ms | 10 ms |
+| **All features** | **81 ms** | **25 ms** |
+| Looks a second | 12.4 | 40.4 |
+
+These numbers use the OpenVINO image, which runs the vision models on the machine's Intel GPU. The models are the same defaults as on the CPU. With every model on Accurate, a look takes 409 ms on the N100 and 102 ms on the Iris Xe. Most of that is Accurate Hand Gestures, at 314 ms and 75 ms. Voice Match runs on the CPU in this image, so its numbers are the CPU table's. See [Intel GPU](docs/installation.md#intel-gpu).
 
 #### GPU Memory
 
@@ -240,9 +254,9 @@ The app needs Home Assistant OS or a Supervised install. For Isolation on an NVI
 
 ### Standalone Docker Container
 
-Use the Docker container to run Ground Control on a machine other than Home Assistant's or on an NVIDIA GPU.
+Use the Docker container to run Ground Control on a machine other than Home Assistant's, on an NVIDIA GPU or on an Intel GPU.
 
-**Docker Compose:** [compose.yaml](compose.yaml) for the CPU and [compose.cuda.yaml](compose.cuda.yaml) for an NVIDIA GPU. Set `HA_URL` in the file, then run `docker compose up -d` (or `docker compose -f compose.cuda.yaml up -d`). Both use the host network, so the service is discovered automatically on the same network.
+**Docker Compose:** [compose.yaml](compose.yaml) for the CPU, [compose.cuda.yaml](compose.cuda.yaml) for an NVIDIA GPU and [compose.openvino.yaml](compose.openvino.yaml) for an Intel GPU. Set `HA_URL` in the file, then run `docker compose up -d` (or `docker compose -f compose.cuda.yaml up -d`). All three use the host network, so the service is discovered automatically on the same network.
 
 **Docker, CPU:**
 
@@ -259,6 +273,16 @@ docker run -d --name ground-control --gpus all -p 10900:10900 \
   -e HA_URL=http://homeassistant.local:8123 \
   -v ground-control:/data ghcr.io/jxlarrea/kiosk-satellite-ground-control:cuda
 ```
+
+**Docker, Intel GPU:**
+
+```bash
+docker run -d --name ground-control --device /dev/dri -p 10900:10900 \
+  -e HA_URL=http://homeassistant.local:8123 \
+  -v ground-control:/data ghcr.io/jxlarrea/kiosk-satellite-ground-control:openvino
+```
+
+The OpenVINO image runs Vision Match on an Intel GPU, integrated or Arc, from the 11th generation of Core processors or newer. Voice Match runs on the CPU there as in the CPU image. See [Intel GPU](docs/installation.md#intel-gpu).
 
 If you use `-p 10900:10900` instead of the host network, the service isn't discovered automatically. Enter this machine's address in each kiosk.
 
@@ -283,7 +307,7 @@ The GPU needs to be from the GTX 10 series or newer. The host needs an NVIDIA dr
 ## Documentation
 
 - [Getting started](docs/getting-started.md): the steps from installing Ground Control to recognizing who is talking to a kiosk and who is looking at it.
-- [Installation](docs/installation.md): the Home Assistant app, Docker on a CPU or an NVIDIA GPU, options and updating.
+- [Installation](docs/installation.md): the Home Assistant app, Docker on a CPU, an NVIDIA GPU or an Intel GPU, options and updating.
 - [Kiosks](docs/kiosks.md): connecting and approving kiosks, kiosks on another network and each kiosk's page.
 - [People](docs/people.md): adding people, enrollment and personal commands.
 - [Voice Match](docs/voice-match.md): Recognition, Trimming, the Wake Word Aligner, Isolation and the speaker models.

@@ -15,7 +15,11 @@ Variable             Meaning                                      Default
 ``CUDA``             run the speaker model on an NVIDIA GPU       ``false``
 ``KEEP_GPU_MEMORY``  Isolation and the vision models keep         ``false``
                      their GPU memory between runs: faster,
-                     about 2.25 GB more held
+                     about 1 GB more held
+``OPENVINO``         run the vision models on an Intel GPU        ``false``, ``true`` in the
+                     with OpenVINO                                OpenVINO image
+``OPENVINO_DEVICE``  the GPU OpenVINO uses, such as ``GPU.1``     ``GPU``
+                     for a second one
 ``HA_URL``           Home Assistant: kiosk tokens and the web     ``http://homeassistant:8123``, or
                      UI's login, so a browser must reach it too   ``auto`` (from the Supervisor) as an app
 ``PORT``             the service port                             ``10900``
@@ -61,6 +65,8 @@ class Config:
     supervisor_token: str | None = None
     update_check: bool = False
     keep_gpu_memory: bool = False
+    openvino: bool = False
+    openvino_device: str = "GPU"
 
 
 def _bool(value: object) -> bool:
@@ -78,6 +84,9 @@ def load() -> Config:
 
     cpus = os.cpu_count() or 2
     cuda = _bool(get("CUDA", "false"))
+    openvino = _bool(get("OPENVINO", "false"))
+    if cuda and openvino:
+        raise ValueError("CUDA and OPENVINO can't both be on")
     model = str(get("MODEL", "auto")).lower()
     if model == "auto":
         model = default_model_key(platform.machine(), cpus, cuda, apple_silicon())
@@ -111,4 +120,6 @@ def load() -> Config:
         # As an app, Home Assistant offers the updates itself.
         update_check=_bool(get("UPDATE_CHECK", "true")) and not os.environ.get("SUPERVISOR_TOKEN"),
         keep_gpu_memory=_bool(get("KEEP_GPU_MEMORY", "false")),
+        openvino=openvino,
+        openvino_device=str(get("OPENVINO_DEVICE", "GPU")).strip() or "GPU",
     )

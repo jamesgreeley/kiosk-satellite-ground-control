@@ -1428,7 +1428,8 @@ def _report_header(vm: GroundControl) -> list[str]:
         f"Runs {'as a Home Assistant app' if vm.cfg.supervisor_token else 'standalone'}"
         f" on {platform.system()} {platform.machine()}, Python {platform.python_version()}",
         f"Speaker model {vm.model.label} on {'the GPU' if vm.active.on_gpu else 'the CPU'}"
-        f" ({vm.cfg.threads} threads, CUDA {'on' if vm.cfg.cuda else 'off'}),"
+        f" ({vm.cfg.threads} threads, CUDA {'on' if vm.cfg.cuda else 'off'}"
+        f"{', OpenVINO on ' + s['openvino'] if s.get('openvino') else ''}),"
         f" thresholds {vm.model.threshold} and {vm.model.other_threshold}",
         f"Settings: {json.dumps({k: v for k, v in s.items() if k not in ('models', 'default_threshold', 'default_other_threshold')}, separators=(', ', ': '))}",
         f"People: {len(vm.people.all())}, {sum(vm.people.has_voice(p.id) for p in vm.people.all())} with a voice",

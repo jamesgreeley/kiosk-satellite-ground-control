@@ -1,0 +1,42 @@
+# OpenVINO image: standalone Docker on an Intel GPU, integrated or Arc (amd64).
+#   docker build -f Dockerfile.openvino -t kiosk-satellite-ground-control:openvino .
+#   docker run --device /dev/dri ...
+#
+# The vision models run through OpenVINO on the Intel GPU. The speaker models,
+# the Wake Word Aligner and Isolation run in ONNX Runtime on the CPU as in the
+# CPU image, where they are as fast or faster.
+#
+# Ubuntu 26.04 has an Intel compute runtime (intel-opencl-icd) recent enough
+# for the GPUs of Core Ultra processors and Arc cards. Debian's is too old or
+# missing.
+FROM ubuntu:26.04
+
+ARG BUILD_VERSION=dev
+ARG BUILD_ARCH=""
+LABEL org.opencontainers.image.title="Kiosk Satellite Ground Control" \
+      org.opencontainers.image.source="https://github.com/jxlarrea/kiosk-satellite-ground-control" \
+      org.opencontainers.image.version="${BUILD_VERSION}" \
+      io.hass.type="addon" io.hass.name="Kiosk Satellite Ground Control" \
+      io.hass.version="${BUILD_VERSION}" io.hass.arch="${BUILD_ARCH}"
+
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 MODELS_DIR=/app/models OPENVINO=true \
+    PIP_BREAK_SYSTEM_PACKAGES=1 DEBIAN_FRONTEND=noninteractive
+
+# espeak-ng says how a wake word is pronounced, to find where it ends.
+RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-pip espeak-ng intel-opencl-icd \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY pyproject.toml README.md LICENSE ./
+COPY ground_control ./ground_control
+RUN pip install --no-cache-dir --root-user-action=ignore ".[openvino]" && rm -rf /root/.cache
+# The same models as the CPU image: Isolation runs the Voice Isolator made for the CPU.
+COPY models/silero_vad.onnx models/redimnet2_b3_multi.onnx models/redimnet2_b1.onnx models/voice_isolator_cpu.onnx \
+     models/wake_word_aligner.onnx models/scrfd_2.5g.onnx models/scrfd_10g.onnx models/yolov10n_gestures.onnx \
+     models/yolov10x_gestures.onnx models/arcface_w600k_mbf.onnx models/arcface_w600k_r50.onnx \
+     models/*.LICENSE.md ./models/
+
+VOLUME /data
+EXPOSE 10900
+HEALTHCHECK --interval=30s --timeout=5s CMD python3 -c "import urllib.request,os;urllib.request.urlopen(f'http://127.0.0.1:{os.environ.get(\"PORT\",\"10900\")}/health')"
+CMD ["python3", "-m", "ground_control"]

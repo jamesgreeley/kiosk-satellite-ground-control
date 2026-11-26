@@ -16,7 +16,8 @@ dependencies = [
 
 [project.optional-dependencies]
 cuda = ["onnxruntime-gpu>=1.20"]
-dev = ["pytest>=8", "pytest-asyncio>=0.24", "pytest-aiohttp>=1.0"]
+openvino = ["openvino>=2026.4"]
+dev = ["pytest>=8", "pytest-asyncio>=0.24", "pytest-aiohttp>=1.0", "openvino>=2026.4"]
 
 [project.scripts]
 ground-control = "ground_control.__main__:main"

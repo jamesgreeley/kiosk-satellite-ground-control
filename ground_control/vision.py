@@ -224,9 +224,18 @@ class FaceModel:
     """SCRFD with five face points."""
 
     def __init__(self, path: Path, threshold: float, threads: int, use_cuda: bool, gpu: GpuThread,
-                 keep_memory: bool = False) -> None:
+                 keep_memory: bool = False, openvino: Any = None) -> None:
+        """``openvino``: the Intel GPU to run on in the OpenVINO image (``ov.Gpu``)."""
         self.threshold = threshold
         self._gpu = gpu
+        self._ov = None
+        if openvino is not None:
+            # Compiled for each frame shape, as many as a CUDA GPU has sessions for.
+            self._ov = openvino.model(path, shapes=FACE_SHAPES)
+            self.session, self.on_gpu, self._input = None, True, self._ov.inputs[0]
+            if self._ov.outputs != 9:
+                raise ValueError(f"{path.name} is not a SCRFD model with face points")
+            return
         self._path, self._options = path, session_options(threads)
         self.session = gpu(open_session, path, self._options, use_cuda, LEAN_CUDA)
         self.on_gpu = self.session.get_providers()[0] == "CUDAExecutionProvider"
@@ -244,6 +253,8 @@ class FaceModel:
 
     def _run(self, x: np.ndarray) -> list[np.ndarray]:
         """The model on a prepared frame. Runs on the GPU thread, so sessions are opened one at a time."""
+        if self._ov is not None:
+            return self._ov.run({self._input: x})
         if not self.on_gpu:
             return self.session.run(None, {self._input: x})
         shape = (x.shape[2], x.shape[3])
@@ -317,14 +328,19 @@ class HandModel:
     """YOLOv10 trained on HaGRIDv2's gestures. Its class names come from the model file."""
 
     def __init__(self, path: Path, threshold: float, threads: int, use_cuda: bool, gpu: GpuThread,
-                 keep_memory: bool = False) -> None:
+                 keep_memory: bool = False, openvino: Any = None) -> None:
         self.threshold = threshold
         self._gpu = gpu
-        self.session = gpu(open_session, path, session_options(threads), use_cuda, LEAN_CUDA)
-        self.on_gpu = self.session.get_providers()[0] == "CUDAExecutionProvider"
-        self._input = self.session.get_inputs()[0].name
-        self._after_run = run_options(self.on_gpu and not keep_memory)
-        names = ast.literal_eval(self.session.get_modelmeta().custom_metadata_map.get("names", "{}"))
+        self._ov = openvino.model(path) if openvino is not None else None
+        if self._ov is not None:
+            self.session, self.on_gpu, self._input = None, True, self._ov.inputs[0]
+            names = ast.literal_eval(self._ov.metadata("names") or "{}")
+        else:
+            self.session = gpu(open_session, path, session_options(threads), use_cuda, LEAN_CUDA)
+            self.on_gpu = self.session.get_providers()[0] == "CUDAExecutionProvider"
+            self._input = self.session.get_inputs()[0].name
+            self._after_run = run_options(self.on_gpu and not keep_memory)
+            names = ast.literal_eval(self.session.get_modelmeta().custom_metadata_map.get("names", "{}"))
         self.names = [names[i] for i in range(len(names))]
         if NO_GESTURE not in self.names:
             raise ValueError(f"{path.name} is not a HaGRIDv2 gesture model")
@@ -345,7 +361,10 @@ class HandModel:
             x = np.full((1, 3, th, tw), 114, np.float32)
         x[0, :, py:py + nh, px:px + nw] = img.transpose(2, 0, 1)
         x /= 255.0
-        out = self._gpu(self.session.run, None, {self._input: x}, self._after_run)[0][0]  # (4 + classes, places)
+        if self._ov is not None:
+            out = self._gpu(self._ov.run, {self._input: x})[0][0]
+        else:
+            out = self._gpu(self.session.run, None, {self._input: x}, self._after_run)[0][0]  # (4 + classes, places)
         scores = out[4:]
         shown = scores.copy()
         shown[self._none] = 0
@@ -380,30 +399,33 @@ class Vision:
     kiosk."""
 
     def __init__(self, models_dir: Path, keys: dict[str, str], threads: int = 1, use_cuda: bool = False,
-                 keep_memory: bool = False) -> None:
-        """``keep_memory``: on a GPU, the models keep their memory between looks
-        (the ``KEEP_GPU_MEMORY`` setting, see KEEPS)."""
+                 keep_memory: bool = False, openvino: Any = None) -> None:
+        """``keep_memory``: on an NVIDIA GPU, the models keep their memory
+        between looks (the ``KEEP_GPU_MEMORY`` setting, see KEEPS).
+        ``openvino``: the Intel GPU the models run on in the OpenVINO image
+        (``ov.Gpu``)."""
         self.keys = dict(keys)
         face, hand, rec = (VISION_MODELS[f][keys[f]] for f in ("face", "hands", "recognition"))
-        self._gpu = GpuThread(use_cuda, "gpu-vision")
+        on_gpu = use_cuda or openvino is not None
+        self._gpu = GpuThread(on_gpu, "gpu-vision")
         # The hand model runs beside the face model in a look that asks for
         # both (see ``look``), so on a GPU it has a thread of its own.
-        self._gpu_hands = GpuThread(use_cuda, "gpu-vision-hands")
+        self._gpu_hands = GpuThread(on_gpu, "gpu-vision-hands")
         self._beside = ThreadPoolExecutor(AT_ONCE, thread_name_prefix="vision-hands")
         try:
             self.face = FaceModel(verified_path(models_dir, face.file, face.sha256),
-                                  face.threshold, threads, use_cuda, self._gpu, keep_memory)
+                                  face.threshold, threads, use_cuda, self._gpu, keep_memory, openvino)
             self.hand = HandModel(verified_path(models_dir, hand.file, hand.sha256),
-                                  hand.threshold, threads, use_cuda, self._gpu_hands, keep_memory)
+                                  hand.threshold, threads, use_cuda, self._gpu_hands, keep_memory, openvino)
             from .faces import FaceEmbedder
 
             self.recognizer = FaceEmbedder(verified_path(models_dir, rec.file, rec.sha256),
-                                           threads, use_cuda, self._gpu, keep_memory)
+                                           threads, use_cuda, self._gpu, keep_memory, openvino)
         except Exception:
             self.close()
             raise
         self.on_gpu = self.face.on_gpu and self.hand.on_gpu and self.recognizer.on_gpu
-        self.keeps_memory = self.on_gpu and keep_memory
+        self.keeps_memory = self.on_gpu and keep_memory and openvino is None
         self.ms: dict[str, float] = {}
         """Each feature's model time on this machine, in ms: a face look, a
         hand look and one face recognized. Measured when the models load."""

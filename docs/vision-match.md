@@ -89,9 +89,9 @@ Each feature has its own Light or Accurate model under **Settings > Vision Match
 
 | Feature | Light | Accurate | Default |
 | --- | --- | --- | --- |
-| Face Detection | SCRFD 2.5G | SCRFD 10G | Accurate on an NVIDIA GPU. Light on a CPU. |
-| Hand Gestures | YOLOv10n | YOLOv10x | Accurate on an NVIDIA GPU. Light on a CPU. |
-| Face Recognition | ArcFace MobileFaceNet | ArcFace R50 | Accurate on an NVIDIA GPU, an x86 CPU or an Apple M-series chip. Light on other ARM CPUs. |
+| Face Detection | SCRFD 2.5G | SCRFD 10G | Accurate on an NVIDIA GPU. Light on a CPU and on an Intel GPU. |
+| Hand Gestures | YOLOv10n | YOLOv10x | Accurate on an NVIDIA GPU. Light on a CPU and on an Intel GPU. |
+| Face Recognition | ArcFace MobileFaceNet | ArcFace R50 | Accurate on an NVIDIA GPU, an Intel GPU, an x86 CPU or an Apple M-series chip. Light on other ARM CPUs. |
 
 Both hand models are trained on HaGRIDv2 gestures. What each choice changes:
 
@@ -111,11 +111,13 @@ A look with every feature on each machine's default models:
 | Intel N100 | Light, Accurate recognition | 292 ms |
 | i9-13900H | Light, Accurate recognition | 64 ms |
 | MacBook Pro M5, in Docker | Light, Accurate recognition | 70 ms |
+| Intel N100 with the OpenVINO image | Light, Accurate recognition | 81 ms |
+| i9-13900H's Iris Xe with the OpenVINO image | Light, Accurate recognition | 25 ms |
 | RTX 3050 | Accurate | 34 ms |
 | RTX 4000 SFF Ada | Accurate | 17 ms |
 | GB10 | Accurate | 17 ms |
 
-The GPU numbers are with `KEEP_GPU_MEMORY` on. On a Pi 4, Face Detection dismisses the screensaver about a second after a face looks at the kiosk. Hand Gestures feel slow there because a gesture needs more than one look. See [Performance Benchmarks](../README.md#performance-benchmarks) for each feature's time and how it is measured.
+The NVIDIA GPU numbers are with `KEEP_GPU_MEMORY` on. The OpenVINO image runs the vision models on the machine's Intel GPU (see [Intel GPU](installation.md#intel-gpu)). On a Pi 4, Face Detection dismisses the screensaver about a second after a face looks at the kiosk. Hand Gestures feel slow there because a gesture needs more than one look. See [Performance Benchmarks](../README.md#performance-benchmarks) for each feature's time and how it is measured.
 
 ### GPU Memory
 

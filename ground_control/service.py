@@ -62,6 +62,14 @@ class GroundControl:
         if self.hub.new:
             self.hub.approve_known(self.sessions.list(limit=100000))
         self.pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="vm")
+        self._openvino = None
+        """The Intel GPU of the OpenVINO image. Checked here, so an image
+        without a usable GPU stops at once with the reason."""
+        if cfg.openvino:
+            from .ov import Gpu
+
+            self._openvino = Gpu(cfg.openvino_device, cfg.data_dir / "openvino")
+            _LOG.info("OpenVINO on %s", self._openvino.name)
         self._embedders: dict[str, Embedder] = {}
         self._settings_file = cfg.data_dir / "settings.json"
         saved = self._saved()
@@ -125,6 +133,7 @@ class GroundControl:
                 "default_threshold": base.threshold, "default_other_threshold": base.other_threshold,
                 "learn": self.learn, "keep_days": self.sessions.keep_days,
                 "keep_audio": self.sessions.keep_audio, "keep_frames": self.sessions.keep_frames, "cuda": self.cfg.cuda, "on_gpu": self.active.on_gpu,
+                "openvino": self._openvino.name if self._openvino is not None else None,
                 "threads": self.cfg.threads, "port": self.cfg.port,
                 "isolator": self.isolate, "isolator_available": self._isolator_files() != [],
                 "isolator_model": ISOLATOR_MODEL,
@@ -289,7 +298,8 @@ class GroundControl:
                 names = ", ".join(f"{f} {VISION_MODELS[f][k].label}" for f, k in self.vision_keys.items())
                 try:
                     self._vision = Vision(self.cfg.models_dir, self.vision_keys, threads=self.cfg.threads,
-                                          use_cuda=self.cfg.cuda, keep_memory=self.cfg.keep_gpu_memory)
+                                          use_cuda=self.cfg.cuda, keep_memory=self.cfg.keep_gpu_memory,
+                                          openvino=self._openvino)
                 except Exception as err:  # noqa: BLE001 - reported on the status page
                     self._vision_error = f"Vision Match's models ({names}) failed to load: {err}"
                     self.status.errors.append(self._vision_error)
@@ -374,7 +384,7 @@ class GroundControl:
                     return None
                 where = "the GPU" if self._isolator.on_gpu else "the CPU"
                 if not self._isolator.on_gpu:
-                    _LOG.warning("Isolation runs on the CPU: each command waits about a second for it")
+                    _LOG.warning("Isolation runs on the CPU: each command waits half a second or more for it")
                 _LOG.info("Isolation model %s loaded on %s%s", self._isolator.version, where,
                           ", keeping its GPU memory between commands" if self._isolator.keeps_memory else "")
             return self._isolator

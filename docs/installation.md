@@ -8,15 +8,16 @@ Every Voice Match and Vision Match feature runs on the Ground Control machine in
 
 | Machine | Speaker model | Isolation | Vision Match look |
 | --- | --- | --- | --- |
-| NVIDIA GPU | Accurate | About a tenth of a second per command | 17 to 34 ms |
-| x86 CPU with more than 4 cores | Accurate | About a second per command | 64 ms on an i9-13900H |
-| Mac with an Apple M-series chip | Accurate | Under a second per command on an M5 | 70 ms on an M5 |
-| Intel N100 and other small x86 CPUs | Light | About 6 seconds per command with Accurate | 292 ms |
+| NVIDIA GPU | Accurate | Under a tenth of a second per command | 17 to 34 ms |
+| x86 CPU with more than 4 cores | Accurate | About half a second per command | 64 ms on an i9-13900H |
+| Mac with an Apple M-series chip | Accurate | Under half a second per command on an M5 | 70 ms on an M5 |
+| Intel N100 and other small x86 CPUs | Light | About 3 seconds per command with Accurate | 292 ms |
+| Intel GPU with the OpenVINO image | As on the machine's CPU | As on the machine's CPU | 81 ms on an Intel N100, 25 ms on an Iris Xe |
 | Raspberry Pi 4, Home Assistant Green and other ARM boards | Light | Too slow | 671 ms on a Pi 4 |
 
 The Vision Match column is a look with Face Detection, Face Recognition and Hand Gestures on the machine's default vision models. See [Performance Benchmarks](../README.md#performance-benchmarks) for the measured times. Isolation is optional, so a small machine still runs Recognition, Trimming and the Wake Word Aligner. Vision Match runs on every machine in the table. On a Pi 4, Face Detection dismisses the screensaver about a second after a face looks at the kiosk. See [Vision Models](vision-match.md#vision-models).
 
-On amd64, the CUDA image works with NVIDIA GPUs from the GTX 10 series (Pascal) to the RTX 50 series (Blackwell). On arm64, it works with the GB10 and other Blackwell boards. It needs 1 GB of free GPU memory or 2.5 GB with Isolation. Vision Match needs about 0.5 GB more.
+On amd64, the CUDA image works with NVIDIA GPUs from the GTX 10 series (Pascal) to the RTX 50 series (Blackwell). On arm64, it works with the GB10 and other Blackwell boards. It needs 1 GB of free GPU memory or 2 GB with Isolation. Vision Match needs about 0.5 GB more.
 
 ## Home Assistant App
 
@@ -54,14 +55,14 @@ People, voiceprints, faces, kiosks and saved sessions are stored in the app's ow
 
 ## Docker
 
-Docker Compose files are in the repository: [compose.yaml](../compose.yaml) for the CPU and [compose.cuda.yaml](../compose.cuda.yaml) for an NVIDIA GPU.
+Docker Compose files are in the repository: [compose.yaml](../compose.yaml) for the CPU, [compose.cuda.yaml](../compose.cuda.yaml) for an NVIDIA GPU and [compose.openvino.yaml](../compose.openvino.yaml) for an Intel GPU.
 
 1. Download the file for your machine.
 2. Set `HA_URL` to your Home Assistant.
-3. Run `docker compose up -d`. For the GPU, run `docker compose -f compose.cuda.yaml up -d`.
+3. Run `docker compose up -d`. For a GPU, name the file: `docker compose -f compose.cuda.yaml up -d` or `docker compose -f compose.openvino.yaml up -d`.
 4. Open `http://THIS_MACHINE:10900` and choose **Log in with Home Assistant**.
 
-Both files use the host network, so Ground Control is discovered automatically on the same network. If you don't use the host network, publish port 10900 and enter the machine's address in each kiosk.
+All three files use the host network, so Ground Control is discovered automatically on the same network. If you don't use the host network, publish port 10900 and enter the machine's address in each kiosk.
 
 To run it without Compose:
 
@@ -77,6 +78,14 @@ For an NVIDIA GPU, add `--gpus all` and use the `cuda` tag:
 docker run -d --name ground-control --network host --gpus all \
   -e HA_URL=http://homeassistant.local:8123 \
   -v ground-control:/data ghcr.io/jxlarrea/kiosk-satellite-ground-control:cuda
+```
+
+For an Intel GPU, add `--device /dev/dri` and use the `openvino` tag:
+
+```bash
+docker run -d --name ground-control --network host --device /dev/dri \
+  -e HA_URL=http://homeassistant.local:8123 \
+  -v ground-control:/data ghcr.io/jxlarrea/kiosk-satellite-ground-control:openvino
 ```
 
 `HA_URL` is used in two ways. Kiosk tokens are checked there and you log in to the web app there from your browser. Use an address your browser can open. Avoid one that only works inside Docker.
@@ -105,13 +114,29 @@ Ground Control picks the Accurate speaker model and the Accurate Face Recognitio
 
 The CUDA image needs:
 
-- An NVIDIA GPU with 1 GB of free memory or 2.5 GB with Isolation, and about 0.5 GB more for Vision Match. On amd64, it can be any GPU from the GTX 10 series (Pascal) to the RTX 50 series (Blackwell). On arm64, it can be the GB10 or another Blackwell board.
+- An NVIDIA GPU with 1 GB of free memory or 2 GB with Isolation, and about 0.5 GB more for Vision Match. On amd64, it can be any GPU from the GTX 10 series (Pascal) to the RTX 50 series (Blackwell). On arm64, it can be the GB10 or another Blackwell board.
 - An NVIDIA driver from the 570 series or newer on amd64 or 580 or newer on arm64.
 - The [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) on the host.
 
 The image is built for amd64 and arm64, so it also runs on an NVIDIA GB10. The CUDA image runs on the GPU or not at all. If it can't use the GPU, it stops and logs a line that starts with `CUDA can't start`. The line gives the reason. For example, no GPU is visible to the container or the driver is too old. Use the CPU image on a machine without a supported GPU.
 
 > **Info:** If Docker runs inside an LXC container on Proxmox, `nvidia-smi` fails with "Failed to initialize NVML: Unknown Error" until you set `nvidia-ctk config --set nvidia-container-cli.no-cgroups --in-place` and pass the devices to the container: `--device /dev/nvidia0 --device /dev/nvidiactl --device /dev/nvidia-uvm --device /dev/nvidia-uvm-tools`.
+
+### Intel GPU
+
+The OpenVINO image runs Vision Match's models on an Intel GPU with OpenVINO. A look takes a fraction of its time on the CPU (see [Performance Benchmarks](../README.md#performance-benchmarks)). Voice Match runs on the CPU as in the CPU image: the speaker models, the Wake Word Aligner and Isolation are as fast or faster there.
+
+The OpenVINO image needs:
+
+- An Intel GPU from the 11th generation of Core processors (Xe graphics) or newer. It can be integrated, including the one in an Intel N100, or an Arc card. It was tested on an Iris Xe and on an Intel N100.
+- The GPU passed to the container with `--device /dev/dri`. The host needs nothing installed for it beyond its normal graphics driver.
+- An amd64 machine.
+
+The vision models take about 0.3 GB of memory on the GPU, or 0.5 GB with every model on Accurate. An integrated GPU takes that from the machine's own memory.
+
+Each model is compiled for the GPU the first time it runs, which takes a few seconds. The compiled models are kept in the `openvino` folder of the data volume, so later starts load them in under a second. The folder takes about 0.1 GB and can be deleted at any time.
+
+The OpenVINO image runs Vision Match on the GPU or not at all. If it can't use the GPU, it stops and logs a line that starts with `OpenVINO can't start`. The line gives the reason. For example, no GPU is visible to the container or the GPU isn't an Intel one. With more than one GPU in the machine, pass only the Intel GPU's render device, such as `--device /dev/dri/renderD128`, or set `OPENVINO_DEVICE` to the one to use, such as `GPU.1`.
 
 ### GPU Memory
 
@@ -122,11 +147,11 @@ This table shows how much GPU memory Ground Control uses with the Accurate speak
 | Kept, Recognition and Trimming | 0.6 GB | 0.7 GB |
 | Kept, with Isolation | 0.8 GB | 0.9 GB |
 | Most during a command | 0.9 GB | 0.9 GB |
-| Most during a command, with Isolation | 2.3 GB | 2.4 GB |
+| Most during a command, with Isolation | 1.6 GB | 1.7 GB |
 
-Ground Control keeps the first two amounts for as long as it runs. While a command runs, it needs up to 0.3 GB more. With Isolation, a command of 10 seconds or longer needs up to 1.5 GB more. That memory is freed once the command is done. Commands that end at the same moment are cleaned one after the other, so the total never goes above that. If the GPU is shared with an LLM or speech-to-text, leave that much free for Ground Control.
+Ground Control keeps the first two amounts for as long as it runs. While a command runs, it needs up to 0.3 GB more. With Isolation, a command of 10 seconds or longer needs up to 0.8 GB more. That memory is freed once the command is done. Commands that end at the same moment are cleaned one after the other, so the total never goes above that. If the GPU is shared with an LLM or speech-to-text, leave that much free for Ground Control.
 
-If the GPU has memory to spare, set `KEEP_GPU_MEMORY` to `true`. Isolation then keeps about 2 GB more memory between commands. Each command is done about 0.05 s sooner on a GB10 and 0.01 s sooner on an RTX 4000. Vision Match's models keep about 0.25 GB more between looks. A look with every feature then takes 17 ms instead of 31 ms on a GB10 and 17 ms instead of 21 ms on an RTX 4000.
+If the GPU has memory to spare, set `KEEP_GPU_MEMORY` to `true`. Isolation then keeps about 0.75 GB more memory between commands. Each command is done about 0.03 s sooner on a GB10 and 0.01 s sooner on an RTX 4000. Vision Match's models keep about 0.25 GB more between looks. A look with every feature then takes 17 ms instead of 31 ms on a GB10 and 17 ms instead of 21 ms on an RTX 4000.
 
 ### Environment Variables
 
@@ -143,6 +168,7 @@ If the GPU has memory to spare, set `KEEP_GPU_MEMORY` to `true`. Isolation then 
 | `MDNS_ADDRESS` | the main network's | The address kiosks get. See [Kiosks on Another Network](kiosks.md#kiosks-on-another-network). |
 | `DATA_DIR` | `/data` | Where people, voiceprints, faces, kiosks and sessions are stored. |
 | `UPDATE_CHECK` | `true` | Look for a new Ground Control version on GitHub every 12 hours and show it on Overview. |
+| `OPENVINO_DEVICE` | `GPU` | OpenVINO image only. The GPU to use when the machine has more than one, such as `GPU.1`. See [Intel GPU](#intel-gpu). |
 | `KEEP_GPU_MEMORY` | `false` | CUDA image only. Isolation and the vision models keep their GPU memory between runs instead of handing it back. See [GPU Memory](#gpu-memory). |
 
 ## Updating

@@ -79,19 +79,28 @@ def jpeg(crop: np.ndarray, quality: int = 92) -> bytes:
 class FaceEmbedder:
     """A face crop to a unit-length embedding."""
 
-    def __init__(self, path: Path, threads: int, use_cuda: bool, gpu: GpuThread, keep_memory: bool = False) -> None:
+    def __init__(self, path: Path, threads: int, use_cuda: bool, gpu: GpuThread, keep_memory: bool = False,
+                 openvino: Any = None) -> None:
+        """``openvino``: the Intel GPU to run on in the OpenVINO image (``ov.Gpu``)."""
         from .vision import session_options
 
+        self._gpu = gpu
+        self._ov = openvino.model(path) if openvino is not None else None
+        if self._ov is not None:
+            self.session, self.on_gpu, self._input = None, True, self._ov.inputs[0]
+            return
         self.session = gpu(open_session, path, session_options(threads), use_cuda, LEAN_CUDA)
         self.on_gpu = self.session.get_providers()[0] == "CUDAExecutionProvider"
         self._input = self.session.get_inputs()[0].name
-        self._gpu = gpu
         # On a GPU the memory of a run goes back after it, unless KEEP_GPU_MEMORY is on.
         self._after_run = run_options(self.on_gpu and not keep_memory)
 
     def __call__(self, crop: np.ndarray) -> np.ndarray:
         x = ((crop.astype(np.float32) - 127.5) / 127.5).transpose(2, 0, 1)[None]
-        v = self._gpu(self.session.run, None, {self._input: x}, self._after_run)[0][0].astype(np.float32)
+        if self._ov is not None:
+            v = self._gpu(self._ov.run, {self._input: np.ascontiguousarray(x)})[0][0].astype(np.float32)
+        else:
+            v = self._gpu(self.session.run, None, {self._input: x}, self._after_run)[0][0].astype(np.float32)
         return v / max(float(np.linalg.norm(v)), 1e-9)
 
 

@@ -9,8 +9,8 @@ identified.
 
 The separator looks at a whole stretch of audio at once. Follow mode holds a
 turn's audio while the user talks and releases it cleaned when the turn ends.
-It is meant for an NVIDIA GPU: a 3 s command takes about 50 ms on a GB10 and
-about a second on four cores of an i9-13900H.
+It is meant for an NVIDIA GPU: a 5 s command takes about 90 ms on a GB10 and
+about 0.6 s on four cores of an i9-13900H.
 
 Long turns run in overlapping windows, so memory stays bounded. Lengths are
 padded to whole half seconds, so a GPU sees few distinct input shapes.
@@ -41,8 +41,8 @@ class Isolator:
     def __init__(self, path: Path, threads: int = 1, use_cuda: bool = False, keep_memory: bool = False) -> None:
         """``keep_memory``: on a GPU, keep the memory a command used for the
         next one (the ``KEEP_GPU_MEMORY`` setting). Taking it again for every
-        command costs about 50 ms on a GB10 and 10 ms on an RTX 4000. It holds
-        about 2 GB more."""
+        command costs about 30 ms on a GB10 and 10 ms on an RTX 4000. It holds
+        about 0.75 GB more."""
         so = session_options(threads)
         so.log_severity_level = 3
         # A thread of its own, not the speaker model's: voice checks go on
