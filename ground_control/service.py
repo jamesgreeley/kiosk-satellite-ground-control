@@ -136,6 +136,7 @@ class GroundControl:
                 "default_threshold": base.threshold, "default_other_threshold": base.other_threshold,
                 "learn": self.learn, "keep_days": self.sessions.keep_days,
                 "keep_audio": self.sessions.keep_audio, "keep_frames": self.sessions.keep_frames, "cuda": self.cfg.cuda, "on_gpu": self.active.on_gpu,
+                "speaker_on_coreml": getattr(self.active, "on_coreml", False),
                 "openvino": self._openvino.name if self._openvino is not None else None,
                 "threads": self.cfg.threads, "port": self.cfg.port,
                 "isolator": self.isolate, "isolator_available": self._isolator_files() != [],
@@ -412,7 +413,8 @@ class GroundControl:
             m = SPEAKER_MODELS[key]
             self._embedders[key] = Embedder(verified_path(self.cfg.models_dir, m.file, m.sha256),
                                             threads=self.cfg.threads, use_cuda=self.cfg.cuda)
-            where = "the GPU" if self._embedders[key].on_gpu else "the CPU"
+            where = ("the GPU" if self._embedders[key].on_gpu else
+                     "Core ML and the CPU" if getattr(self._embedders[key], "on_coreml", False) else "the CPU")
             _LOG.info("%s model loaded on %s", m.label, where)
         return self._embedders[key]
 

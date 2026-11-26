@@ -566,3 +566,22 @@ async def test_hand_sensitivity_sets_the_smallest_hand_counted(client):
     assert result["hand"] is None and fake.hand_min == pytest.approx(0.188)
     await client.patch("/api/settings", json={"hand_sensitivity": 100}, headers=GOOD)
     assert vm.hand_min_size == 0.0
+
+
+def test_fixed_coreml_detector_reuses_fallback_after_failed_compile(light, monkeypatch):
+    from ground_control import vision
+
+    if not apple_neural_engine_available():
+        pytest.skip("native Apple Silicon Core ML is unavailable")
+    calls = []
+
+    def fail(path, shape):
+        calls.append(shape)
+        raise RuntimeError("conversion unavailable")
+
+    monkeypatch.setattr(vision, "fixed_scrfd_session", fail)
+    monkeypatch.setattr(light.face, "_fixed", {})
+    x = np.zeros((1, 3, 384, 640), np.float32)
+    for _ in range(2):
+        assert len(light.face._run(x)) == 9
+    assert calls == [(384, 640)]

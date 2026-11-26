@@ -197,7 +197,7 @@ export async function render({ area } = {}) {
     const byDefault = (feature) => defaultText(s.vision_defaults[feature]);
     const where = !s.vision_loaded ? h("span", { class: "val" }, "Loads with the first look")
       : chip(s.vision_on_gpu ? (s.openvino ? "Intel GPU (OpenVINO)" : "NVIDIA GPU (CUDA)")
-        : s.vision_on_coreml ? "Apple Neural Engine (Core ML)" : "CPU", s.vision_on_gpu || s.vision_on_coreml ? "c-ok" : "");
+        : s.vision_on_coreml ? "Apple Core ML" : "CPU", s.vision_on_gpu || s.vision_on_coreml ? "c-ok" : "");
     const looks = s.vision_max_looks
       ? h("span", { class: "val" }, `${s.vision_max_looks.face} face, ${s.vision_max_looks.hands} hand`)
       : h("span", { class: "val" }, "Measured when they load");
@@ -223,7 +223,7 @@ export async function render({ area } = {}) {
         row("Hand Gestures", `Accurate reads the finger count right more often at 3 m and in dim light. The hand model runs on every look, so on a CPU Accurate lowers the looks a second each kiosk gets.${byDefault("hands")}${measured("hands", "a look")}`, pick("hands")),
         row("Face Recognition", `Accurate recognizes small faces in dim light more often. A recognized face is checked again only every 2 seconds, so Accurate costs little even on a CPU. Faces are rebuilt from their pictures, so nobody has to enroll again.${byDefault("recognition")}${measured("recognition", "a face")}`, pick("recognition")),
         row("Runs on", s.vision_on_coreml
-          ? "Light Face Detection and Face Recognition use Core ML with Apple Neural Engine acceleration when supported; Accurate Face Detection and Hand Gestures use the CPU."
+          ? "Face Detection and Face Recognition use Core ML on supported frames. Hand Gestures uses the CPU."
           : "Set by the CUDA or OpenVINO option.", where),
         row("Looks a second", "For one kiosk, measured on this machine when the models load. Kiosks look at most 2 times a second for faces and 4 for hands.", looks),
         s.vision_error ? hint(s.vision_error)
@@ -257,8 +257,9 @@ export async function render({ area } = {}) {
     section("Engine", "Where voices are checked."),
     h("div", { class: "card" },
       row("Runs on", s.cuda && !s.on_gpu ? "CUDA is on but no GPU is usable, so the CPU is used."
+        : s.speaker_on_coreml ? "Tuned speaker windows use Core ML. Other lengths use the CPU."
         : s.openvino ? `Voices are checked on the CPU in the OpenVINO image. Vision Match runs on ${s.openvino}.` : "Set by the CUDA option.",
-        chip(s.on_gpu ? "NVIDIA GPU (CUDA)" : "CPU", s.on_gpu ? "c-ok" : "")),
+        chip(s.on_gpu ? "NVIDIA GPU (CUDA)" : s.speaker_on_coreml ? "Core ML and CPU" : "CPU", s.on_gpu || s.speaker_on_coreml ? "c-ok" : "")),
       row("Threads", "Threads per check. Set in the app's options.", h("span", { class: "val" }, String(s.threads))),
       hint("CUDA is available in the Docker image on a machine with an NVIDIA GPU.")),
 

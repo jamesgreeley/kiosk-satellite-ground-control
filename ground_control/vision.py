@@ -26,6 +26,7 @@ import ast
 import io
 import logging
 import time
+import threading
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -221,6 +222,29 @@ def _r(v: float) -> float:
     return round(float(v), 4)
 
 
+# Compile only common kiosk dimensions. Other sizes keep the fully dynamic
+# session so a stream of unusual frame sizes cannot grow the compilation cache.
+_COREML_FRAME_SIZES = {(480, 640), (384, 640), (640, 480)}
+
+
+def fixed_scrfd_session(path: Path, shape: tuple[int, int]):
+    """Specialize SCRFD's input and all nine anchor outputs for Core ML."""
+    import onnx
+    import onnxruntime as ort
+
+    height, width = shape
+    graph = onnx.load(path)
+    dims = graph.graph.input[0].type.tensor_type.shape.dim
+    dims[2].dim_value, dims[3].dim_value = height, width
+    del graph.graph.value_info[:]  # Let ORT infer intermediates for this frame.
+    for i, output in enumerate(graph.graph.output):
+        stride = (8, 16, 32)[i % 3]
+        output.type.tensor_type.shape.dim[0].dim_value = 2 * (height // stride) * (width // stride)
+    opts = {"ModelFormat": "NeuralNetwork", "MLComputeUnits": "CPUAndNeuralEngine"}
+    return ort.InferenceSession(graph.SerializeToString(), session_options(1),
+                                providers=[("CoreMLExecutionProvider", opts), "CPUExecutionProvider"])
+
+
 class FaceModel:
     """SCRFD with five face points."""
 
@@ -241,8 +265,11 @@ class FaceModel:
         # Core ML handles the convolution-heavy detector outside ORT's CPU
         # pool. More ORT worker threads add contention at its CPU partitions;
         # one thread was consistently as fast or faster in the M1 Pro sweep.
-        self._path, self._options = path, session_options(1 if use_coreml else threads)
-        self.session = gpu(open_session, path, self._options, use_cuda, LEAN_CUDA, use_coreml)
+        self._fixed = {} if use_coreml and not use_cuda else None
+        self._fixed_lock = threading.Lock()
+        dynamic_coreml = use_coreml and path.stem == "scrfd_2.5g"
+        self._path, self._options = path, session_options(1 if dynamic_coreml else threads)
+        self.session = gpu(open_session, path, self._options, use_cuda, LEAN_CUDA, dynamic_coreml)
         self.on_gpu = self.session.get_providers()[0] == "CUDAExecutionProvider"
         self.on_coreml = "CoreMLExecutionProvider" in self.session.get_providers()
         self._input = self.session.get_inputs()[0].name
@@ -262,6 +289,26 @@ class FaceModel:
         if self._ov is not None:
             return self._ov.run({self._input: x})
         if not self.on_gpu:
+            shape = x.shape[2:]
+            if self._fixed is not None and shape in _COREML_FRAME_SIZES:
+                with self._fixed_lock:
+                    if shape not in self._fixed:
+                        try:
+                            self._fixed[shape] = fixed_scrfd_session(self._path, shape)
+                        except Exception as err:
+                            _LOG.warning("Core ML specialization failed for %s: %s", shape, err)
+                            self._fixed[shape] = None
+                    session = self._fixed[shape]
+                if session is not None:
+                    try:
+                        result = session.run(None, {self._input: x})
+                    except Exception as err:
+                        _LOG.warning("Core ML prediction failed for %s: %s", shape, err)
+                        with self._fixed_lock:
+                            self._fixed[shape] = None
+                    else:
+                        self.on_coreml = "CoreMLExecutionProvider" in session.get_providers()
+                        return result
             return self.session.run(None, {self._input: x})
         shape = (x.shape[2], x.shape[3])
         if self._first is None:
@@ -423,7 +470,7 @@ class Vision:
         try:
             self.face = FaceModel(verified_path(models_dir, face.file, face.sha256),
                                   face.threshold, threads, use_cuda, self._gpu, keep_memory, openvino,
-                                  use_coreml=apple_neural_engine_available() and face.key == "light")
+                                  use_coreml=apple_neural_engine_available())
             self.hand = HandModel(verified_path(models_dir, hand.file, hand.sha256),
                                   hand.threshold, threads, use_cuda, self._gpu_hands, keep_memory, openvino)
             from .faces import FaceEmbedder
@@ -437,12 +484,15 @@ class Vision:
             self.close()
             raise
         self.on_gpu = self.face.on_gpu and self.hand.on_gpu and self.recognizer.on_gpu
-        self.on_coreml = self.face.on_coreml or self.recognizer.on_coreml
         self.keeps_memory = self.on_gpu and keep_memory and openvino is None
         self.ms: dict[str, float] = {}
         """Each feature's model time on this machine, in ms: a face look, a
         hand look and one face recognized. Measured when the models load."""
         self.max_looks = self._measure()
+
+    @property
+    def on_coreml(self) -> bool:
+        return self.face.on_coreml or self.recognizer.on_coreml
 
     @property
     def rec_key(self) -> str:

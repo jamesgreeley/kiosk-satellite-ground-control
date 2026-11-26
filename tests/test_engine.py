@@ -98,3 +98,25 @@ def test_coreml_without_cache_option_retries_without_disk_cache(monkeypatch, tmp
     assert isinstance(result, Session)
     assert "ModelCacheDirectory" in calls[0][0][1]
     assert calls[1][0] == ("CoreMLExecutionProvider", engine.COREML_OPTIONS)
+
+
+def test_tuned_speaker_window_retries_on_cpu_if_embedding_is_invalid():
+    import numpy as np
+
+    class Session:
+        def __init__(self, vector):
+            self.vector = vector
+
+        def run(self, *args):
+            return [np.array([self.vector], dtype=np.float32)]
+
+    model = engine.Embedder.__new__(engine.Embedder)
+    model._lock = threading.Lock()
+    model._rank, model._input, model.calls = 2, "waveform", 0
+    model.session = Session([3, 4])
+    model._coreml_windows = {16000: Session([np.nan, 1])}
+    model._own, model._keeps_memory = {}, 16000
+    model._gpu, model._hand_back = GpuThread(False, "speaker"), None
+    result = model.embed(np.zeros(16000, dtype=np.float32))
+    np.testing.assert_allclose(result, [0.6, 0.8])
+    assert not model.on_coreml and model.calls == 1

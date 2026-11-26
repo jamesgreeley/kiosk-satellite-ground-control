@@ -188,22 +188,30 @@ These numbers use the CPU image with Ground Control's default threads. That is 2
 
 #### Apple Silicon (Core ML)
 
-On native macOS, Ground Control uses ONNX Runtime's Core ML provider for Light Face Detection and Face Recognition. The Light recognition model uses Core ML's NeuralNetwork conversion; the larger Accurate model uses MLProgram. Core ML's compute plan confirmed that supported convolution layers run on the Apple Neural Engine, with unsupported nodes on the CPU. Accurate Face Detection stays on the CPU because its dynamic outputs fail Core ML shape validation; the Accurate speaker model and Isolation also stay on the CPU because their variable audio windows were slower on Core ML in these measurements.
+On native macOS, both SCRFD face detectors specialize their input and nine output shapes for 640×480, 640×384 and 480×640 tensors after resizing and padding. Core ML compiles each size on first use and reuses the session. Other sizes use the dynamic Light detector or the Accurate CPU detector. Recognition uses Core ML NeuralNetwork for Light and MLProgram for Accurate. The Accurate recognition compute plan assigned convolution layers to the Neural Engine.
 
 | Vision stage (model-level) | CPU | Core ML | Change |
 |---|---:|---:|---:|
-| Light Face Detection, 640×480 | 23.3 ms | 11.7 ms | 2.0× faster |
-| Light Face Detection, 640×384 | 19.2 ms | 9.7 ms | 2.0× faster |
+| Light Face Detection, 640×480 | 22.6 ms | 4.8 ms | 4.7× faster |
+| Light Face Detection, 640×384 | 18.1 ms | 4.0 ms | 4.5× faster |
+| Accurate Face Detection, 640×480 | 73.2 ms | 9.3 ms | 7.9× faster |
 | Light Face Recognition, one 112×112 crop | 6.1 ms | 0.8 ms | 7.6× faster |
 | Accurate Face Recognition, one 112×112 crop | 56.1 ms | 3.2 ms | 17.5× faster |
 
-A repeated thread-count sweep (1, 2, 4, 8 and 16 ONNX Runtime intra-op threads) found no gain from a larger CPU pool on the Core ML paths. Light detection and recognition use one thread; Accurate recognition uses two. For the Light recognition graph, an interleaved eight-run comparison measured 0.817 ms with `CPUAndNeuralEngine` and 0.824 ms with `ALL`, so it keeps the Neural Engine-specific setting. Accurate Face Detection remains on the CPU because its dynamic outputs fail Core ML shape validation. A warmed full Vision model load measured 13.0 ms for Light detection and 2.5 ms for Light recognition on Core ML, versus 23.5 ms and 6.1 ms on CPU; hands are unchanged and run alongside detection.
+A repeated thread-count sweep (1, 2, 4, 8 and 16 ONNX Runtime intra-op threads) found no gain from a larger CPU pool on the Core ML paths. Light detection and recognition use one thread; Accurate recognition uses two. For the Light recognition graph, an interleaved eight-run comparison measured 0.817 ms with `CPUAndNeuralEngine` and 0.824 ms with `ALL`, so it keeps the Neural Engine-specific setting.
 
-Voice Match did not benefit from the same change. Across 0.5, 1, 2 and 4 s windows, both speaker models were slower with Core ML. For the Accurate model's 2 s window, the median was 52.1 ms on CPU and 83.4 ms with Core ML's NeuralNetwork conversion; MLProgram returned non-finite embeddings on the sampled input. The CPU Isolation model took 547.6 ms for 5 s of audio, compared with 876.0 ms on Core ML MLProgram and 1,327.6 ms on Core ML NeuralNetwork. Voice Match and Isolation therefore remain on CPU.
+Voice Match can use Core ML for half-second increments from 0.5 to 4 seconds. Run the local tuner once after installing the Apple tuning dependencies. It simplifies the speaker graph for each length and saves only configurations with at least 10% lower median latency, equal or lower p95, and embedding cosine similarity of at least 0.999 on its test signals. Restart Ground Control to load the selected windows. Other lengths use the CPU. On the M1 Pro, the Accurate 2 s window fell from 42.3 to 18.6 ms. Voice isolation still performed best on CPU.
 
-An end-to-end Vision run with warm model caches on an M1 Pro measured Light Face Detection at 23.5 ms on CPU and 13.0 ms with Core ML, and Light Face Recognition at 6.1 ms and 2.5 ms. Hand Gestures took 34.0 ms on CPU and 29.9 ms with the same face workload beside it. These are model-stage timings from a blank test frame, not a rerun of the 64-frame kiosk benchmark above. The model-level run used macOS 27.2.1, ONNX Runtime 1.32.0, four CPU baseline threads and the tuned Core ML thread counts above; it profiles deterministic synthetic tensors, so it measures latency and numeric output agreement rather than face-recognition accuracy on people. Embedding cosine similarity between CPU and Core ML was 0.99998 for the Light model and 0.99540 for Accurate on those synthetic inputs. Please validate match rates with enrolled faces before relying on that accuracy-sensitive stage.
+```sh
+python -m pip install '.[apple-tuning]'
+python tools/tune_coreml_voice.py --threads 4
+```
 
-Core ML's first model load compiles the graph and took about 5 seconds for both models together on this M1 Pro; a later load from the compiled-model cache took about 3 seconds. Compiled graphs are cached under the user's macOS Caches folder, keyed by the ONNX file hash and ONNX Runtime version. To rerun the model-level comparison on an Apple Silicon Mac, use `python tools/benchmark_apple_silicon.py --suite face --iterations 40`; add `--tune` to compare Core ML's NeuralNetwork conversion, `--tune-compute-units` to sweep CPU, GPU, Neural Engine and ALL, or `--profile-compute-plan` to log hardware assignment. Use `--suite voice --tune` to compare variable speaker-model windows and CPU isolation. These voice tests use deterministic synthetic audio, so they measure inference timing and basic output agreement, not speaker identification quality on recordings.
+Use the service's thread count and optionally supply a representative mono 16 kHz, 16-bit PCM recording with `--wav`. The tuner also checks silence and seeded noise. Loading all eight Accurate windows took 15.9 s on the M1 Pro. Peak resident memory of the standalone speaker process reached 534 MiB.
+
+On 18 resized and mirrored variations of the scikit-image astronaut photograph, both detectors agreed with CPU on one face in every frame. Median times including preprocessing and decoding fell from 24.1 to 8.0 ms for Light and from 76.0 to 12.6 ms for Accurate. The largest change in a reported box coordinate was 0.0003 of the frame dimension. This checks one subject. The table measures warmed model inference on synthetic inputs. Embedding cosine similarity between CPU and Core ML was 0.99998 for the Light model and 0.99540 for Accurate on those synthetic inputs. Please validate match rates with enrolled faces before relying on that accuracy-sensitive stage.
+
+Ground Control caches compiled recognition graphs under the user's macOS Caches folder, keyed by the ONNX file hash and ONNX Runtime version. Fixed detector sessions compile once per size in each process. To rerun the model-level comparison on an Apple Silicon Mac, use `python tools/benchmark_apple_silicon.py --suite face --iterations 40`; add `--tune` to compare Core ML's NeuralNetwork conversion, `--tune-compute-units` to sweep CPU, GPU, Neural Engine and ALL, or `--profile-compute-plan` to log hardware assignment. Use `--suite voice --tune` to compare variable speaker-model windows and CPU isolation. These voice tests use deterministic synthetic audio, so they measure inference timing and basic output agreement, not speaker identification quality on recordings.
 
 #### NVIDIA GPU (CUDA)
 

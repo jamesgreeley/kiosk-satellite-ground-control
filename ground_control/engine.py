@@ -114,6 +114,15 @@ def _coreml_cache(path: Path) -> str:
                / ort.__version__ / digest.hexdigest())
 
 
+def speaker_profile_dir(path: Path, threads: int) -> Path:
+    """Local measurements are relative to the configured CPU thread count."""
+    return Path(_coreml_cache(path)) / "speaker-v1" / f"threads-{threads}"
+
+
+def speaker_compute_units(samples: int) -> str:
+    return "CPUAndNeuralEngine" if samples <= 16000 else "ALL"
+
+
 class CudaUnavailable(RuntimeError):
     """CUDA is on, but a model can't run on the GPU. A CUDA image runs on the
     GPU or not at all: it never falls back to the CPU on its own."""
@@ -253,6 +262,20 @@ class Embedder:
         except BaseException:
             self._gpu.close()
             raise
+        self._coreml_windows = {}
+        if not use_cuda and apple_neural_engine_available() and path.stem.startswith("redimnet2_"):
+            folder = speaker_profile_dir(path, threads)
+            for seconds in OWN_SESSION_S:
+                samples = int(seconds * 16000)
+                fixed = folder / f"{samples}.onnx"
+                if fixed.is_file():
+                    try:
+                        session = open_session(fixed, so, False, use_coreml=True, coreml_options={
+                            "MLComputeUnits": speaker_compute_units(samples)})
+                        if "CoreMLExecutionProvider" in session.get_providers():
+                            self._coreml_windows[samples] = session
+                    except Exception as err:
+                        _LOG.warning("Could not load tuned speaker window %s: %s", fixed, err)
         self._keeps_memory = int(KEEPS_MEMORY_S * 16000)
         self._hand_back = run_options(self.on_gpu)
         inp = self.session.get_inputs()[0]
@@ -265,6 +288,10 @@ class Embedder:
             self.embed(np.zeros(n, dtype=np.float32))
         self.calls = 0
         malloc_trim()
+
+    @property
+    def on_coreml(self) -> bool:
+        return bool(self._coreml_windows)
 
     def embed(self, audio: np.ndarray) -> np.ndarray:
         """Unit-length embedding of float32 audio in [-1, 1].
@@ -284,6 +311,22 @@ class Embedder:
         x = x[None, None, :] if self._rank == 3 else x[None, :]
         n = x.shape[-1]
         session = self._own.get(n, self.session)
+        with self._lock:
+            coreml = self._coreml_windows.get(n)
+        if coreml is not None:
+            try:
+                vector = coreml.run(None, {self._input: x})[0][0].astype(np.float32)
+                norm = float(np.linalg.norm(vector))
+                if not np.isfinite(norm) or norm <= 0:
+                    raise ValueError("invalid embedding")
+            except Exception as err:
+                _LOG.warning("Disabling Core ML speaker window %s: %s", n, err)
+                with self._lock:
+                    self._coreml_windows.pop(n, None)
+            else:
+                with self._lock:
+                    self.calls += 1
+                return vector / norm
         if n == self._keeps_memory and n in self._own:
             e = self._gpu(session.run, None, {self._input: x})[0][0]
         else:

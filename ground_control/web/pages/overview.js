@@ -70,7 +70,7 @@ export async function render() {
       })
     : [h("div", { class: "empty" }, "No sessions yet.")];
 
-  const where = status.on_gpu ? "Running on the GPU" : "Running on the CPU";
+  const where = status.on_gpu ? "Running on the GPU" : status.speaker_on_coreml ? "Running on Core ML and CPU" : "Running on the CPU";
   return {
     nodes: [
       shell("overview"),
@@ -124,7 +124,7 @@ export async function render() {
               feature("eye", "Face Detection and Hand Gestures",
                 `Faces looking at the kiosk and raised fingers. ${visionModels(settings)}`,
                 settings.vision_error ? chip("Can't run", "c-err")
-                  : settings.vision_loaded ? chip(settings.vision_on_gpu ? "On, GPU" : "On, CPU", "c-ok") : chip("Not loaded yet"),
+                  : settings.vision_loaded ? chip(settings.vision_on_gpu ? "On, GPU" : settings.vision_on_coreml ? "On, Core ML" : "On, CPU", "c-ok") : chip("Not loaded yet"),
                 "vision-match"),
               feature("person", "Face Recognition", `Who is looking at each kiosk. It shows in each kiosk's Face sensor. ${modelName(settings.vision_models?.recognition)} model.`,
                 settings.faces_enrolled ? chip(`${settings.faces_enrolled} ${settings.faces_enrolled === 1 ? "face" : "faces"}`, "c-ok") : chip("No faces yet"),

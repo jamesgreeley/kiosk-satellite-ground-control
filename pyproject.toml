@@ -9,12 +9,14 @@ dependencies = [
     "aiohttp>=3.10",
     "cryptography>=42",
     "numpy>=1.26,<2.4",
+    "onnx>=1.16; sys_platform == 'darwin' and platform_machine == 'arm64'",
     "onnxruntime>=1.20",
     "pillow>=10",
     "zeroconf>=0.130",
 ]
 
 [project.optional-dependencies]
+apple-tuning = ["onnxsim>=0.8.1; sys_platform == 'darwin' and platform_machine == 'arm64'"]
 cuda = ["onnxruntime-gpu>=1.20"]
 openvino = ["openvino>=2026.4"]
 dev = ["pytest>=8", "pytest-asyncio>=0.24", "pytest-aiohttp>=1.0", "openvino>=2026.4"]

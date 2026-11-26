@@ -15,7 +15,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
+import sys
 import platform
 import statistics
 import tempfile
@@ -183,6 +183,29 @@ def main() -> None:
                                 ["CPUExecutionProvider"], None, embedding)
         cpu["provider"] = "CPUExecutionProvider"
         print(json.dumps(cpu, sort_keys=True), flush=True)
+        if model.startswith("scrfd_"):
+            if str(ROOT) not in sys.path:
+                sys.path.insert(0, str(ROOT))
+            from ground_control.vision import fixed_scrfd_session
+
+            shape = feed["input.1"].shape[2:]
+            started = time.perf_counter()
+            session = fixed_scrfd_session(path, shape)
+            startup_ms = (time.perf_counter() - started) * 1000
+            outputs = session.run(None, feed)
+            for _ in range(3):
+                session.run(None, feed)
+            samples = []
+            for _ in range(args.iterations):
+                started = time.perf_counter()
+                session.run(None, feed)
+                samples.append((time.perf_counter() - started) * 1000)
+            print(json.dumps({"case": label, "provider": "fixed Core ML NeuralNetwork",
+                              "active_providers": session.get_providers(), "threads": 1,
+                              "startup_ms": startup_ms, "median_ms": statistics.median(samples),
+                              "p95_ms": float(np.percentile(samples, 95)),
+                              "max_delta_per_output": [float(np.abs(a-b).max())
+                                                       for a, b in zip(outputs, baseline, strict=True)]}), flush=True)
         if not args.tune and not apple_default:
             continue
         production_settings = dict(COREML[1])

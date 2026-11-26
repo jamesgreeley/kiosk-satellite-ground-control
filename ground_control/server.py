@@ -297,7 +297,8 @@ async def status(request: web.Request) -> web.Response:
     return web.json_response({**asdict(vm.status), "version": __version__, "people": len(vm.people.all()),
                               "model_label": vm.model.label, "threshold": vm.model.threshold,
                               "other_threshold": vm.model.other_threshold, "cuda": vm.cfg.cuda,
-                              "on_gpu": vm.active.on_gpu, "threads": vm.cfg.threads,
+                              "on_gpu": vm.active.on_gpu, "speaker_on_coreml": getattr(vm.active, "on_coreml", False),
+                              "threads": vm.cfg.threads,
                               "kiosks": sum(k.connected for k in vm.hub.kiosks.values()),
                               "isolation": vm.isolator() is not None,
                               # Whether each runs here, for the kiosks' own switches on the Kiosks page.

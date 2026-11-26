@@ -175,7 +175,7 @@ HA_URL="http://homeassistant.local:8123" \
 ground-control
 ```
 
-Replace `HA_URL` with the address of your Home Assistant. Core ML is selected automatically for Light Face Detection and Accurate Face Recognition when the macOS ONNX Runtime package includes its Core ML provider. Voice Match and Isolation stay on the CPU. See [Apple Silicon Core ML benchmarks](../README.md#apple-silicon-core-ml).
+Replace `HA_URL` with the address of your Home Assistant. Core ML is selected automatically for face detection and recognition when the macOS ONNX Runtime package includes its Core ML provider. The optional speaker tuner enables Core ML for measured Voice Match windows. Isolation uses the CPU. See [Apple Silicon Core ML benchmarks](../README.md#apple-silicon-core-ml).
 
 With this Docker install, Ground Control on a Mac isn't discovered automatically. Docker runs it in a small Linux VM, so its mDNS announcement doesn't reach your network. Docker Desktop's host network option doesn't change that. Give the Mac a fixed address in your router so the address in each kiosk keeps working.
 
