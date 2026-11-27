@@ -15,7 +15,7 @@ Changes are saved right away and take precedence over the app's options or the c
 | Setting | Default | What it does |
 | --- | --- | --- |
 | **Engine** | | |
-| Runs on | | NVIDIA GPU (CUDA) or CPU. CUDA is available in the Docker image on a machine with an NVIDIA GPU. |
+| Runs on | | Shows where speaker checks run. On native macOS, **Core ML and CPU** means the local tuner selected one or more audio lengths. Other backends include CPU, CUDA and Vulkan. See [speaker tuning](apple-silicon.md#speaker-recognition). |
 | Threads | half the CPUs, up to 4 | Threads per check. Set in the app's options or with `THREADS`. |
 | **Sessions** | | |
 | Keep sessions for | 7 days | Older sessions, their audio and their frames are deleted. See [Sessions](sessions.md#keeping-sessions). |

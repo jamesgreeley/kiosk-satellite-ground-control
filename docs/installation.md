@@ -1,6 +1,6 @@
 # Installation
 
-Kiosk Satellite Ground Control runs on a CPU or GPU accelerated (CUDA, OpenVINO and Vulkan) as a Home Assistant app or a Docker container. Kiosks running [Kiosk Satellite](https://github.com/jxlarrea/kiosk-satellite) connect to it over the network.
+Kiosk Satellite Ground Control runs on a CPU or GPU accelerated (CUDA, OpenVINO and Vulkan) as a Home Assistant app or a Docker container. On Apple Silicon, a native macOS install supports Core ML. Kiosks running [Kiosk Satellite](https://github.com/jxlarrea/kiosk-satellite) connect to it over the network.
 
 ## Choosing a Machine
 
@@ -10,7 +10,8 @@ Every Voice Match and Vision Match feature runs on the Ground Control machine in
 | --- | --- | --- | --- |
 | NVIDIA GPU | Accurate | Under a tenth of a second per command | 17 to 34 ms |
 | x86 CPU with more than 4 cores | Accurate | About half a second per command | 64 ms on an i9-13900H |
-| Mac with an Apple M-series chip | Accurate | Under half a second per command on an M5 | 70 ms on an M5 |
+| [Native macOS on Apple Silicon](#run-natively-for-core-ml) | Accurate, with optional Core ML tuning | CPU | See [M1 Pro camera timings](apple-silicon.md#complete-camera-requests) |
+| Mac with an Apple M-series chip in Docker | Accurate | Under half a second per command on an M5 | 70 ms on an M5 |
 | Intel N100 and other small x86 CPUs | Light | About 3 seconds per command with Accurate | 292 ms |
 | Intel GPU with the OpenVINO image | As on the machine's CPU | As on the machine's CPU | 81 ms on an Intel N100, 25 ms on an Iris Xe |
 | AMD GPU with the Vulkan image | As on the machine's CPU | Depends on the GPU | Depends on the GPU. See [AMD GPU](#amd-gpu) |
@@ -215,6 +216,33 @@ It has not been tested on a Radeon card yet.
 
 ### Mac with Apple Silicon
 
+#### Run natively for Core ML
+
+Use an M-series Mac and a native arm64 Python 3.12 installation. From Terminal, clone the Apple Silicon branch of this fork and install from the repository root.
+
+```bash
+git clone --branch codex/apple-coreml-ane https://github.com/jamesgreeley/kiosk-satellite-ground-control.git
+cd kiosk-satellite-ground-control
+python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install '.[apple-tuning]'
+python -c 'import platform, onnxruntime as ort; print(platform.machine(), ort.get_available_providers())'
+```
+
+Check for `arm64` and `CoreMLExecutionProvider` in the output. Face detection, face recognition and gestures select Core ML automatically. To also tune speaker recognition, run `python tools/tune_coreml_voice.py --threads 4` once on this Mac before starting the service. Use the same thread count when starting Ground Control.
+
+```bash
+DATA_DIR="$HOME/Library/Application Support/Ground Control" \
+MODELS_DIR="$PWD/models" \
+HA_URL="http://homeassistant.local:8123" \
+THREADS=4 \
+.venv/bin/ground-control
+```
+
+Set `HA_URL` to the address you use to open Home Assistant. Leave Terminal open, visit `http://localhost:10900` and choose **Log in with Home Assistant**. If a kiosk needs an address, enter the Mac’s LAN address and port 10900. In Ground Control, **Settings > Vision Match > Runs on** shows the vision backend. **Settings > General > Engine** shows where speaker checks run. See [Apple Silicon performance](apple-silicon.md) to measure latency with your own frames.
+
+#### Run the CPU image in Docker
+
 Ground Control runs with the CPU image in [Docker Desktop](https://www.docker.com/products/docker-desktop/) or [OrbStack](https://orbstack.dev) on a Mac with an Apple M-series chip. Docker on a Mac can't use the Mac's GPU or Neural Engine, so everything runs on the CPU. An M-series chip is fast enough for every feature. On a MacBook Pro M5, all Voice Match features together add about 0.8 s to a 5 s command. A look with every Vision Match feature takes 70 ms.
 
 1. Install Docker Desktop or OrbStack.
@@ -228,22 +256,6 @@ Ground Control runs with the CPU image in [Docker Desktop](https://www.docker.co
 
 3. Open `http://localhost:10900` and choose **Log in with Home Assistant**.
 4. In Kiosk Satellite's Ground Control settings on each kiosk, enter the Mac's address (for example `192.168.1.20:10900`) under **Address**.
-
-#### Run natively for Core ML
-
-To use Apple's Neural Engine for supported face models, run Ground Control directly on macOS instead of in Docker. Use Python 3.12 and a checkout of this repository:
-
-```bash
-python3.12 -m venv .venv
-source .venv/bin/activate
-python -m pip install .
-DATA_DIR="$HOME/Library/Application Support/Ground Control" \
-MODELS_DIR="$PWD/models" \
-HA_URL="http://homeassistant.local:8123" \
-ground-control
-```
-
-Replace `HA_URL` with the address of your Home Assistant. Core ML is selected automatically for face detection, face recognition and hand gestures when the macOS ONNX Runtime package includes its Core ML provider. The optional speaker tuner enables Core ML for measured Voice Match windows. Isolation uses the CPU. See [Apple Silicon Core ML benchmarks](../README.md#apple-silicon-core-ml).
 
 With this Docker install, Ground Control on a Mac isn't discovered automatically. Docker runs it in a small Linux VM, so its mDNS announcement doesn't reach your network. Docker Desktop's host network option doesn't change that. Give the Mac a fixed address in your router so the address in each kiosk keeps working.
 
@@ -282,6 +294,8 @@ Set `HA_TOKEN` to a long-lived access token to open the web app without logging 
 ## Updating
 
 **Home Assistant app:** update it from the app's page when Home Assistant offers a new version.
+
+**Native macOS:** in the Apple Silicon checkout, stop the service, run `git pull --ff-only` and reinstall with `.venv/bin/python -m pip install '.[apple-tuning]'`. Start it again with the same data directory. Rerun the speaker tuner if the speaker model, ONNX Runtime version or thread count changes.
 
 **Docker:** run `docker compose pull && docker compose up -d` or pull the image again and recreate the container. The data volume is kept.
 

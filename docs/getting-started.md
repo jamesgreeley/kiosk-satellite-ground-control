@@ -11,6 +11,8 @@ You need:
 
 **As a Home Assistant app:** add `https://github.com/jxlarrea/kiosk-satellite-ground-control` under **Settings > Apps > App store > Repositories**, install **Kiosk Satellite Ground Control** and start it. Open **Ground Control** in the sidebar.
 
+**On an Apple Silicon Mac:** follow the [native macOS install](installation.md#run-natively-for-core-ml) to enable Core ML. Open `http://localhost:10900` on the Mac and choose **Log in with Home Assistant**.
+
 **With Docker:** set `HA_URL` to your Home Assistant in [compose.yaml](../compose.yaml) and run it. On a machine with an NVIDIA GPU, use [compose.cuda.yaml](../compose.cuda.yaml) instead. Open `http://THIS_MACHINE:10900` and choose **Log in with Home Assistant**.
 
 See [Installation](installation.md) for the options.

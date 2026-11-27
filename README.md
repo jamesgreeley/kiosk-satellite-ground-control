@@ -19,6 +19,7 @@
 <a href="docs/installation.md#nvidia-gpu"><img src="https://img.shields.io/badge/NVIDIA-CUDA-76b900?style=for-the-badge" alt="NVIDIA CUDA"></a>
 <a href="docs/installation.md#intel-gpu"><img src="https://img.shields.io/badge/Intel-OpenVINO-0071c5?style=for-the-badge" alt="Intel OpenVINO"></a>
 <a href="docs/installation.md#amd-gpu"><img src="https://img.shields.io/badge/AMD-Vulkan-ed1c24?style=for-the-badge" alt="AMD Vulkan"></a>
+<a href="docs/installation.md#run-natively-for-core-ml"><img src="https://img.shields.io/badge/Apple%20Silicon-Core%20ML-353535?style=for-the-badge" alt="Apple Silicon Core ML"></a>
 </p>
 
 <p align="center">
@@ -120,6 +121,10 @@ These tables show how much latency each feature adds to a 5-second command.
 
 These numbers use the CPU image with Ground Control's default threads. That is 2 threads on the Pi and the N100 and 4 on the others. The MacBook Pro runs it in Docker Desktop.
 
+#### Native macOS (Core ML)
+
+On the M1 Pro, the Accurate speaker model took **18.6 ms** for a two-second audio window selected by the tuner, compared with **42.3 ms** on CPU. Isolation runs separately on the CPU. See [speaker recognition benchmarks](docs/apple-silicon.md#speaker-recognition).
+
 #### NVIDIA GPU (CUDA)
 
 | | RTX 3050 | RTX 4000 SFF Ada | GB10 |
@@ -185,34 +190,9 @@ These numbers use the CPU image with Ground Control's default threads. That is 2
 
 #### Apple Silicon (Core ML)
 
-On native macOS, both SCRFD face detectors specialize their input and nine output shapes for 640×480, 640×384 and 480×640 tensors after resizing and padding. Core ML compiles each size on first use and reuses the session. Other sizes use the dynamic Light detector or the Accurate CPU detector. Recognition uses Core ML NeuralNetwork for Light and MLProgram for Accurate. The Accurate recognition compute plan assigned convolution layers to the Neural Engine.
+On an M1 Pro, Accurate face detection at 640×480 took **9.3 ms** with Core ML and **73.2 ms** on CPU. Accurate face recognition took **3.2 ms** and **56.1 ms** per crop. These are warmed model inference times.
 
-| Vision stage (model-level) | CPU | Core ML | Change |
-|---|---:|---:|---:|
-| Light Face Detection, 640×480 | 22.6 ms | 4.8 ms | 4.7× faster |
-| Light Face Detection, 640×384 | 18.1 ms | 4.0 ms | 4.5× faster |
-| Accurate Face Detection, 640×480 | 73.2 ms | 9.3 ms | 7.9× faster |
-| Light Face Recognition, one 112×112 crop | 6.1 ms | 0.8 ms | 7.6× faster |
-| Accurate Face Recognition, one 112×112 crop | 56.1 ms | 3.2 ms | 17.5× faster |
-
-A repeated thread-count sweep (1, 2, 4, 8 and 16 ONNX Runtime intra-op threads) found no gain from a larger CPU pool on the Core ML paths. Light detection and recognition use one thread; Accurate recognition uses two. For the Light recognition graph, an interleaved eight-run comparison measured 0.817 ms with `CPUAndNeuralEngine` and 0.824 ms with `ALL`, so it keeps the Neural Engine-specific setting.
-
-Both gesture models use Core ML MLProgram with all compute units available. On an M1 Pro, 27 alternating CPU/Core ML comparisons used JPEG crops from two HaGRID example images and the scikit-image astronaut photograph. Each request ran Light face detection, Accurate face recognition and gestures together. Moving Light gestures to Core ML reduced median request latency from 32.0 to 24.1 ms. With Accurate gestures, the median fell from 440.1 to 32.4 ms and p95 from 488.6 to 44.2 ms. A second comparison with Accurate gestures put the fixed 640×480 face detector on Core ML’s CPU/GPU policy. With Light face detection, this reduced median time from 31.8 to 28.0 ms, and from 30.8 to 29.2 ms when the frame order was reversed. Ground Control selects that policy when Accurate gestures are configured. Both backends returned the same gesture or absence of a hand on all 27 frames for each model. To compare isolated gesture inference on another Mac, run `python tools/benchmark_apple_silicon.py --suite hands --tune-compute-units`. For complete requests, run `python tools/benchmark_camera.py --hands accurate frame1.jpg frame2.jpg` with representative kiosk frames.
-
-HD camera requests reuse the decoded image for recognition and resize it once when face and hand detection need the same dimensions. Accurate recognition can process up to three aligned faces concurrently through its existing Core ML session. Against the preceding version (`2faf12e`), median complete request latency on 1920×1080 frames with three frontal faces fell from 47.4 to 31.2 ms on the M1 Pro. Reversing the frame and comparison order gave 46.5 to 31.3 ms (p95 58.6 to 40.1 ms). Each comparison used 45 timed three-face frames, including repeats of the same image crops. The earlier and updated versions returned the same boxes and gestures in the reverse-order comparison, and the lowest corresponding embedding cosine was 0.9999999. These timings use Light face and gesture detection plus Accurate face recognition.
-
-Voice Match can use Core ML for half-second increments from 0.5 to 4 seconds. Run the local tuner once after installing the Apple tuning dependencies. It simplifies the speaker graph for each length and saves only configurations with at least 10% lower median latency, equal or lower p95, and embedding cosine similarity of at least 0.999 on its test signals. Restart Ground Control to load the selected windows. Other lengths use the CPU. On the M1 Pro, the Accurate 2 s window fell from 42.3 to 18.6 ms. Voice isolation uses the CPU. Tests of the dynamic Core ML graphs on one-, three- and five-second synthetic speech clips took longer.
-
-```sh
-python -m pip install '.[apple-tuning]'
-python tools/tune_coreml_voice.py --threads 4
-```
-
-Use the service's thread count and optionally supply a representative mono 16 kHz, 16-bit PCM recording with `--wav`. The tuner also checks silence and seeded noise. Loading all eight Accurate windows took 15.9 s on the M1 Pro. Peak resident memory of the standalone speaker process reached 534 MiB.
-
-On 18 resized and mirrored variations of the scikit-image astronaut photograph, both detectors agreed with CPU on one face in every frame. Median times including preprocessing and decoding fell from 24.1 to 8.0 ms for Light and from 76.0 to 12.6 ms for Accurate. The largest change in a reported box coordinate was 0.0003 of the frame dimension. This checks one subject. The table measures warmed model inference on synthetic inputs. Embedding cosine similarity between CPU and Core ML was 0.99998 for the Light model and 0.99540 for Accurate on those synthetic inputs. Please validate match rates with enrolled faces before relying on that accuracy-sensitive stage.
-
-Ground Control caches compiled recognition graphs under the user's macOS Caches folder, keyed by the ONNX file hash and ONNX Runtime version. Fixed detector sessions compile once per size in each process. To rerun the model-level comparison on an Apple Silicon Mac, use `python tools/benchmark_apple_silicon.py --suite face --iterations 40`; add `--tune` to compare Core ML's NeuralNetwork conversion, `--tune-compute-units` to sweep CPU, GPU, Neural Engine and ALL, or `--profile-compute-plan` to log hardware assignment. Use `--suite voice --tune` to compare variable speaker-model windows and CPU isolation. These voice tests use deterministic synthetic audio, so they measure inference timing and basic output agreement, not speaker identification quality on recordings.
+For a complete camera request with Light face detection, Accurate recognition and Accurate gestures, moving gestures to Core ML reduced median latency from **440.1 to 32.4 ms** on 27 sample frames. See [Apple Silicon performance](docs/apple-silicon.md) for the workloads, output comparisons and commands to benchmark your own Mac.
 
 #### NVIDIA GPU (CUDA)
 
@@ -275,7 +255,7 @@ On an NVIDIA GPU every feature uses Accurate. Changing the Face Recognition mode
 
 ## Install
 
-Ground Control runs as a Home Assistant app or as a standalone Docker container. See [Installation](docs/installation.md) for the details and every option.
+Ground Control runs as a Home Assistant app, in Docker, or directly on macOS with Apple Silicon. See [Installation](docs/installation.md) for the details and every option.
 
 ### Home Assistant App
 
@@ -288,6 +268,10 @@ The simplest way to run Ground Control is as a Home Assistant app. It runs on th
 3. Open **Ground Control** in the sidebar.
 
 The app needs Home Assistant OS or a Supervised install. For Isolation on an NVIDIA GPU, run the Docker container on a machine with the GPU instead.
+
+### Mac with Apple Silicon
+
+Run Ground Control directly on an M-series Mac to use Core ML for Vision Match. The optional speaker tuner measures which audio lengths also benefit on your Mac. See [native macOS installation](docs/installation.md#run-natively-for-core-ml) for setup and [Apple Silicon performance](docs/apple-silicon.md) for timings. Docker Desktop and OrbStack run the CPU image.
 
 ### Standalone Docker Container
 
@@ -354,13 +338,9 @@ docker run -d --name ground-control --device /dev/dri -p 10900:10900 \
 
 The speaker models, Isolation and Vision Match run on the GPU through Vulkan. Ground Control times each model on the GPU and on the CPU when it loads and runs it where it is faster. The host needs to run Linux. See [AMD GPU](docs/installation.md#amd-gpu).
 
-#### Mac with Apple Silicon
-
-Run the CPU command above in Docker Desktop or OrbStack. Docker on a Mac can't use the Mac's GPU or Neural Engine, so every feature including Isolation runs on the CPU of an M-series chip. Native macOS installs use Core ML for supported vision models and locally tuned speaker windows. Ground Control on a Mac isn't discovered automatically, so enter the Mac's address in each kiosk. See [Mac with Apple Silicon](docs/installation.md#mac-with-apple-silicon).
-
 ## Getting started
 
-1. **Open Ground Control.** If you installed the Home Assistant app, it's in the sidebar. If you run the container, open port 10900 and select **Log in with Home Assistant**.
+1. **Open Ground Control.** If you installed the Home Assistant app, it's in the sidebar. For Docker or native macOS, open port 10900 and select **Log in with Home Assistant**.
 2. **Connect your kiosks.** Ground Control is discovered automatically on the same network. For a kiosk on another network, enter the address from **Settings > General > Kiosks** in Kiosk Satellite. Approve each new kiosk on the Kiosks page. Ground Control only accepts kiosks running Kiosk Satellite.
 3. **Enroll people.** Add each person on the People page, then enroll their voice on a kiosk of every kind they talk to.
 4. **Turn on Voice Match.** In Kiosk Satellite, under **Settings > Ground Control > Voice Match**, choose who each kiosk answers and turn on **Enable Trimming** and **Enable Isolation**. Turn on Isolation in Ground Control's settings too.
@@ -369,7 +349,7 @@ Run the CPU command above in Docker Desktop or OrbStack. Docker on a Mac can't u
 ## Documentation
 
 - [Getting started](docs/getting-started.md): the steps from installing Ground Control to recognizing who is talking to a kiosk and who is looking at it.
-- [Installation](docs/installation.md): the Home Assistant app, Docker on a CPU, an NVIDIA GPU or an Intel GPU, options and updating.
+- [Installation](docs/installation.md): the Home Assistant app, native Apple Silicon, Docker images, options and updating.
 - [Kiosks](docs/kiosks.md): connecting and approving kiosks, kiosks on another network and each kiosk's page.
 - [People](docs/people.md): adding people, enrollment and personal commands.
 - [Voice Match](docs/voice-match.md): Recognition, Trimming, the Wake Word Aligner, Isolation and the speaker models.

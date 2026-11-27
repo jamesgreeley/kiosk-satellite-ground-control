@@ -99,6 +99,8 @@ Both hand models are trained on HaGRIDv2 gestures. What each choice changes:
 - **Hand Gestures:** Accurate gets the finger count right more often at 3 m and in dim light, 96% of frames compared to 68%. The hand model runs on every hand look and Accurate is slow on a CPU: 1.8 s a look on an Intel N100, 352 ms on an i9-13900H and 256 ms on a MacBook Pro M5. Light is the default on a CPU.
 - **Face Recognition:** Accurate recognizes small faces in dim light more often, 93% compared to 71%. After its first 2 seconds in view a face is checked at most once a second, so Accurate is the default on x86 CPUs and Apple M-series chips. It takes 173 ms a face on an Intel N100. A Raspberry Pi and other ARM CPUs use Light.
 
+On [native macOS](installation.md#run-natively-for-core-ml), both Light and Accurate gesture and recognition models use Core ML. Face detection uses it for common frame sizes. Start with Light detection and gestures and Accurate recognition, the Apple Silicon defaults. To compare gesture models using your kiosk JPEGs, see [complete camera requests](apple-silicon.md#complete-camera-requests).
+
 In the [Vulkan image](installation.md#amd-gpu), Face Detection and Hand Gestures are Accurate by default when the GPU runs the Accurate model in 50 ms or less. Ground Control times both at start.
 
 Each model's row shows its time on this machine once the models load. Changing the Face Recognition model rebuilds everyone's face from the kept pictures, so nobody has to enroll again. Each Face Recognition model has its own **Threshold**.
@@ -133,7 +135,7 @@ With every model on Accurate, Vision Match keeps about 0.25 GB of GPU memory on 
 | Face Detection | Accurate with an NVIDIA GPU, else Light | Light or Accurate. See [Vision Models](#vision-models). |
 | Hand Gestures | Accurate with an NVIDIA GPU, else Light | Light or Accurate. On a CPU, Accurate lowers the looks a second each kiosk gets. |
 | Face Recognition | Accurate with an NVIDIA GPU, an x86 CPU or an Apple M-series chip, else Light | Light or Accurate. Faces are rebuilt from their pictures when it changes, so nobody has to enroll again. |
-| Runs on | | NVIDIA GPU (CUDA) or CPU. The CUDA option sets it in the same way as the speaker model. |
+| Runs on | | Shows the vision backend: CPU, CUDA, OpenVINO, Vulkan or Apple Core ML. Speaker processing has a separate indicator in General. |
 | Looks a second | | The face looks and hand looks a second one kiosk can get. It is measured on this machine when the models load. |
 | **Hand Gestures** | | |
 | Hand sensitivity | 50 | From 1 to 100. It sets the smallest hand counted, by the longer side of its box: about 9% of the frame at 50, 13% at 30 and any size at 100. See [Hand Gestures](#hand-gestures). |

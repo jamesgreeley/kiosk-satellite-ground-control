@@ -22,6 +22,7 @@ The folder's location depends on the installation:
 | Installation | Data folder |
 | --- | --- |
 | Home Assistant app | It is `addon_configs/…_kiosk_satellite_ground_control` in the Samba share and File editor apps and `/addon_configs/…_kiosk_satellite_ground_control` from the SSH app. The start of the name depends on where the app was installed from. |
+| Native macOS | The [native installation](installation.md#run-natively-for-core-ml) uses `~/Library/Application Support/Ground Control`. Copy that directory for backup. Run the speaker tuner again on a replacement Mac. |
 | Docker | It is the volume mounted at `/data`. If you used `docker run` as in the README, it is named `ground-control`. Docker Compose puts the project name in front, such as `kiosk-satellite-ground-control_ground-control`. Run `docker volume ls` to find it. Use that name in the commands below. |
 
 ## Backing Up
