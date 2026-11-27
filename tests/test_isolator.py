@@ -115,6 +115,45 @@ def test_a_turn_isolation_returns_as_near_silence_goes_on_as_it_was(household, s
     assert not [p for p in f.timeline if p["kind"] == "isolated" and p.get("skipped")]
 
 
+class Lost:
+    """An isolator on a GPU that doesn't answer for some turns (the Vulkan image)."""
+
+    def __init__(self, turns: set[int]) -> None:
+        self.turns, self.calls = turns, 0
+
+    def clean(self, audio: np.ndarray, voiceprint: np.ndarray) -> np.ndarray:
+        from ground_control.vulkan import Failed
+
+        self.calls += 1
+        if self.calls in self.turns:
+            raise Failed("the GPU's process ended (exit code -6)")
+        return audio * 0.5
+
+
+def test_a_turn_the_gpu_doesnt_answer_for_goes_on_as_it_was(household, speakers, voice, vad, embedder):
+    """A GPU driver can reset the GPU under Isolation. The command it was
+    working on reaches the assistant as Trimming left it, and the next one is
+    cleaned again."""
+    people, _, _ = household
+    user, tv = held_out(speakers[0]), voice[speakers[2]]["test"]
+    s = (Script().add("quiet", silence(0.3)).add("user", user[2 * SR:5 * SR]).add("tv", tv[:2 * SR])
+         .add("user", user[6 * SR:8 * SR]).add("quiet", silence(1.5)))
+    f = Follow(FollowConfig(), ACCURATE, embedder, vad, people, anchor=user[: int(1.2 * SR)], isolator=Lost({1}))
+    events = [e for c in chunks(s.audio) for e in f.feed(c)] + f.finish()
+    steps = [p for p in f.timeline if p["kind"] == "isolated"]
+    assert len(steps) >= 2
+    assert steps[0].get("failed") is True and steps[0]["skipped"] is True and "kept_db" not in steps[0]
+    assert all("skipped" not in p for p in steps[1:])
+    stats = of(events, "stats")[0]
+    assert stats["isolation_failed"] == 1 and "isolation_skipped" not in stats
+    sent = np.concatenate([e["audio"] for e in of(events, "audio") if not e.get("keepalive")])
+    raw = np.concatenate([s.audio[a:b] for a, b in f.released])
+    first = int(round(of(events, "turn_end")[0]["t"] * SR)) - f.released[0][0]
+    turn1 = sum(b - a for a, b in f.released if b <= f.released[0][0] + first + 1)
+    assert np.allclose(sent[:turn1], raw[:turn1])              # as Trimming left it
+    assert np.allclose(sent[turn1:], raw[turn1:] * 0.5)        # the next turn: Isolation's output
+
+
 def test_a_held_turn_keeps_the_stream_open(household, speakers, voice, vad, embedder):
     """Home Assistant Cloud's speech-to-text gives up on a stream that gets
     nothing for about 6 s, so a held turn sends a little silence as it goes."""

@@ -87,7 +87,7 @@ class FaceEmbedder:
         self._gpu = gpu
         self._ov = openvino.model(path) if openvino is not None else None
         if self._ov is not None:
-            self.session, self.on_gpu, self._input = None, True, self._ov.inputs[0]
+            self.session, self.on_gpu, self._input = None, getattr(self._ov, "on_gpu", True), self._ov.inputs[0]
             return
         self.session = gpu(open_session, path, session_options(threads), use_cuda, LEAN_CUDA)
         self.on_gpu = self.session.get_providers()[0] == "CUDAExecutionProvider"

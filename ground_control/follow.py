@@ -54,6 +54,7 @@ from .engine import QUANTUM, Embedder
 from .models import ISOLATOR_MODEL, SpeakerModel
 from .people import People
 from .vad import FRAME, VadModel
+from .vulkan import Failed as IsolationFailed
 
 _LOG = logging.getLogger(__name__)
 
@@ -269,6 +270,8 @@ class Follow:
         """With Isolation on: this turn's released ranges, sent when it ends."""
         self.isolated_ms = 0
         self.isolation_skipped = 0
+        self.isolation_failed = 0
+        """Turns sent as Trimming left them, since the GPU didn't answer (Vulkan image)."""
         """Turns sent as Trimming left them, since Isolation returned near silence."""
         self.dropped_s = 0.0
         self._raw: list[np.ndarray] = []
@@ -424,6 +427,7 @@ class Follow:
             "cpu_ms": round(self._cpu * 1000),
             **({"isolated_ms": self.isolated_ms} if self.isolator is not None else {}),
             **({"isolation_skipped": self.isolation_skipped} if self.isolation_skipped else {}),
+            **({"isolation_failed": self.isolation_failed} if self.isolation_failed else {}),
             **({"wake_word_s": round(self._wake_end / SR, 2)} if self.wake_word and self.wake_word["found"] else {}),
             "wall_ms": round((time.monotonic() - self._started) * 1000),
             "model": self.model.key,
@@ -778,11 +782,22 @@ class Follow:
             t0 = time.perf_counter()
             # The isolator hears everything kept around the turn, up to now.
             ctx = max(self._base, start - int(self.cfg.isolation_context_s * SR))
-            around = self.isolator.clean(self._audio(ctx, self.n).copy(), voiceprint)
-            cleaned_span = around[start - ctx:end - ctx]
+            try:
+                around = self.isolator.clean(self._audio(ctx, self.n).copy(), voiceprint)
+            except IsolationFailed as err:
+                # The GPU didn't answer (Vulkan image): the turn goes on as Trimming left it.
+                _LOG.warning("Isolation not used for this command: %s", err)
+                around = None
             ms = round((time.perf_counter() - t0) * 1000)
             self.isolated_ms += ms
             step = {"t": round(end / SR, 3), "kind": "isolated", "ms": ms, "turn": self.turns}
+            if around is None:
+                self.isolation_failed += 1
+                step.update(skipped=True, failed=True)
+                self.timeline.append(step)
+                voiceprint = None
+        if voiceprint is not None:
+            cleaned_span = around[start - ctx:end - ctx]
             # How much of the turn came back, over the pieces that go on.
             went_in = np.concatenate([span[a - start:b - start] for a, b in held])
             came_back = np.concatenate([cleaned_span[a - start:b - start] for a, b in held])

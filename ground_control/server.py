@@ -1462,6 +1462,9 @@ def _session_text(stats: dict[str, Any], events: list[dict[str, Any]]) -> str:
     if stats.get("isolation_skipped"):
         n = stats["isolation_skipped"]
         parts.append(f"Isolation not used for {n} turn{'s' if n != 1 else ''}, which it returned as near silence")
+    if stats.get("isolation_failed"):
+        n = stats["isolation_failed"]
+        parts.append(f"Isolation not used for {n} turn{'s' if n != 1 else ''}, since the GPU didn't answer")
     if stats.get("wake_word_s"):
         parts.append(f"{stats['wake_word_s']} s of the wake word left out")
     if stats.get("cpu_ms") is not None:
@@ -1500,7 +1503,8 @@ def _report_header(vm: GroundControl) -> list[str]:
         f" on {platform.system()} {platform.machine()}, Python {platform.python_version()}",
         f"Speaker model {vm.model.label} on {'the GPU' if vm.active.on_gpu else 'the CPU'}"
         f" ({vm.cfg.threads} threads, CUDA {'on' if vm.cfg.cuda else 'off'}"
-        f"{', OpenVINO on ' + s['openvino'] if s.get('openvino') else ''}),"
+        f"{', OpenVINO on ' + s['openvino'] if s.get('openvino') else ''}"
+        f"{', Vulkan on ' + s['vulkan'] if s.get('vulkan') else ''}),"
         f" thresholds {vm.model.threshold} and {vm.model.other_threshold}",
         f"Settings: {json.dumps({k: v for k, v in s.items() if k not in ('models', 'default_threshold', 'default_other_threshold')}, separators=(', ', ': '))}",
         f"People: {len(vm.people.all())}, {sum(vm.people.has_voice(p.id) for p in vm.people.all())} with a voice",

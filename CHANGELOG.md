@@ -2,6 +2,15 @@
 
 All notable changes to Kiosk Satellite Ground Control are documented here.
 
+## Unreleased
+
+### Added
+- **Vulkan image for AMD GPUs (#27).** The new `vulkan` image runs the models on a GPU through Vulkan, so an AMD GPU can do what the CUDA image does on an NVIDIA one. The speaker models, Isolation, Face Detection, Hand Gestures and Face Recognition can run on the GPU. The Wake Word Aligner runs on the CPU, as in every image. Pass the GPU with `--device /dev/dri`, as in [compose.vulkan.yaml](compose.vulkan.yaml). See [AMD GPU](docs/installation.md#amd-gpu).
+- **Each model runs where it is faster.** When a model loads in the Vulkan image, Ground Control runs it on the GPU and on the CPU with the same input. If the results differ or the GPU is not faster, the model runs on the CPU. **Settings** shows where the speaker model, Isolation and Vision Match run. A small integrated GPU is slower than its CPU for every model, so everything runs on the CPU there.
+- **The GPU's work in helper processes.** In the Vulkan image each model runs in a helper process and Isolation is sent to the GPU in short jobs, since Linux's AMD driver cancels a job that runs for 2 seconds. If the GPU is lost anyway, a voice check or a look that was under way is done on the CPU. A command Isolation was working on goes to the assistant as Trimming left it and its session shows **Isolation not used** under **Steps**. The helper process starts again and the model is back on the GPU a few seconds later.
+- **`VULKAN_DEVICE`.** In the Vulkan image, set it to part of a GPU's name to choose between several GPUs.
+- **Vulkan image times and tests.** On an RTX 4000 through Vulkan, a 5 second command waits 0.12 s for Isolation, a 1 second voice check takes 7 ms and a Vision Match look with the default models takes 27 ms where the CPU takes 62 ms. The 2,357 frames of the kiosk test set read the same as on the CPU and 120 recorded voice sessions gave the same events. On Mesa's RADV driver with the integrated Radeon of a Ryzen 9 9950X3D, every model gives the CPU's results. The image has not been tested on a Radeon card yet.
+
 ## v2026.11.16 - 2026-11-26
 
 ### Added

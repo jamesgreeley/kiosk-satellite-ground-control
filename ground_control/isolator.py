@@ -10,7 +10,8 @@ identified.
 The separator looks at a whole stretch of audio at once. Follow mode holds a
 turn's audio while the user talks and releases it cleaned when the turn ends.
 It is meant for an NVIDIA GPU: a 5 s command takes about 90 ms on a GB10 and
-about 0.6 s on four cores of an i9-13900H.
+about 0.6 s on four cores of an i9-13900H. A GPU of another make runs it
+through Vulkan in the Vulkan image (``vulkan``).
 
 Long turns run in overlapping windows, so memory stays bounded. Lengths are
 padded to whole half seconds, so a GPU sees few distinct input shapes.
@@ -21,6 +22,7 @@ from __future__ import annotations
 import logging
 import threading
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -38,11 +40,26 @@ MIN_SAMPLES = SR // 10
 
 
 class Isolator:
-    def __init__(self, path: Path, threads: int = 1, use_cuda: bool = False, keep_memory: bool = False) -> None:
+    def __init__(self, path: Path, threads: int = 1, use_cuda: bool = False, keep_memory: bool = False,
+                 vulkan: Any = None) -> None:
         """``keep_memory``: on a GPU, keep the memory a command used for the
         next one (the ``KEEP_GPU_MEMORY`` setting). Taking it again for every
-        command costs about 30 ms on a GB10 and 10 ms on an RTX 4000. It holds
-        about 0.75 GB more."""
+        command costs about 30 ms on a GPU of a GB10 and 10 ms on an RTX 4000.
+        It holds about 0.75 GB more.
+
+        ``vulkan``: the helper process that runs the model on a GPU through
+        Vulkan (``vulkan.Worker``), in place of a session here. Its memory is
+        taken once, for the longest window."""
+        self._vulkan = vulkan
+        self.vulkan = vulkan is not None
+        self._lock = threading.Lock()
+        self.calls = 0
+        if vulkan is not None:
+            self._gpu = GpuThread(False, "gpu-isolator")
+            self.session = None
+            self.on_gpu, self.keeps_memory = True, False
+            self.version = vulkan.info["meta"].get("version", "unknown")
+            return
         so = session_options(threads)
         so.log_severity_level = 3
         # A thread of its own, not the speaker model's: voice checks go on
@@ -61,8 +78,6 @@ class Isolator:
         meta = self.session.get_modelmeta().custom_metadata_map
         self.version = meta.get("version", "unknown")
         """From the model's metadata, with its copyright and license."""
-        self._lock = threading.Lock()
-        self.calls = 0
         if self.keeps_memory:
             # The longest input first. A command longer than any before it
             # can't use the memory kept from the shorter ones, so without this
@@ -77,6 +92,9 @@ class Isolator:
         padded = -(-n // QUANTUM) * QUANTUM
         x = np.zeros((1, padded), dtype=np.float32)
         x[0, :n] = audio
+        if self._vulkan is not None:
+            # Raises vulkan.Failed when the GPU doesn't answer.
+            return self._vulkan.run(x[0], voiceprint)[:n]
         y = self._gpu(self.session.run, None, {"audio": x, "voiceprint": voiceprint[None].astype(np.float32)},
                       self._run_options)[0][0]
         return y[:n]
@@ -109,3 +127,8 @@ class Isolator:
             out[start:end] += self._run(audio[start:end], voiceprint) * w
             weight[start:end] += w
         return np.clip(out / np.maximum(weight, 1e-6), -1.0, 1.0)
+
+    def close(self) -> None:
+        if self._vulkan is not None:
+            self._vulkan.close()
+        self._gpu.close()

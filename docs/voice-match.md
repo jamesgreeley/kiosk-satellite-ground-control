@@ -129,6 +129,7 @@ Trimming cuts other voices out between the user's words. Isolation uses the user
 | Machine | Wait per command |
 | --- | --- |
 | NVIDIA GPU | Under a tenth of a second |
+| AMD GPU with the [Vulkan image](installation.md#amd-gpu) | Depends on the GPU |
 | Fast x86 CPU | About half a second |
 | Intel N100 | About 3 seconds |
 | Raspberry Pi 4 | Too slow |
@@ -169,6 +170,6 @@ Ground Control picks Accurate on an NVIDIA GPU, an Apple M-series chip or an x86
 | Use Wake Word Aligner | on | Leaves the end of the wake word out of the command on kiosks with Trimming and **Talk right after the wake word** on in Kiosk Satellite. See [Wake Word Aligner](#wake-word-aligner). |
 | **Isolation** | | |
 | Use Isolation | off | Removes other voices under the user's words on kiosks with Trimming and Isolation on in Kiosk Satellite. Needs the Accurate model. |
-| Runs on | | NVIDIA GPU (CUDA) or CPU. The image sets which one. |
+| Runs on | | NVIDIA GPU (CUDA), GPU (Vulkan) or CPU. The image sets which one. In the Vulkan image, each model runs on the CPU when the GPU is not faster for it. |
 
 The thresholds are a starting point. If a TV voice is taken for someone, raise **Threshold**. If a person is often unknown, enroll them on that device model first and then lower it a little.

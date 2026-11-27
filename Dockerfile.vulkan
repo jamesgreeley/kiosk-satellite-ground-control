@@ -1,0 +1,51 @@
+# Vulkan image: standalone Docker on an AMD GPU (amd64).
+#   docker build -f Dockerfile.vulkan -t kiosk-satellite-ground-control:vulkan .
+#   docker run --device /dev/dri ...
+#
+# Everything but the Wake Word Aligner runs on the GPU through Vulkan
+# (ground_control/vulkan.py): Isolation on shaders of its own, and the speaker
+# and vision models through ONNX Runtime's WebGPU build. Each model is timed
+# on the GPU and on the CPU when it loads and runs where it is faster.
+#
+# Mesa has the Vulkan drivers: RADV for AMD GPUs and ANV for Intel's. Ubuntu
+# 26.04 has a Mesa recent enough for current GPUs. NVIDIA GPUs have the CUDA
+# image, which is twice as fast on them.
+FROM ubuntu:26.04
+
+ARG BUILD_VERSION=dev
+ARG BUILD_ARCH=""
+LABEL org.opencontainers.image.title="Kiosk Satellite Ground Control" \
+      org.opencontainers.image.source="https://github.com/jxlarrea/kiosk-satellite-ground-control" \
+      org.opencontainers.image.version="${BUILD_VERSION}" \
+      io.hass.type="addon" io.hass.name="Kiosk Satellite Ground Control" \
+      io.hass.version="${BUILD_VERSION}" io.hass.arch="${BUILD_ARCH}"
+
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 MODELS_DIR=/app/models VULKAN=true \
+    VULKAN_ORT=/opt/onnxruntime-webgpu PIP_BREAK_SYSTEM_PACKAGES=1 DEBIAN_FRONTEND=noninteractive
+
+# espeak-ng says how a wake word is pronounced, to find where it ends.
+RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-pip espeak-ng \
+        mesa-vulkan-drivers libvulkan1 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY pyproject.toml README.md LICENSE ./
+COPY ground_control ./ground_control
+# ONNX Runtime's WebGPU build goes in a folder of its own. Only the helper
+# processes that run a model on the GPU load it (VULKAN_ORT). The service
+# itself keeps the CPU build that every image runs.
+RUN pip install --no-cache-dir --root-user-action=ignore ".[vulkan]" \
+    && pip install --no-cache-dir --root-user-action=ignore --no-deps --target /opt/onnxruntime-webgpu "onnxruntime-webgpu==1.27.0" \
+    && rm -rf /root/.cache
+# The CPU image's models and the full Voice Isolator, which is the one the GPU
+# runs. The one made for the CPU is what Isolation runs on a GPU that turns
+# out slower than the CPU.
+COPY models/silero_vad.onnx models/redimnet2_b3_multi.onnx models/redimnet2_b1.onnx models/voice_isolator.onnx models/voice_isolator_cpu.onnx \
+     models/wake_word_aligner.onnx models/scrfd_2.5g.onnx models/scrfd_10g.onnx models/yolov10n_gestures.onnx \
+     models/yolov10x_gestures.onnx models/arcface_w600k_mbf.onnx models/arcface_w600k_r50.onnx \
+     models/*.LICENSE.md ./models/
+
+VOLUME /data
+EXPOSE 10900
+HEALTHCHECK --interval=30s --timeout=5s CMD python3 -c "import urllib.request,os;urllib.request.urlopen(f'http://127.0.0.1:{os.environ.get(\"PORT\",\"10900\")}/health')"
+CMD ["python3", "-m", "ground_control"]

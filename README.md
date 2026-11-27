@@ -18,6 +18,7 @@
 <a href="https://github.com/users/jxlarrea/packages/container/package/kiosk-satellite-ground-control"><img src="https://img.shields.io/badge/Docker-amd64%20%7C%20arm64-b39ddb?style=for-the-badge&logo=docker&logoColor=white" alt="Docker amd64 and arm64"></a>
 <a href="docs/installation.md#nvidia-gpu"><img src="https://img.shields.io/badge/NVIDIA-CUDA-76b900?style=for-the-badge&logo=nvidia&logoColor=white" alt="NVIDIA CUDA"></a>
 <a href="docs/installation.md#intel-gpu"><img src="https://img.shields.io/badge/Intel-OpenVINO-0071c5?style=for-the-badge&logo=intel&logoColor=white" alt="Intel OpenVINO"></a>
+<a href="docs/installation.md#amd-gpu"><img src="https://img.shields.io/badge/AMD-Vulkan-ed1c24?style=for-the-badge&logo=amd&logoColor=white" alt="AMD Vulkan"></a>
 </p>
 
 <p align="center">
@@ -259,13 +260,14 @@ The app needs Home Assistant OS or a Supervised install. For Isolation on an NVI
 
 ### Standalone Docker Container
 
-Use the Docker container to run Ground Control on a machine other than Home Assistant's, on an NVIDIA GPU or on an Intel GPU. There is an image for each:
+Use the Docker container to run Ground Control on a machine other than Home Assistant's, on an NVIDIA GPU, on an Intel GPU or on an AMD GPU. There is an image for each:
 
 | Image | Tag | Runs |
 |---|---|---|
 | CPU | `latest` | Everything on the CPU of an amd64 or arm64 machine. |
 | NVIDIA GPU (CUDA) | `cuda` | Everything on an NVIDIA GPU. |
 | Intel GPU (OpenVINO) | `openvino` | Vision Match on an Intel GPU and Voice Match on the CPU. |
+| AMD GPU (Vulkan) | `vulkan` | Each model on an AMD GPU when it is faster there than on the CPU. |
 
 In every command below, `HA_URL` is your Home Assistant address. Kiosks sign in with the Home Assistant token they already have and Ground Control checks that token against Home Assistant. You also log in through `HA_URL` in your browser, so use an address your browser can open. Avoid one that only works inside Docker.
 
@@ -275,7 +277,7 @@ The commands publish port 10900 with `-p 10900:10900`. That way the service isn'
 
 #### Docker Compose
 
-Use [compose.yaml](compose.yaml) for the CPU, [compose.cuda.yaml](compose.cuda.yaml) for an NVIDIA GPU or [compose.openvino.yaml](compose.openvino.yaml) for an Intel GPU. Set `HA_URL` in the file, then run `docker compose up -d`. For a GPU, name the file, as in `docker compose -f compose.cuda.yaml up -d`. All three use the host network, so the service is discovered automatically on the same network.
+Use [compose.yaml](compose.yaml) for the CPU, [compose.cuda.yaml](compose.cuda.yaml) for an NVIDIA GPU, [compose.openvino.yaml](compose.openvino.yaml) for an Intel GPU or [compose.vulkan.yaml](compose.vulkan.yaml) for an AMD GPU. Set `HA_URL` in the file, then run `docker compose up -d`. For a GPU, name the file, as in `docker compose -f compose.cuda.yaml up -d`. All four use the host network, so the service is discovered automatically on the same network.
 
 #### CPU
 
@@ -310,6 +312,16 @@ docker run -d --name ground-control --device /dev/dri -p 10900:10900 \
 ```
 
 The GPU can be integrated or an Arc card, from the 11th generation of Core processors or newer. That includes the Intel N100. See [Intel GPU](docs/installation.md#intel-gpu).
+
+#### AMD GPU (Vulkan)
+
+```bash
+docker run -d --name ground-control --device /dev/dri -p 10900:10900 \
+  -e HA_URL=http://homeassistant.local:8123 \
+  -v ground-control:/data ghcr.io/jxlarrea/kiosk-satellite-ground-control:vulkan
+```
+
+The speaker models, Isolation and Vision Match run on the GPU through Vulkan. Ground Control times each model on the GPU and on the CPU when it loads and runs it where it is faster. The host needs to run Linux. See [AMD GPU](docs/installation.md#amd-gpu).
 
 #### Mac with Apple Silicon
 

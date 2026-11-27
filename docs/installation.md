@@ -1,6 +1,6 @@
 # Installation
 
-Kiosk Satellite Ground Control runs on a CPU or GPU accelerated (CUDA and  OpenVINO) as a Home Assistant app or a Docker container. Kiosks running [Kiosk Satellite](https://github.com/jxlarrea/kiosk-satellite) connect to it over the network.
+Kiosk Satellite Ground Control runs on a CPU or GPU accelerated (CUDA, OpenVINO and Vulkan) as a Home Assistant app or a Docker container. Kiosks running [Kiosk Satellite](https://github.com/jxlarrea/kiosk-satellite) connect to it over the network.
 
 ## Choosing a Machine
 
@@ -13,6 +13,7 @@ Every Voice Match and Vision Match feature runs on the Ground Control machine in
 | Mac with an Apple M-series chip | Accurate | Under half a second per command on an M5 | 70 ms on an M5 |
 | Intel N100 and other small x86 CPUs | Light | About 3 seconds per command with Accurate | 292 ms |
 | Intel GPU with the OpenVINO image | As on the machine's CPU | As on the machine's CPU | 81 ms on an Intel N100, 25 ms on an Iris Xe |
+| AMD GPU with the Vulkan image | As on the machine's CPU | Depends on the GPU | Depends on the GPU. See [AMD GPU](#amd-gpu) |
 | Raspberry Pi 4, Home Assistant Green and other ARM boards | Light | Too slow | 671 ms on a Pi 4 |
 
 The Vision Match column is a look with Face Detection, Face Recognition and Hand Gestures on the machine's default vision models. See [Performance Benchmarks](../README.md#performance-benchmarks) for the measured times. Isolation is optional, so a small machine still runs Recognition, Trimming and the Wake Word Aligner. Vision Match runs on every machine in the table. On a Pi 4, Face Detection dismisses the screensaver about a second after a face looks at the kiosk. See [Vision Models](vision-match.md#vision-models).
@@ -62,15 +63,16 @@ There is an image for each kind of machine:
 | [CPU](#cpu) | `latest` | Everything on the CPU of an amd64 or arm64 machine. |
 | [NVIDIA GPU (CUDA)](#nvidia-gpu) | `cuda` | Everything on an NVIDIA GPU. |
 | [Intel GPU (OpenVINO)](#intel-gpu) | `openvino` | Vision Match on an Intel GPU and Voice Match on the CPU. |
+| [AMD GPU (Vulkan)](#amd-gpu) | `vulkan` | Each model on an AMD GPU when it is faster there than on the CPU. |
 
-Docker Compose files are in the repository: [compose.yaml](../compose.yaml) for the CPU, [compose.cuda.yaml](../compose.cuda.yaml) for an NVIDIA GPU and [compose.openvino.yaml](../compose.openvino.yaml) for an Intel GPU.
+Docker Compose files are in the repository: [compose.yaml](../compose.yaml) for the CPU, [compose.cuda.yaml](../compose.cuda.yaml) for an NVIDIA GPU, [compose.openvino.yaml](../compose.openvino.yaml) for an Intel GPU and [compose.vulkan.yaml](../compose.vulkan.yaml) for an AMD GPU.
 
 1. Download the file for your machine.
 2. Set `HA_URL` to your Home Assistant.
-3. Run `docker compose up -d`. For a GPU, name the file: `docker compose -f compose.cuda.yaml up -d` or `docker compose -f compose.openvino.yaml up -d`.
+3. Run `docker compose up -d`. For a GPU, name the file, as in `docker compose -f compose.cuda.yaml up -d`.
 4. Open `http://THIS_MACHINE:10900` and choose **Log in with Home Assistant**.
 
-All three files use the host network, so Ground Control is discovered automatically on the same network. If you don't use the host network, publish port 10900 and enter the machine's address in each kiosk.
+All four files use the host network, so Ground Control is discovered automatically on the same network. If you don't use the host network, publish port 10900 and enter the machine's address in each kiosk.
 
 `HA_URL` is used in two ways. Kiosk tokens are checked there and you log in to the web app there from your browser. Use an address your browser can open. Avoid one that only works inside Docker.
 
@@ -145,6 +147,70 @@ Each model is compiled for the GPU the first time it runs, which takes a few sec
 
 The OpenVINO image runs Vision Match on the GPU or not at all. If it can't use the GPU, it stops and logs a line that starts with `OpenVINO can't start`. The line gives the reason. For example, no GPU is visible to the container or the GPU isn't an Intel one. With more than one GPU in the machine, pass only the Intel GPU's render device, such as `--device /dev/dri/renderD128`, or set `OPENVINO_DEVICE` to the one to use, such as `GPU.1`.
 
+### AMD GPU
+
+Add `--device /dev/dri` and use the `vulkan` tag:
+
+```bash
+docker run -d --name ground-control --network host --device /dev/dri \
+  -e HA_URL=http://homeassistant.local:8123 \
+  -v ground-control:/data ghcr.io/jxlarrea/kiosk-satellite-ground-control:vulkan
+```
+
+The Vulkan image runs the models on a GPU through Vulkan, the graphics interface that every current GPU driver has. It is meant for AMD GPUs, which the CUDA image can't use. The speaker models, Isolation, Face Detection, Hand Gestures and Face Recognition can all run on the GPU. The Wake Word Aligner runs on the CPU, as in every image.
+
+The Vulkan image needs:
+
+- A GPU with a Vulkan driver in Mesa. For an AMD GPU that is the RADV driver, which is in the image.
+- The GPU passed to the container with `--device /dev/dri`. The host needs nothing installed for it beyond its normal graphics driver.
+- An amd64 machine running Linux. Docker on Windows doesn't give a container the GPU's own driver.
+- About 2 GB more memory than the CPU image with every model on the GPU, and about 1 GB on the GPU.
+
+#### Each Model Runs Where It Is Faster
+
+When a model loads, Ground Control runs it on the GPU and on the CPU with the same input. It compares the results and the time:
+
+- If the results differ, the model runs on the CPU and the log gives the reason. This protects against a driver that computes a model wrong. For Isolation, the model turns off.
+- If the GPU is not faster than the machine's CPU, the model runs on the CPU. **Settings** shows where each one runs.
+
+A small integrated GPU is slower than its machine's CPU for every model, so everything runs on the CPU there. This is the case for the Radeon graphics of a Ryzen 9000 desktop processor and for an Intel Iris Xe. For an Intel GPU, the [OpenVINO image](#intel-gpu) is faster for Vision Match.
+
+#### How Fast It Is
+
+These are the times on an RTX 4000 through Vulkan, next to its i9-13900H on four threads. An NVIDIA GPU is faster still with the CUDA image, so use that one for NVIDIA.
+
+| Model | GPU through Vulkan | CPU |
+| --- | --- | --- |
+| Accurate speaker model, a 1 second check | 7 ms | 15 ms |
+| Isolation, a 5 second command | 0.12 s | 0.57 s |
+| Face Detection, Light and Accurate | 8 and 13 ms | 17 and 45 ms |
+| Hand Gestures, Light and Accurate | 5 and 26 ms | 22 and 290 ms |
+| Face Recognition, Light and Accurate | 3 and 14 ms | 6 and 30 ms |
+
+The image has not been timed on a Radeon card yet.
+
+#### If the GPU Stops Answering
+
+Everything that touches the GPU runs in helper processes, one for each model, and Isolation is sent to the GPU in short jobs. A GPU driver cancels a job that runs for too long, which is 2 seconds with Linux's AMD driver, so no job is allowed to get near that.
+
+If the GPU is lost anyway, such as after a driver reset, Ground Control goes on:
+
+- A voice check or a Vision Match look that was under way is done on the CPU.
+- A command that Isolation was working on goes to the assistant as Trimming left it, and its session shows **Isolation not used**.
+- The helper process starts again and the model is back on the GPU a few seconds later.
+
+#### More Than One GPU
+
+If Ground Control finds no GPU, it stops and logs the reason. With more than one GPU in the machine, pass only the render device of the one to use, such as `--device /dev/dri/renderD128`, or set `VULKAN_DEVICE` to part of its name, such as `Radeon RX`. The start of the log names the GPU it found.
+
+#### What It Was Tested On
+
+- An NVIDIA RTX 4000 through NVIDIA's Vulkan driver: every model on the GPU. The 2,357 frames of the kiosk test set read the same as on the CPU, and 120 recorded voice sessions gave the same events.
+- Mesa's RADV driver with the integrated Radeon of a Ryzen 9 9950X3D: every model gives the CPU's results. That GPU is slower than its CPU, so the models run on the CPU there.
+- Mesa's Intel driver with an Iris Xe: the same.
+
+It has not been tested on a Radeon card yet.
+
 ### Mac with Apple Silicon
 
 Ground Control runs with the CPU image in [Docker Desktop](https://www.docker.com/products/docker-desktop/) or [OrbStack](https://orbstack.dev) on a Mac with an Apple M-series chip. Docker on a Mac can't use the Mac's GPU, so everything runs on the CPU. An M-series chip is fast enough for every feature. On a MacBook Pro M5, all Voice Match features together add about 0.8 s to a 5 s command. A look with every Vision Match feature takes 70 ms.
@@ -192,6 +258,7 @@ Set `HA_TOKEN` to a long-lived access token to open the web app without logging 
 | `DATA_DIR` | `/data` | Where people, voiceprints, faces, kiosks and sessions are stored. |
 | `UPDATE_CHECK` | `true` | Look for a new Ground Control version on GitHub every 12 hours and show it on Overview. |
 | `OPENVINO_DEVICE` | `GPU` | OpenVINO image only. The GPU to use when the machine has more than one, such as `GPU.1`. See [Intel GPU](#intel-gpu). |
+| `VULKAN_DEVICE` | the first GPU | Vulkan image only. Part of the name of the GPU to use when the machine has more than one, such as `Radeon RX`. See [AMD GPU](#amd-gpu). |
 | `KEEP_GPU_MEMORY` | `false` | CUDA image only. Isolation and the vision models keep their GPU memory between runs instead of handing it back. See [GPU Memory](#gpu-memory). |
 
 ## Updating

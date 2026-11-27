@@ -70,6 +70,18 @@ class GroundControl:
 
             self._openvino = Gpu(cfg.openvino_device, cfg.data_dir / "openvino")
             _LOG.info("OpenVINO on %s", self._openvino.name)
+        self._vulkan = None
+        """The GPU of the Vulkan image (``vulkan.Gpu``). Found here, in a
+        process of its own, so an image without a usable GPU stops at once
+        with the reason. Each model runs on it when it is faster there than
+        on the CPU."""
+        self._vulkan_slow: str | None = None
+        """Why Isolation runs on the CPU in the Vulkan image, when the GPU turned out slower."""
+        if cfg.vulkan:
+            from .vulkan import Gpu as VulkanGpu
+
+            self._vulkan = VulkanGpu(cfg.vulkan_device, cfg.threads)
+            _LOG.info("Vulkan on %s", self._vulkan.name)
         self._embedders: dict[str, Embedder] = {}
         self._settings_file = cfg.data_dir / "settings.json"
         saved = self._saved()
@@ -134,6 +146,8 @@ class GroundControl:
                 "learn": self.learn, "keep_days": self.sessions.keep_days,
                 "keep_audio": self.sessions.keep_audio, "keep_frames": self.sessions.keep_frames, "cuda": self.cfg.cuda, "on_gpu": self.active.on_gpu,
                 "openvino": self._openvino.name if self._openvino is not None else None,
+                "vulkan": self._vulkan.name if self._vulkan is not None else None, "vulkan_slow": self._vulkan_slow,
+                "vulkan_on_cpu": self._vulkan.on_cpu() if self._vulkan is not None else [],
                 "threads": self.cfg.threads, "port": self.cfg.port,
                 "isolator": self.isolate, "isolator_available": self._isolator_files() != [],
                 "isolator_model": ISOLATOR_MODEL,
@@ -146,6 +160,10 @@ class GroundControl:
                                    for f, keys in self.vision_choices().items()},
                 "vision_loaded": self._vision is not None,
                 "vision_on_gpu": self._vision.on_gpu if self._vision is not None else None,
+                # In the Vulkan image each model runs where it is faster: which of the three are on the GPU.
+                "vision_gpu_models": ([f for f, m in (("face", self._vision.face), ("hands", self._vision.hand),
+                                                      ("recognition", self._vision.recognizer)) if m.on_gpu]
+                                      if self._vision is not None else None),
                 "vision_max_looks": self._vision.max_looks if self._vision is not None else None,
                 "vision_ms": self._vision.ms if self._vision is not None else None,
                 "vision_error": self._vision_error,
@@ -299,7 +317,7 @@ class GroundControl:
                 try:
                     self._vision = Vision(self.cfg.models_dir, self.vision_keys, threads=self.cfg.threads,
                                           use_cuda=self.cfg.cuda, keep_memory=self.cfg.keep_gpu_memory,
-                                          openvino=self._openvino)
+                                          openvino=self._openvino if self._openvino is not None else self._vulkan)
                 except Exception as err:  # noqa: BLE001 - reported on the status page
                     self._vision_error = f"Vision Match's models ({names}) failed to load: {err}"
                     self.status.errors.append(self._vision_error)
@@ -355,7 +373,7 @@ class GroundControl:
     def _isolator_files(self) -> list[tuple[str, str, bool]]:
         """The isolation models in this image, in the order to try them: the
         full one on a GPU, then the one made for the CPU."""
-        files = [(ISOLATOR_FILE, ISOLATOR_SHA256, True)] if self.cfg.cuda else []
+        files = [(ISOLATOR_FILE, ISOLATOR_SHA256, True)] if self.cfg.cuda or self._vulkan is not None else []
         files += [(ISOLATOR_CPU_FILE, ISOLATOR_CPU_SHA256, False), (ISOLATOR_FILE, ISOLATOR_SHA256, False)]
         return [f for f in files if (self.cfg.models_dir / f[0]).is_file()]
 
@@ -369,9 +387,22 @@ class GroundControl:
 
                 try:
                     for file, sha, gpu in self._isolator_files():
+                        worker = None
+                        if gpu and self._vulkan is not None:
+                            from .isolator import WINDOW
+                            from .vulkan import Slow
+
+                            made_for_cpu = self.cfg.models_dir / ISOLATOR_CPU_FILE
+                            try:
+                                worker = self._vulkan.isolation(verified_path(self.cfg.models_dir, file, sha), WINDOW,
+                                                                made_for_cpu if made_for_cpu.is_file() else None)
+                            except Slow as err:
+                                self._vulkan_slow = str(err)
+                                _LOG.warning("%s", err)
+                                continue
                         candidate = Isolator(verified_path(self.cfg.models_dir, file, sha),
-                                             threads=self.cfg.threads, use_cuda=gpu,
-                                             keep_memory=self.cfg.keep_gpu_memory)
+                                             threads=self.cfg.threads, use_cuda=gpu and self.cfg.cuda,
+                                             keep_memory=self.cfg.keep_gpu_memory, vulkan=worker)
                         if candidate.on_gpu or not gpu:
                             self._isolator = candidate
                             break
@@ -382,7 +413,8 @@ class GroundControl:
                     self.status.errors.append(f"Isolation model failed to load: {err}")
                     _LOG.exception("Isolation model failed to load")
                     return None
-                where = "the GPU" if self._isolator.on_gpu else "the CPU"
+                where = (f"{self._vulkan.name} through Vulkan" if self._isolator.vulkan
+                         else "the GPU" if self._isolator.on_gpu else "the CPU")
                 if not self._isolator.on_gpu:
                     _LOG.warning("Isolation runs on the CPU: each command waits half a second or more for it")
                 _LOG.info("Isolation model %s loaded on %s%s", self._isolator.version, where,
@@ -392,8 +424,9 @@ class GroundControl:
     def _load(self, key: str) -> Embedder:
         if key not in self._embedders:
             m = SPEAKER_MODELS[key]
-            self._embedders[key] = Embedder(verified_path(self.cfg.models_dir, m.file, m.sha256),
-                                            threads=self.cfg.threads, use_cuda=self.cfg.cuda)
+            path = verified_path(self.cfg.models_dir, m.file, m.sha256)
+            self._embedders[key] = Embedder(path, threads=self.cfg.threads, use_cuda=self.cfg.cuda,
+                                            remote=self._vulkan.model(path) if self._vulkan is not None else None)
             where = "the GPU" if self._embedders[key].on_gpu else "the CPU"
             _LOG.info("%s model loaded on %s", m.label, where)
         return self._embedders[key]
@@ -462,7 +495,9 @@ class GroundControl:
             self.active = embedder
             self.status.model = key
             self._save(model=key)
-            self._embedders.pop(old, None)
+            dropped = self._embedders.pop(old, None)
+            if dropped is not None and dropped is not embedder:
+                dropped.close()
             malloc_trim()
             _LOG.info("speaker model is now %s", key)
         except Exception as err:  # noqa: BLE001 - reported on the status page
@@ -491,5 +526,7 @@ class GroundControl:
         self.pool.shutdown(wait=False, cancel_futures=True)
         if self._vision is not None:
             self._vision.close()
+        if self._isolator is not None:
+            self._isolator.close()
         # After any write that is under way, so sessions.db is whole on its own.
         self.sessions.close()

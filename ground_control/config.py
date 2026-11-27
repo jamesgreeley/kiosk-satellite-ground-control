@@ -20,6 +20,10 @@ Variable             Meaning                                      Default
                      with OpenVINO                                OpenVINO image
 ``OPENVINO_DEVICE``  the GPU OpenVINO uses, such as ``GPU.1``     ``GPU``
                      for a second one
+``VULKAN``           run Isolation on a GPU through Vulkan,       ``false``, ``true`` in the
+                     such as an AMD one                           Vulkan image
+``VULKAN_DEVICE``    part of the name of the GPU Vulkan uses,     the first GPU
+                     when the machine has more than one
 ``HA_URL``           Home Assistant: kiosk tokens and the web     ``http://homeassistant:8123``, or
                      UI's login, so a browser must reach it too   ``auto`` (from the Supervisor) as an app
 ``HA_TOKEN``         a long-lived Home Assistant token that       none
@@ -70,6 +74,8 @@ class Config:
     keep_gpu_memory: bool = False
     openvino: bool = False
     openvino_device: str = "GPU"
+    vulkan: bool = False
+    vulkan_device: str = ""
     ha_token: str | None = None
 
 
@@ -91,6 +97,9 @@ def load() -> Config:
     openvino = _bool(get("OPENVINO", "false"))
     if cuda and openvino:
         raise ValueError("CUDA and OPENVINO can't both be on")
+    vulkan = _bool(get("VULKAN", "false"))
+    if cuda and vulkan:
+        raise ValueError("CUDA and VULKAN can't both be on")
     model = str(get("MODEL", "auto")).lower()
     if model == "auto":
         model = default_model_key(platform.machine(), cpus, cuda, apple_silicon())
@@ -126,5 +135,7 @@ def load() -> Config:
         keep_gpu_memory=_bool(get("KEEP_GPU_MEMORY", "false")),
         openvino=openvino,
         openvino_device=str(get("OPENVINO_DEVICE", "GPU")).strip() or "GPU",
+        vulkan=vulkan,
+        vulkan_device=str(get("VULKAN_DEVICE", "") or "").strip(),
         ha_token=str(get("HA_TOKEN", "") or "").strip() or None,
     )
