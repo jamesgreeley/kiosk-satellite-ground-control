@@ -2,7 +2,7 @@
 
 All notable changes to Kiosk Satellite Ground Control are documented here.
 
-## Unreleased
+## v2026.11.17 - 2026-11-26
 
 ### Added
 - **Vulkan image for AMD GPUs (#27).** The new `vulkan` image runs the models on a GPU through Vulkan, so an AMD GPU can do what the CUDA image does on an NVIDIA one. The speaker models, Isolation, Face Detection, Hand Gestures and Face Recognition can run on the GPU. The Wake Word Aligner runs on the CPU, as in every image. Pass the GPU with `--device /dev/dri`, as in [compose.vulkan.yaml](compose.vulkan.yaml). See [AMD GPU](docs/installation.md#amd-gpu).
