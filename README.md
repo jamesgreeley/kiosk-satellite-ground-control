@@ -7,10 +7,10 @@
 </h1>
 
 <p align="center">
-<img src="https://img.shields.io/github/stars/jxlarrea/kiosk-satellite-ground-control?style=for-the-badge&label=Stars&color=d6a102" alt="Stars">
-<a href="https://github.com/jxlarrea?tab=packages&repo_name=kiosk-satellite-ground-control"><img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fjxlarrea%2Fkiosk-satellite-ground-control%2Fbadges%2Fdownloads.json&style=for-the-badge&cacheSeconds=3600" alt="Downloads"></a>
-<a href="CHANGELOG.md"><img src="https://img.shields.io/github/v/tag/jxlarrea/kiosk-satellite-ground-control?style=for-the-badge&label=Version&color=5da3a6" alt="Version"></a>
-<a href="https://github.com/jxlarrea/kiosk-satellite-ground-control/actions/workflows/images.yml"><img src="https://img.shields.io/github/actions/workflow/status/jxlarrea/kiosk-satellite-ground-control/images.yml?style=for-the-badge&label=Build&color=3fbf5f" alt="Build"></a>
+<a href="https://github.com/jxlarrea/kiosk-satellite-ground-control/stargazers"><img src="https://kiosksatellite.com/badges/ground-control/stars.svg" alt="Stars"></a>
+<a href="https://github.com/jxlarrea?tab=packages&repo_name=kiosk-satellite-ground-control"><img src="https://kiosksatellite.com/badges/ground-control/downloads.svg" alt="Downloads"></a>
+<a href="CHANGELOG.md"><img src="https://kiosksatellite.com/badges/ground-control/version.svg" alt="Version"></a>
+<a href="https://github.com/jxlarrea/kiosk-satellite-ground-control/actions/workflows/images.yml"><img src="https://kiosksatellite.com/badges/ground-control/build.svg" alt="Build"></a>
 </p>
 
 <p align="center">
