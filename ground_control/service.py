@@ -22,7 +22,8 @@ from .config import Config
 from .engine import Embedder, malloc_trim
 from .models import (ALIGNER_FILE, ALIGNER_SHA256, ISOLATOR_CPU_FILE, ISOLATOR_CPU_SHA256, ISOLATOR_FILE,
                      ISOLATOR_MODEL, ISOLATOR_SHA256, SPEAKER_MODELS, VAD_FILE, VAD_SHA256, VISION_FEATURES,
-                     VISION_MODELS, SpeakerModel, apple_silicon, default_vision_keys, verified_path)
+                     VISION_MODELS, VULKAN_ACCURATE_MS, SpeakerModel, apple_silicon, default_vision_keys,
+                     verified_path)
 from .hub import Hub
 from .people import People
 from .session import Session, SessionConfig
@@ -75,6 +76,8 @@ class GroundControl:
         process of its own, so an image without a usable GPU stops at once
         with the reason. Each model runs on it when it is faster there than
         on the CPU."""
+        self._vulkan_accurate: tuple[str, ...] = ()
+        """The features that are Accurate by default for how fast the Vulkan image's GPU runs them."""
         self._vulkan_slow: str | None = None
         """Why Isolation runs on the CPU in the Vulkan image, when the GPU turned out slower."""
         if cfg.vulkan:
@@ -82,6 +85,7 @@ class GroundControl:
 
             self._vulkan = VulkanGpu(cfg.vulkan_device, cfg.threads)
             _LOG.info("Vulkan on %s", self._vulkan.name)
+            self._vulkan_accurate = self._time_accurate()
         self._embedders: dict[str, Embedder] = {}
         self._settings_file = cfg.data_dir / "settings.json"
         saved = self._saved()
@@ -136,6 +140,21 @@ class GroundControl:
         tuned = (self._saved().get("thresholds") or {}).get(base.key) or {}
         return replace(base, threshold=float(tuned.get("threshold", base.threshold)),
                        other_threshold=float(tuned.get("other_threshold", base.other_threshold)))
+
+    @property
+    def gpu(self) -> str:
+        """What this install's models reach a GPU through: ``cuda``,
+        ``openvino``, ``vulkan`` or nothing when everything runs on the CPU.
+        The CUDA image without a usable GPU runs on the CPU. So does the
+        Vulkan image on a GPU that is slower than the CPU for the speaker
+        model and for the Accurate vision models."""
+        if self.cfg.cuda:
+            return "cuda" if self.active.on_gpu else ""
+        if self._openvino is not None:
+            return "openvino"
+        if self._vulkan is not None:
+            return "vulkan" if self.active.on_gpu or self._vulkan_accurate else ""
+        return ""
 
     def settings(self) -> dict[str, object]:
         m, base = self.model, SPEAKER_MODELS[self.status.model]
@@ -281,7 +300,28 @@ class GroundControl:
                 for f in VISION_FEATURES}
 
     def _vision_defaults(self) -> dict[str, str]:
-        return default_vision_keys(platform.machine(), self.cfg.cuda, apple_silicon())
+        return default_vision_keys(platform.machine(), self.cfg.cuda, apple_silicon(), self._vulkan_accurate)
+
+    def _time_accurate(self) -> tuple[str, ...]:
+        """In the Vulkan image: the features whose Accurate model the GPU
+        runs fast enough to be the default. Face Recognition isn't timed,
+        since it follows the CPU as in the other images."""
+        fast = []
+        for f in ("face", "hands"):
+            part = VISION_MODELS[f]["accurate"]
+            if not (self.cfg.models_dir / part.file).is_file():
+                continue
+            try:
+                ms = self._vulkan.time(verified_path(self.cfg.models_dir, part.file, part.sha256))
+            except Exception:  # noqa: BLE001 - a default, not worth stopping the service for
+                _LOG.exception("couldn't time %s on the GPU, so its default stays Light", part.file)
+                continue
+            if ms is not None and ms <= VULKAN_ACCURATE_MS:
+                fast.append(f)
+            _LOG.info("%s by default: %s", {"face": "Face Detection", "hands": "Hand Gestures"}[f],
+                      "Light, since the Accurate model runs on the CPU" if ms is None
+                      else f"{'Accurate' if f in fast else 'Light'}, since the Accurate model takes {ms:.0f} ms on the GPU")
+        return tuple(fast)
 
     def _vision_keys(self, saved: dict) -> dict[str, str]:
         """Each feature's model: as saved, else as saved before the models

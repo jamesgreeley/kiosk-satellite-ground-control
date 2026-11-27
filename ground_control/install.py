@@ -3,7 +3,8 @@
 Each kiosk hears it when it connects and puts it in its daily report with
 the rest of Ground Control's details: the HA app, standalone Docker or
 Python from the source, the CPU architecture, the CUDA version of the CUDA
-image and whether the speaker model runs on the GPU.
+image, whether the speaker model runs on the GPU and what the GPU is used
+through (``gpu``: cuda, openvino, vulkan or nothing on a CPU).
 """
 
 from __future__ import annotations
@@ -40,5 +41,8 @@ def cuda_version() -> str:
     return str(getattr(info, "cuda_version", "") or "")
 
 
-def describe(supervisor: bool, on_gpu: bool) -> dict[str, object]:
-    return {"install": kind(supervisor), "arch": arch(), "cuda": cuda_version(), "on_gpu": on_gpu}
+def describe(supervisor: bool, on_gpu: bool, gpu: str = "") -> dict[str, object]:
+    """``gpu``: what the models reach a GPU through (``Service.gpu``). A Kiosk
+    Satellite from before the OpenVINO and Vulkan images only reads ``on_gpu``
+    and takes it for CUDA."""
+    return {"install": kind(supervisor), "arch": arch(), "cuda": cuda_version(), "on_gpu": on_gpu, "gpu": gpu}

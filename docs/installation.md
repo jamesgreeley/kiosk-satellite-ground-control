@@ -175,6 +175,8 @@ When a model loads, Ground Control runs it on the GPU and on the CPU with the sa
 
 A small integrated GPU is slower than its machine's CPU for every model, so everything runs on the CPU there. This is the case for the Radeon graphics of a Ryzen 9000 desktop processor and for an Intel Iris Xe. For an Intel GPU, the [OpenVINO image](#intel-gpu) is faster for Vision Match.
 
+Face Detection and Hand Gestures are Accurate by default when the GPU runs the Accurate model in 50 ms or less. Ground Control times both at start and the log shows the result. On a slower GPU the defaults are the CPU image's, which is Light for both. A model you choose under **Settings > Vision Match** stays as chosen.
+
 #### How Fast It Is
 
 These are the times on an RTX 4000 through Vulkan, next to its i9-13900H on four threads. An NVIDIA GPU is faster still with the CUDA image, so use that one for NVIDIA.

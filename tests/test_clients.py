@@ -102,7 +102,7 @@ async def test_a_new_kiosk_waits_for_approval(client):
     assert [p["name"] for p in people["people"]] == ["Leo"]
     # How Ground Control is installed, for the kiosk's analytics.
     assert people["install"] in ("docker", "python") and people["arch"] and people["cuda"] == ""
-    assert people["on_gpu"] is False
+    assert people["on_gpu"] is False and people["gpu"] == ""
 
     # Declined: the ticket stops working and the kiosk hears it.
     await client.post("/api/kiosks/k1/access", json={"access": "declined"}, headers=GOOD)

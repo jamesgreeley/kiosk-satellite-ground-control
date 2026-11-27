@@ -284,6 +284,12 @@ def test_the_speaker_model_gives_the_cpus_voiceprints_on_the_gpu(gpu):
         there.close()
 
 
+def test_a_model_is_timed_on_the_gpu_without_staying_loaded(gpu):
+    ms = gpu.time(MODELS / "arcface_w600k_mbf.onnx")
+    assert ms is not None and ms > 0
+    assert gpu.on_cpu() == [] and gpu._models == []
+
+
 def test_a_model_goes_on_on_the_cpu_when_its_helper_is_lost(gpu):
     path = MODELS / "arcface_w600k_mbf.onnx"
     model = gpu.model(path)

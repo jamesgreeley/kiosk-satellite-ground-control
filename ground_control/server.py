@@ -360,7 +360,7 @@ async def status(request: web.Request) -> web.Response:
     return web.json_response({**asdict(vm.status), "version": __version__, "people": len(vm.people.all()),
                               "model_label": vm.model.label, "threshold": vm.model.threshold,
                               "other_threshold": vm.model.other_threshold, "cuda": vm.cfg.cuda,
-                              "on_gpu": vm.active.on_gpu, "threads": vm.cfg.threads,
+                              "on_gpu": vm.active.on_gpu, "gpu": vm.gpu, "threads": vm.cfg.threads,
                               "kiosks": sum(k.connected for k in vm.hub.kiosks.values()),
                               "isolation": vm.isolator() is not None,
                               "aligner": vm.align and vm._aligner_missing() is None,
@@ -1192,7 +1192,7 @@ async def _people(vm: GroundControl) -> dict[str, Any]:
         p["has_face"] = vm.faces.has_face(str(p["id"]))
     return {"type": "people", "people": people, "model": vm.model.key,
             "version": __version__, "app_path": vm.app_path,
-            **describe_install(bool(vm.cfg.supervisor_token), vm.active.on_gpu)}
+            **describe_install(bool(vm.cfg.supervisor_token), vm.active.on_gpu, vm.gpu)}
 
 
 def _from_kiosk(vm: GroundControl, device_id: str, data: str) -> None:

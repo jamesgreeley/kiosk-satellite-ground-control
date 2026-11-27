@@ -64,6 +64,11 @@ function modelSeg(name, current, offered, onPick) {
   return seg;
 }
 
+// The line under a Runs on row. ``what``: "Isolation runs" or "Each model runs".
+const runsOnText = (s, what) => (s.vulkan ? `${what} on the GPU when that is faster than this machine's CPU.`
+  : s.openvino ? (what.startsWith("Isolation") ? "Isolation runs on the CPU in the OpenVINO image." : `Vision Match runs on ${s.openvino} in the OpenVINO image.`)
+  : "Set by the CUDA option in the same way as the speaker model.");
+
 const defaultText = (key) => ` The default here is ${key === "accurate" ? "Accurate" : "Light"}.`;
 
 const size = (bytes) => (bytes >= 1e9 ? `${(bytes / 1e9).toFixed(1)} GB` : bytes >= 1e6 ? `${(bytes / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1e3))} KB`);
@@ -79,6 +84,7 @@ function areas(current) {
 export async function render({ area } = {}) {
   const current = AREAS.some(([key]) => key === area) ? area : "voice-match";
   const s = await api("api/settings");
+  const runsOn = (what) => runsOnText(s, what);
   let poll = null;
 
   const save = async (body) => {
@@ -167,7 +173,7 @@ export async function render({ area } = {}) {
       section("Isolation", "Uses the user's voiceprint to also remove other voices talking over their words."),
       h("div", { class: "card" },
         row("Use Isolation", "For kiosks with Trimming and Isolation on in Kiosk Satellite.", isolation),
-        row("Runs on", "Set by the CUDA option in the same way as the speaker model.", where),
+        row("Runs on", runsOn("Isolation runs"), where),
         hint(isolationNote)),
     ];
   };
@@ -215,7 +221,7 @@ export async function render({ area } = {}) {
         row("Face Detection", `Both models found every face looking at the kiosk on the test set and let the same turned heads through. Accurate takes about 3 times as long.${byDefault("face")}${measured("face", "a look")}`, pick("face")),
         row("Hand Gestures", `Accurate reads the finger count right more often at 3 m and in dim light. The hand model runs on every look, so on a CPU Accurate lowers the looks a second each kiosk gets.${byDefault("hands")}${measured("hands", "a look")}`, pick("hands")),
         row("Face Recognition", `Accurate recognizes small faces in dim light more often. A recognized face is checked again only every 2 seconds, so Accurate costs little even on a CPU. Faces are rebuilt from their pictures, so nobody has to enroll again.${byDefault("recognition")}${measured("recognition", "a face")}`, pick("recognition")),
-        row("Runs on", "Set by the CUDA option in the same way as the speaker model.", where),
+        row("Runs on", runsOn("Each model runs"), where),
         row("Looks a second", "For one kiosk, measured on this machine when the models load. Kiosks look at most 2 times a second for faces and 4 for hands.", looks),
         s.vision_error ? hint(s.vision_error)
           : hint("Turn Vision Match on for each kiosk in Kiosk Satellite under Ground Control > Vision Match.")),

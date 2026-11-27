@@ -1289,6 +1289,11 @@ class Remote:
     def on_gpu(self) -> bool:
         return self._helper is not None and self._helper.down is None
 
+    @property
+    def gpu_ms(self) -> float | None:
+        """What a run took on the GPU in the check at load, in ms. None on the CPU."""
+        return float(self._helper.info["gpu_ms"]) if self.on_gpu else None
+
     def metadata(self, key: str) -> str | None:
         return self._meta.get(key)
 
@@ -1343,6 +1348,15 @@ class Gpu:
         remote = Remote(self, path)
         self._models.append(remote)
         return remote
+
+    def time(self, path: Path) -> float | None:
+        """What a run of the model at ``path`` takes on the GPU, in ms, without
+        keeping it loaded. None when the model would run on the CPU."""
+        remote = Remote(self, path)
+        try:
+            return remote.gpu_ms
+        finally:
+            remote.close()
 
     def isolation(self, path: Path, longest: int, cpu_path: Path | None = None) -> Worker:
         return Worker(path, self.threads, longest, cpu_path, self.device, self.software, self.env())
