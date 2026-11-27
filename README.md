@@ -14,11 +14,11 @@
 </p>
 
 <p align="center">
-<a href="https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fjxlarrea%2Fkiosk-satellite-ground-control"><img src="https://img.shields.io/badge/Home%20Assistant-App-18bcf2?style=for-the-badge&logo=homeassistant&logoColor=white" alt="Home Assistant app"></a>
-<a href="https://github.com/users/jxlarrea/packages/container/package/kiosk-satellite-ground-control"><img src="https://img.shields.io/badge/Docker-amd64%20%7C%20arm64-b39ddb?style=for-the-badge&logo=docker&logoColor=white" alt="Docker amd64 and arm64"></a>
-<a href="docs/installation.md#nvidia-gpu"><img src="https://img.shields.io/badge/NVIDIA-CUDA-76b900?style=for-the-badge&logo=nvidia&logoColor=white" alt="NVIDIA CUDA"></a>
-<a href="docs/installation.md#intel-gpu"><img src="https://img.shields.io/badge/Intel-OpenVINO-0071c5?style=for-the-badge&logo=intel&logoColor=white" alt="Intel OpenVINO"></a>
-<a href="docs/installation.md#amd-gpu"><img src="https://img.shields.io/badge/AMD-Vulkan-ed1c24?style=for-the-badge&logo=amd&logoColor=white" alt="AMD Vulkan"></a>
+<a href="https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fjxlarrea%2Fkiosk-satellite-ground-control"><img src="https://img.shields.io/badge/Home%20Assistant-App-18bcf2?style=for-the-badge" alt="Home Assistant app"></a>
+<a href="https://github.com/users/jxlarrea/packages/container/package/kiosk-satellite-ground-control"><img src="https://img.shields.io/badge/Docker-amd64%20%7C%20arm64-b39ddb?style=for-the-badge" alt="Docker amd64 and arm64"></a>
+<a href="docs/installation.md#nvidia-gpu"><img src="https://img.shields.io/badge/NVIDIA-CUDA-76b900?style=for-the-badge" alt="NVIDIA CUDA"></a>
+<a href="docs/installation.md#intel-gpu"><img src="https://img.shields.io/badge/Intel-OpenVINO-0071c5?style=for-the-badge" alt="Intel OpenVINO"></a>
+<a href="docs/installation.md#amd-gpu"><img src="https://img.shields.io/badge/AMD-Vulkan-ed1c24?style=for-the-badge" alt="AMD Vulkan"></a>
 </p>
 
 <p align="center">
