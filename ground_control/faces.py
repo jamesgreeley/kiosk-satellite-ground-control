@@ -89,7 +89,7 @@ class FaceEmbedder:
         self._gpu = gpu
         self._ov = openvino.model(path) if openvino is not None else None
         if self._ov is not None:
-            self.session, self.on_gpu, self._input = None, True, self._ov.inputs[0]
+            self.session, self.on_gpu, self._input = None, getattr(self._ov, "on_gpu", True), self._ov.inputs[0]
             self.on_coreml = False
             return
         session_threads = coreml_threads if use_coreml and coreml_threads is not None else threads

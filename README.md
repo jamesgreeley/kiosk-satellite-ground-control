@@ -7,24 +7,25 @@
 </h1>
 
 <p align="center">
-<img src="https://img.shields.io/github/stars/jxlarrea/kiosk-satellite-ground-control?style=for-the-badge&label=Stars&color=d6a102" alt="Stars">
-<a href="https://github.com/jxlarrea?tab=packages&repo_name=kiosk-satellite-ground-control"><img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fjxlarrea%2Fkiosk-satellite-ground-control%2Fbadges%2Fdownloads.json&style=for-the-badge&cacheSeconds=3600" alt="Downloads"></a>
-<a href="CHANGELOG.md"><img src="https://img.shields.io/github/v/tag/jxlarrea/kiosk-satellite-ground-control?style=for-the-badge&label=Version&color=5da3a6" alt="Version"></a>
-<a href="https://github.com/jxlarrea/kiosk-satellite-ground-control/actions/workflows/images.yml"><img src="https://img.shields.io/github/actions/workflow/status/jxlarrea/kiosk-satellite-ground-control/images.yml?style=for-the-badge&label=Build&color=3fbf5f" alt="Build"></a>
+<a href="https://github.com/jxlarrea/kiosk-satellite-ground-control/stargazers"><img src="https://kiosksatellite.com/badges/ground-control/stars.svg" alt="Stars"></a>
+<a href="https://github.com/jxlarrea?tab=packages&repo_name=kiosk-satellite-ground-control"><img src="https://kiosksatellite.com/badges/ground-control/downloads.svg" alt="Downloads"></a>
+<a href="CHANGELOG.md"><img src="https://kiosksatellite.com/badges/ground-control/version.svg" alt="Version"></a>
+<a href="https://github.com/jxlarrea/kiosk-satellite-ground-control/actions/workflows/images.yml"><img src="https://kiosksatellite.com/badges/ground-control/build.svg" alt="Build"></a>
 </p>
 
 <p align="center">
-<a href="https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fjxlarrea%2Fkiosk-satellite-ground-control"><img src="https://img.shields.io/badge/Home%20Assistant-App-18bcf2?style=for-the-badge&logo=homeassistant&logoColor=white" alt="Home Assistant app"></a>
-<a href="https://github.com/users/jxlarrea/packages/container/package/kiosk-satellite-ground-control"><img src="https://img.shields.io/badge/Docker-amd64%20%7C%20arm64-b39ddb?style=for-the-badge&logo=docker&logoColor=white" alt="Docker amd64 and arm64"></a>
-<a href="docs/installation.md#nvidia-gpu"><img src="https://img.shields.io/badge/NVIDIA-CUDA-76b900?style=for-the-badge&logo=nvidia&logoColor=white" alt="NVIDIA CUDA"></a>
-<a href="docs/installation.md#intel-gpu"><img src="https://img.shields.io/badge/Intel-OpenVINO-0071c5?style=for-the-badge&logo=intel&logoColor=white" alt="Intel OpenVINO"></a>
+<a href="https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fjxlarrea%2Fkiosk-satellite-ground-control"><img src="https://img.shields.io/badge/Home%20Assistant-App-18bcf2?style=for-the-badge" alt="Home Assistant app"></a>
+<a href="https://github.com/users/jxlarrea/packages/container/package/kiosk-satellite-ground-control"><img src="https://img.shields.io/badge/Docker-amd64%20%7C%20arm64-b39ddb?style=for-the-badge" alt="Docker amd64 and arm64"></a>
+<a href="docs/installation.md#nvidia-gpu"><img src="https://img.shields.io/badge/NVIDIA-CUDA-76b900?style=for-the-badge" alt="NVIDIA CUDA"></a>
+<a href="docs/installation.md#intel-gpu"><img src="https://img.shields.io/badge/Intel-OpenVINO-0071c5?style=for-the-badge" alt="Intel OpenVINO"></a>
+<a href="docs/installation.md#amd-gpu"><img src="https://img.shields.io/badge/AMD-Vulkan-ed1c24?style=for-the-badge" alt="AMD Vulkan"></a>
 </p>
 
 <p align="center">
 <a href="https://buymeacoffee.com/jxlarrea"><img src="https://img.shields.io/badge/Buy%20Me%20A%20Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black" alt="Buy Me A Coffee"></a>
 </p>
 
-Ground Control is a companion service for [Kiosk Satellite](https://github.com/jxlarrea/kiosk-satellite). It runs on a computer or server in your home and handles the voice and vision processing that kiosks don't have the computing power for. Install it as a Home Assistant app, run it in Docker on a CPU or an NVIDIA GPU, or run it natively on Apple Silicon for Core ML acceleration of vision and tuned speaker models.
+Ground Control is a companion service for [Kiosk Satellite](https://github.com/jxlarrea/kiosk-satellite). It runs on a computer or server in your home and handles the voice and vision processing that kiosks don't have the computing power for. Install it as a Home Assistant app or run it in Docker on CPU (ARM and x86_x64) or GPU (CUDA, Vulkan and OpenVINO), or run it natively on Apple Silicon for Core ML acceleration of vision and tuned speaker models.
 
 Kiosk Satellite Ground Control currently has two components. **Voice Match** handles speaker voice recognition, trimming, wake word alignment and isolation. **Vision Match** handles face detection, hand gestures and face recognition.
 
@@ -55,10 +56,6 @@ Trimming doesn't simply end the command when someone else starts talking because
 <video src="assets/videos/voice-match-trimming.mp4" controls width="100%"></video>
 
 https://github.com/user-attachments/assets/985faf93-9b86-48ce-bbda-41d91d0a1b49
-
-### Wake Word Verifier
-
-A wake word engine now and then wakes a kiosk up to speech that is nothing like its wake word, most often a TV across the room. The Wake Word Verifier checks that the wake word was really said. If it wasn't, the session is stopped 0.3 seconds in and nothing reaches the assistant. It works with any wake word and any wake word engine. It needs Trimming and is on by default. See [Wake Word Verifier](docs/voice-match.md#wake-word-verifier).
 
 ### Wake Word Aligner
 
@@ -294,21 +291,24 @@ The app needs Home Assistant OS or a Supervised install. For Isolation on an NVI
 
 ### Standalone Docker Container
 
-Use the Docker container to run Ground Control on a machine other than Home Assistant's, on an NVIDIA GPU or on an Intel GPU. There is an image for each:
+Use the Docker container to run Ground Control on a machine other than Home Assistant's, on an NVIDIA GPU, on an Intel GPU or on an AMD GPU. There is an image for each:
 
 | Image | Tag | Runs |
 |---|---|---|
 | CPU | `latest` | Everything on the CPU of an amd64 or arm64 machine. |
 | NVIDIA GPU (CUDA) | `cuda` | Everything on an NVIDIA GPU. |
 | Intel GPU (OpenVINO) | `openvino` | Vision Match on an Intel GPU and Voice Match on the CPU. |
+| AMD GPU (Vulkan) | `vulkan` | Each model on an AMD GPU when it is faster there than on the CPU. |
 
 In every command below, `HA_URL` is your Home Assistant address. Kiosks sign in with the Home Assistant token they already have and Ground Control checks that token against Home Assistant. You also log in through `HA_URL` in your browser, so use an address your browser can open. Avoid one that only works inside Docker.
+
+To skip the login, set `HA_TOKEN` to a long-lived access token from your Home Assistant profile. Anyone who can reach port 10900 can then open Ground Control without logging in. See [Skip the Login](docs/installation.md#skip-the-login).
 
 The commands publish port 10900 with `-p 10900:10900`. That way the service isn't discovered automatically, so enter this machine's address in each kiosk. See [Installation](docs/installation.md#docker) for the host network and for every setting.
 
 #### Docker Compose
 
-Use [compose.yaml](compose.yaml) for the CPU, [compose.cuda.yaml](compose.cuda.yaml) for an NVIDIA GPU or [compose.openvino.yaml](compose.openvino.yaml) for an Intel GPU. Set `HA_URL` in the file, then run `docker compose up -d`. For a GPU, name the file, as in `docker compose -f compose.cuda.yaml up -d`. All three use the host network, so the service is discovered automatically on the same network.
+Use [compose.yaml](compose.yaml) for the CPU, [compose.cuda.yaml](compose.cuda.yaml) for an NVIDIA GPU, [compose.openvino.yaml](compose.openvino.yaml) for an Intel GPU or [compose.vulkan.yaml](compose.vulkan.yaml) for an AMD GPU. Set `HA_URL` in the file, then run `docker compose up -d`. For a GPU, name the file, as in `docker compose -f compose.cuda.yaml up -d`. All four use the host network, so the service is discovered automatically on the same network.
 
 #### CPU
 
@@ -344,6 +344,16 @@ docker run -d --name ground-control --device /dev/dri -p 10900:10900 \
 
 The GPU can be integrated or an Arc card, from the 11th generation of Core processors or newer. That includes the Intel N100. See [Intel GPU](docs/installation.md#intel-gpu).
 
+#### AMD GPU (Vulkan)
+
+```bash
+docker run -d --name ground-control --device /dev/dri -p 10900:10900 \
+  -e HA_URL=http://homeassistant.local:8123 \
+  -v ground-control:/data ghcr.io/jxlarrea/kiosk-satellite-ground-control:vulkan
+```
+
+The speaker models, Isolation and Vision Match run on the GPU through Vulkan. Ground Control times each model on the GPU and on the CPU when it loads and runs it where it is faster. The host needs to run Linux. See [AMD GPU](docs/installation.md#amd-gpu).
+
 #### Mac with Apple Silicon
 
 Run the CPU command above in Docker Desktop or OrbStack. Docker on a Mac can't use the Mac's GPU or Neural Engine, so every feature including Isolation runs on the CPU of an M-series chip. Native macOS installs use Core ML for supported vision models and locally tuned speaker windows. Ground Control on a Mac isn't discovered automatically, so enter the Mac's address in each kiosk. See [Mac with Apple Silicon](docs/installation.md#mac-with-apple-silicon).
@@ -362,7 +372,7 @@ Run the CPU command above in Docker Desktop or OrbStack. Docker on a Mac can't u
 - [Installation](docs/installation.md): the Home Assistant app, Docker on a CPU, an NVIDIA GPU or an Intel GPU, options and updating.
 - [Kiosks](docs/kiosks.md): connecting and approving kiosks, kiosks on another network and each kiosk's page.
 - [People](docs/people.md): adding people, enrollment and personal commands.
-- [Voice Match](docs/voice-match.md): Recognition, Trimming, the Wake Word Verifier, the Wake Word Aligner, Isolation and the speaker models.
+- [Voice Match](docs/voice-match.md): Recognition, Trimming, the Wake Word Aligner, Isolation and the speaker models.
 - [Vision Match](docs/vision-match.md): Face Detection, Hand Gestures, Face Recognition and the vision models.
 - [Backup and moving](docs/backup.md): backing up the data and moving it to another machine for the app and Docker.
 - [Sessions](docs/sessions.md): what each voice command did, its audio and how to download it for an issue.

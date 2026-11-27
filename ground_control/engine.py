@@ -16,6 +16,7 @@ import platform
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import onnxruntime as ort
@@ -247,7 +248,25 @@ def session_options(threads: int) -> ort.SessionOptions:
 class Embedder:
     """One speaker model. Thread safe: onnxruntime sessions can run concurrently."""
 
-    def __init__(self, path: Path, threads: int = 1, use_cuda: bool = False) -> None:
+    def __init__(self, path: Path, threads: int = 1, use_cuda: bool = False, remote: Any = None) -> None:
+        """``remote``: the model in the Vulkan image (``vulkan.Remote``), which
+        runs on the GPU in a helper process or here on the CPU, in place of a session."""
+        self._coreml_windows = {}
+        self._remote = remote
+        if remote is not None:
+            self._gpu = GpuThread(False, "gpu-speaker")
+            self.session, self._own, self.on_gpu = None, {}, remote.on_gpu
+            self._input, self._rank = remote.inputs[0], remote.ranks[0]
+            self._keeps_memory, self._hand_back = 0, None
+            self._lock = threading.Lock()
+            self.calls = 0
+            self.dim = int(self.embed(np.zeros(16000, dtype=np.float32)).shape[0])
+            if self.on_gpu:
+                # The GPU compiles its shaders for each new length: the most used ones now.
+                for sec in OWN_SESSION_S:
+                    self.embed(np.zeros(int(sec * 16000), dtype=np.float32))
+            self.calls = 0
+            return
         so = session_options(threads)
         so.log_severity_level = 3  # the frontend's CPU fallback nodes are expected
         self._gpu = GpuThread(use_cuda, "gpu-speaker")
@@ -262,7 +281,6 @@ class Embedder:
         except BaseException:
             self._gpu.close()
             raise
-        self._coreml_windows = {}
         if not use_cuda and apple_neural_engine_available() and path.stem.startswith("redimnet2_"):
             folder = speaker_profile_dir(path, threads)
             for seconds in OWN_SESSION_S:
@@ -292,6 +310,11 @@ class Embedder:
     @property
     def on_coreml(self) -> bool:
         return bool(self._coreml_windows)
+
+    def close(self) -> None:
+        if self._remote is not None:
+            self._remote.close()
+        self._gpu.close()
 
     def embed(self, audio: np.ndarray) -> np.ndarray:
         """Unit-length embedding of float32 audio in [-1, 1].
@@ -327,7 +350,9 @@ class Embedder:
                 with self._lock:
                     self.calls += 1
                 return vector / norm
-        if n == self._keeps_memory and n in self._own:
+        if self._remote is not None:
+            e = self._remote.run({self._input: x})[0][0]
+        elif n == self._keeps_memory and n in self._own:
             e = self._gpu(session.run, None, {self._input: x})[0][0]
         else:
             e = self._gpu(session.run, None, {self._input: x}, self._hand_back)[0][0]

@@ -34,6 +34,7 @@ async def test_home_assistant_down_keeps_known_tokens():
     up["on"] = False
     assert await check.valid("known")
     assert not await check.valid("new")
+    assert await check.check("new") is None
 
 
 def test_bearer():

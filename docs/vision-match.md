@@ -99,6 +99,8 @@ Both hand models are trained on HaGRIDv2 gestures. What each choice changes:
 - **Hand Gestures:** Accurate gets the finger count right more often at 3 m and in dim light, 96% of frames compared to 68%. The hand model runs on every hand look and Accurate is slow on a CPU: 1.8 s a look on an Intel N100, 352 ms on an i9-13900H and 256 ms on a MacBook Pro M5. Light is the default on a CPU.
 - **Face Recognition:** Accurate recognizes small faces in dim light more often, 93% compared to 71%. After its first 2 seconds in view a face is checked at most once a second, so Accurate is the default on x86 CPUs and Apple M-series chips. It takes 173 ms a face on an Intel N100. A Raspberry Pi and other ARM CPUs use Light.
 
+In the [Vulkan image](installation.md#amd-gpu), Face Detection and Hand Gestures are Accurate by default when the GPU runs the Accurate model in 50 ms or less. Ground Control times both at start.
+
 Each model's row shows its time on this machine once the models load. Changing the Face Recognition model rebuilds everyone's face from the kept pictures, so nobody has to enroll again. Each Face Recognition model has its own **Threshold**.
 
 ### Time per Look

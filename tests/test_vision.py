@@ -378,6 +378,41 @@ def test_the_default_models_follow_the_machine():
     assert default_vision_keys("aarch64") == {"face": "light", "hands": "light", "recognition": "light"}
 
 
+def test_the_vulkan_images_defaults_follow_how_fast_its_gpu_is(cfg):
+    from ground_control.service import GroundControl
+
+    everything = {"face": "accurate", "hands": "accurate", "recognition": "accurate"}
+    assert default_vision_keys("x86_64", gpu_accurate=("face", "hands")) == everything
+    assert default_vision_keys("x86_64", gpu_accurate=("face",))["hands"] == "light"
+
+    class Gpu:
+        """Stands in for ``vulkan.Gpu``: what each Accurate model takes on it, None for one left on the CPU."""
+        name = "Test GPU"
+
+        def __init__(self, face, hands):
+            self.ms = {"scrfd_10g.onnx": face, "yolov10x_gestures.onnx": hands}
+
+        def time(self, path):
+            return self.ms[path.name]
+
+    vm = GroundControl(cfg)
+    try:
+        cpu = vm._vision_defaults()
+        assert cpu["face"] == cpu["hands"] == "light" and vm.gpu == ""
+        vm._vulkan = Gpu(13.0, 26.0)                  # an RTX 4000
+        vm._vulkan_accurate = vm._time_accurate()
+        assert vm._vision_defaults() == {**cpu, "face": "accurate", "hands": "accurate"} and vm.gpu == "vulkan"
+        vm._vulkan = Gpu(30.0, 120.0)                 # a GPU that is only fast enough for faces
+        vm._vulkan_accurate = vm._time_accurate()
+        assert vm._vision_defaults() == {**cpu, "face": "accurate"} and vm.gpu == "vulkan"
+        vm._vulkan = Gpu(None, None)                  # an integrated GPU: both run on the CPU
+        vm._vulkan_accurate = vm._time_accurate()
+        assert vm._vision_defaults() == cpu and vm.gpu == ""
+    finally:
+        vm._vulkan = None
+        vm.close()
+
+
 async def test_settings_choose_a_model_for_each_feature(client):
     s = await (await client.get("/api/settings", headers=GOOD)).json()
     assert s["vision_models"] == s["vision_defaults"]

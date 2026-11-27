@@ -20,7 +20,11 @@ jobs:
           python-version: "3.12"
       - name: Install
         run: |
-          sudo apt-get update && sudo apt-get install -y --no-install-recommends espeak-ng
+          # mesa-vulkan-drivers has a software Vulkan device, which the Vulkan tests run the shaders on.
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends espeak-ng mesa-vulkan-drivers libvulkan1
           pip install -e '.[dev]'
+          # ONNX Runtime's WebGPU build, beside the CPU one, for the Vulkan image's other models.
+          pip install --no-deps --target "$RUNNER_TEMP/onnxruntime-webgpu" onnxruntime-webgpu==1.27.0
+          echo "VULKAN_ORT=$RUNNER_TEMP/onnxruntime-webgpu" >> "$GITHUB_ENV"
       - name: Test
         run: python -m pytest -q

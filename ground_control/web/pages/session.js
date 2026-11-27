@@ -91,7 +91,6 @@ function chartKey(record, color) {
 function steps(record) {
   // The end of the wake word first: the user's own first word can start right at it.
   const out = (record.timeline || []).filter((p) => p.kind === "wake_word").map((p) => wakeWordStep(p, record.wake?.wake_word));
-  out.push(...(record.timeline || []).filter((p) => p.kind === "wake_check").map((p) => wakeCheckStep(p, record.wake?.wake_word)));
   out.push(...(record.followups || []).map((t) => ["Follow-up", "The assistant asked something and the user answered. This part is the answer.", t]));
   for (const e of record.events || []) {
     if (e.type === "speech_start") out.push(["Speech started", "The voice check starts here.", e.t]);
@@ -113,12 +112,13 @@ function steps(record) {
     }
     if (e.type === "turn_start") out.push([e.turn > 1 ? `Turn ${e.turn}` : "The user started talking", "What they say goes to the assistant.", e.t]);
     if (e.type === "turn_end") out.push(["The user stopped", `${e.speech_s ?? 0} s of speech. The command ended here.`, e.t]);
-    if (e.type === "rejected" && e.reason === "wake_word") out.push(["False positive", "The wake word wasn't said, so the session was stopped and nothing went to the assistant.", e.t]);
-    else if (e.type === "rejected") out.push(["Rejected", "This kiosk answers enrolled voices only.", e.t]);
+    if (e.type === "rejected") out.push(["Rejected", "This kiosk answers enrolled voices only.", e.t]);
     if (e.type === "end_of_speech" && e.reason === "silence") out.push(["Speaker stopped", "Silence after the speech.", e.t]);
   }
   for (const p of record.timeline || []) {
-    if (p.kind === "isolated") out.push(["Isolation", `Other voices under the user's words were removed in ${p.ms} ms. The command went to the assistant after that.`, p.t]);
+    if (p.kind === "isolated" && p.failed) out.push(["Isolation not used", `The GPU didn't answer, so this part went to the assistant as Trimming left it, with other voices still under the user's words. Ground Control starts Isolation on the GPU again for the next command.`, p.t]);
+    else if (p.kind === "isolated" && p.skipped) out.push(["Isolation not used", `Isolation returned this part ${Math.abs(p.kept_db)} dB quieter, as if the user wasn't talking in it. It went to the assistant as Trimming left it, with other voices still under the user's words. Isolation took ${p.ms} ms.`, p.t]);
+    else if (p.kind === "isolated") out.push(["Isolation", `Other voices under the user's words were removed in ${p.ms} ms. The command went to the assistant after that.`, p.t]);
   }
   return out.sort((a, b) => a[2] - b[2]).map(([title, desc, t]) => h("div", { class: "row" },
     h("div", { class: "grow" }, h("div", { class: "rt" }, title), h("div", { class: "rd" }, desc)),
@@ -133,15 +133,6 @@ function wakeWordStep(p, word) {
   if (!p.t) return [title, `${name[0].toUpperCase()}${name.slice(1)} was over before the command's audio started. Nothing to leave out.`, 0];
   const how = p.rule === "pause" ? "The user paused after it." : "The command started right after it.";
   return [title, `The first ${Number(p.t).toFixed(2)} s was still ${name} and was left out. Finding it took ${p.ms} ms. ${how}`, p.t];
-}
-
-function wakeCheckStep(p, word) {
-  const name = word ? `"${word}"` : "the wake word";
-  const title = "Wake Word Verifier";
-  const fit = `It fits what the kiosk heard with a score of ${p.fit}. A wake word that was said scores ${p.needs} or more.`;
-  if (p.known_voice) return [title, `${name[0].toUpperCase()}${name.slice(1)} wasn't clear, but the voice is someone enrolled, so the session went on. ${fit}`, 0];
-  if (p.said) return [title, `${name[0].toUpperCase()}${name.slice(1)} was said. ${fit} The check took ${p.ms} ms.`, 0];
-  return [title, `${name[0].toUpperCase()}${name.slice(1)} wasn't said. ${fit} The check took ${p.ms} ms.`, 0];
 }
 
 function player(path, title, desc, length) {
@@ -341,7 +332,8 @@ export async function render({ id }) {
     const lead = record.lead_in_s ? ` ${record.lead_in_s} s of silence was put in front of it because the command started right after the wake word.` : "";
     const [cleanRow, cleanAudio, cleanSpec] = follow
       ? player(`api/sessions/${id}/audio/clean`, "Sent to the assistant",
-        (stats.isolated_ms !== undefined ? "Only the user's speech: other voices left out between their words and removed under them."
+        (stats.isolation_skipped || stats.isolation_failed ? "Only the user's speech: other voices left out between their words. Isolation wasn't used for all of it, see Steps."
+          : stats.isolated_ms !== undefined ? "Only the user's speech: other voices left out between their words and removed under them."
           : "Only the user's speech without the other voices.") + lead,
         secs((stats.released_s ?? 0) + (record.lead_in_s || 0)))
       : player(`api/sessions/${id}/audio/clean`, record.mode === "gated" ? "Sent to the assistant" : "Cleaned",

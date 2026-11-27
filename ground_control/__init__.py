@@ -5,6 +5,6 @@ and says when someone else starts talking, and Kiosk Satellite sends the
 result to whichever backend it uses (Home Assistant or a realtime provider).
 """
 
-__version__ = "2026.11.15"
+__version__ = "2026.11.17"
 
 SAMPLE_RATE = 16000

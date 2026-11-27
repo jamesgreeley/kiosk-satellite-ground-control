@@ -22,7 +22,8 @@ from .config import Config
 from .engine import Embedder, malloc_trim
 from .models import (ALIGNER_FILE, ALIGNER_SHA256, ISOLATOR_CPU_FILE, ISOLATOR_CPU_SHA256, ISOLATOR_FILE,
                      ISOLATOR_MODEL, ISOLATOR_SHA256, SPEAKER_MODELS, VAD_FILE, VAD_SHA256, VISION_FEATURES,
-                     VISION_MODELS, SpeakerModel, apple_silicon, default_vision_keys, verified_path)
+                     VISION_MODELS, VULKAN_ACCURATE_MS, SpeakerModel, apple_silicon, default_vision_keys,
+                     verified_path)
 from .hub import Hub
 from .people import People
 from .session import Session, SessionConfig
@@ -70,6 +71,21 @@ class GroundControl:
 
             self._openvino = Gpu(cfg.openvino_device, cfg.data_dir / "openvino")
             _LOG.info("OpenVINO on %s", self._openvino.name)
+        self._vulkan = None
+        """The GPU of the Vulkan image (``vulkan.Gpu``). Found here, in a
+        process of its own, so an image without a usable GPU stops at once
+        with the reason. Each model runs on it when it is faster there than
+        on the CPU."""
+        self._vulkan_accurate: tuple[str, ...] = ()
+        """The features that are Accurate by default for how fast the Vulkan image's GPU runs them."""
+        self._vulkan_slow: str | None = None
+        """Why Isolation runs on the CPU in the Vulkan image, when the GPU turned out slower."""
+        if cfg.vulkan:
+            from .vulkan import Gpu as VulkanGpu
+
+            self._vulkan = VulkanGpu(cfg.vulkan_device, cfg.threads)
+            _LOG.info("Vulkan on %s", self._vulkan.name)
+            self._vulkan_accurate = self._time_accurate()
         self._embedders: dict[str, Embedder] = {}
         self._settings_file = cfg.data_dir / "settings.json"
         saved = self._saved()
@@ -84,9 +100,6 @@ class GroundControl:
         self._isolator = None
         self._isolator_lock = threading.Lock()
         self.align = bool(saved.get("aligner", True))
-        self.verify = bool(saved.get("verifier", True))
-        """Check that the wake word was said and stop the session when it
-        wasn't (the Wake Word Verifier)."""
         self.short_answers = bool(saved.get("short_answers", True))
         """Take a short reply to a question Home Assistant asked when it
         sounds like one of the people the kiosk answers (``FollowConfig.short_answers``)."""
@@ -128,6 +141,21 @@ class GroundControl:
         return replace(base, threshold=float(tuned.get("threshold", base.threshold)),
                        other_threshold=float(tuned.get("other_threshold", base.other_threshold)))
 
+    @property
+    def gpu(self) -> str:
+        """What this install's models reach a GPU through: ``cuda``,
+        ``openvino``, ``vulkan`` or nothing when everything runs on the CPU.
+        The CUDA image without a usable GPU runs on the CPU. So does the
+        Vulkan image on a GPU that is slower than the CPU for the speaker
+        model and for the Accurate vision models."""
+        if self.cfg.cuda:
+            return "cuda" if self.active.on_gpu else ""
+        if self._openvino is not None:
+            return "openvino"
+        if self._vulkan is not None:
+            return "vulkan" if self.active.on_gpu or self._vulkan_accurate else ""
+        return ""
+
     def settings(self) -> dict[str, object]:
         m, base = self.model, SPEAKER_MODELS[self.status.model]
         return {"model": self.status.model, "default_model": self.cfg.model, "rebuilding": self.status.rebuilding,
@@ -138,12 +166,13 @@ class GroundControl:
                 "keep_audio": self.sessions.keep_audio, "keep_frames": self.sessions.keep_frames, "cuda": self.cfg.cuda, "on_gpu": self.active.on_gpu,
                 "speaker_on_coreml": getattr(self.active, "on_coreml", False),
                 "openvino": self._openvino.name if self._openvino is not None else None,
+                "vulkan": self._vulkan.name if self._vulkan is not None else None, "vulkan_slow": self._vulkan_slow,
+                "vulkan_on_cpu": self._vulkan.on_cpu() if self._vulkan is not None else [],
                 "threads": self.cfg.threads, "port": self.cfg.port,
                 "isolator": self.isolate, "isolator_available": self._isolator_files() != [],
                 "isolator_model": ISOLATOR_MODEL,
                 "isolator_on_gpu": self._isolator.on_gpu if self._isolator is not None else None,
                 "aligner": self.align, "aligner_missing": self._aligner_missing(),
-                "verifier": self.verify,
                 "short_answers": self.short_answers,
                 "vision_models": dict(self.vision_keys),
                 "vision_defaults": self._vision_defaults(),
@@ -152,6 +181,10 @@ class GroundControl:
                 "vision_loaded": self._vision is not None,
                 "vision_on_gpu": self._vision.on_gpu if self._vision is not None else None,
                 "vision_on_coreml": self._vision.on_coreml if self._vision is not None else None,
+                # In the Vulkan image each model runs where it is faster: which of the three are on the GPU.
+                "vision_gpu_models": ([f for f, m in (("face", self._vision.face), ("hands", self._vision.hand),
+                                                      ("recognition", self._vision.recognizer)) if m.on_gpu]
+                                      if self._vision is not None else None),
                 "vision_max_looks": self._vision.max_looks if self._vision is not None else None,
                 "vision_ms": self._vision.ms if self._vision is not None else None,
                 "vision_error": self._vision_error,
@@ -197,8 +230,6 @@ class GroundControl:
                 self.isolator()  # load it now, so the first command doesn't wait
         if "aligner" in values:
             self.align = out["aligner"] = bool(values["aligner"])
-        if "verifier" in values:
-            self.verify = out["verifier"] = bool(values["verifier"])
         if "short_answers" in values:
             self.short_answers = out["short_answers"] = bool(values["short_answers"])
         if "face_threshold" in values:
@@ -242,16 +273,7 @@ class GroundControl:
     def aligner(self):
         """The Wake Word Aligner, loaded with the first command that needs
         it. None when it is off or can't run here."""
-        return self._phoneme_model() if self.align else None
-
-    def verifier(self):
-        """The Wake Word Verifier: the same model, asked whether the wake
-        word was said. None when it is off or can't run here."""
-        return self._phoneme_model() if self.verify else None
-
-    def _phoneme_model(self):
-        """The model the Wake Word Aligner and the Wake Word Verifier share."""
-        if self._aligner_failed:
+        if not self.align or self._aligner_failed:
             return None
         with self._aligner_lock:
             if self._aligner is None and not self._aligner_failed:
@@ -280,7 +302,28 @@ class GroundControl:
                 for f in VISION_FEATURES}
 
     def _vision_defaults(self) -> dict[str, str]:
-        return default_vision_keys(platform.machine(), self.cfg.cuda, apple_silicon())
+        return default_vision_keys(platform.machine(), self.cfg.cuda, apple_silicon(), self._vulkan_accurate)
+
+    def _time_accurate(self) -> tuple[str, ...]:
+        """In the Vulkan image: the features whose Accurate model the GPU
+        runs fast enough to be the default. Face Recognition isn't timed,
+        since it follows the CPU as in the other images."""
+        fast = []
+        for f in ("face", "hands"):
+            part = VISION_MODELS[f]["accurate"]
+            if not (self.cfg.models_dir / part.file).is_file():
+                continue
+            try:
+                ms = self._vulkan.time(verified_path(self.cfg.models_dir, part.file, part.sha256))
+            except Exception:  # noqa: BLE001 - a default, not worth stopping the service for
+                _LOG.exception("couldn't time %s on the GPU, so its default stays Light", part.file)
+                continue
+            if ms is not None and ms <= VULKAN_ACCURATE_MS:
+                fast.append(f)
+            _LOG.info("%s by default: %s", {"face": "Face Detection", "hands": "Hand Gestures"}[f],
+                      "Light, since the Accurate model runs on the CPU" if ms is None
+                      else f"{'Accurate' if f in fast else 'Light'}, since the Accurate model takes {ms:.0f} ms on the GPU")
+        return tuple(fast)
 
     def _vision_keys(self, saved: dict) -> dict[str, str]:
         """Each feature's model: as saved, else as saved before the models
@@ -316,7 +359,7 @@ class GroundControl:
                 try:
                     self._vision = Vision(self.cfg.models_dir, self.vision_keys, threads=self.cfg.threads,
                                           use_cuda=self.cfg.cuda, keep_memory=self.cfg.keep_gpu_memory,
-                                          openvino=self._openvino)
+                                          openvino=self._openvino if self._openvino is not None else self._vulkan)
                 except Exception as err:  # noqa: BLE001 - reported on the status page
                     self._vision_error = f"Vision Match's models ({names}) failed to load: {err}"
                     self.status.errors.append(self._vision_error)
@@ -374,7 +417,7 @@ class GroundControl:
     def _isolator_files(self) -> list[tuple[str, str, bool]]:
         """The isolation models in this image, in the order to try them: the
         full one on a GPU, then the one made for the CPU."""
-        files = [(ISOLATOR_FILE, ISOLATOR_SHA256, True)] if self.cfg.cuda else []
+        files = [(ISOLATOR_FILE, ISOLATOR_SHA256, True)] if self.cfg.cuda or self._vulkan is not None else []
         files += [(ISOLATOR_CPU_FILE, ISOLATOR_CPU_SHA256, False), (ISOLATOR_FILE, ISOLATOR_SHA256, False)]
         return [f for f in files if (self.cfg.models_dir / f[0]).is_file()]
 
@@ -388,9 +431,22 @@ class GroundControl:
 
                 try:
                     for file, sha, gpu in self._isolator_files():
+                        worker = None
+                        if gpu and self._vulkan is not None:
+                            from .isolator import WINDOW
+                            from .vulkan import Slow
+
+                            made_for_cpu = self.cfg.models_dir / ISOLATOR_CPU_FILE
+                            try:
+                                worker = self._vulkan.isolation(verified_path(self.cfg.models_dir, file, sha), WINDOW,
+                                                                made_for_cpu if made_for_cpu.is_file() else None)
+                            except Slow as err:
+                                self._vulkan_slow = str(err)
+                                _LOG.warning("%s", err)
+                                continue
                         candidate = Isolator(verified_path(self.cfg.models_dir, file, sha),
-                                             threads=self.cfg.threads, use_cuda=gpu,
-                                             keep_memory=self.cfg.keep_gpu_memory)
+                                             threads=self.cfg.threads, use_cuda=gpu and self.cfg.cuda,
+                                             keep_memory=self.cfg.keep_gpu_memory, vulkan=worker)
                         if candidate.on_gpu or not gpu:
                             self._isolator = candidate
                             break
@@ -401,7 +457,8 @@ class GroundControl:
                     self.status.errors.append(f"Isolation model failed to load: {err}")
                     _LOG.exception("Isolation model failed to load")
                     return None
-                where = "the GPU" if self._isolator.on_gpu else "the CPU"
+                where = (f"{self._vulkan.name} through Vulkan" if self._isolator.vulkan
+                         else "the GPU" if self._isolator.on_gpu else "the CPU")
                 if not self._isolator.on_gpu:
                     _LOG.warning("Isolation runs on the CPU: each command waits half a second or more for it")
                 _LOG.info("Isolation model %s loaded on %s%s", self._isolator.version, where,
@@ -411,8 +468,9 @@ class GroundControl:
     def _load(self, key: str) -> Embedder:
         if key not in self._embedders:
             m = SPEAKER_MODELS[key]
-            self._embedders[key] = Embedder(verified_path(self.cfg.models_dir, m.file, m.sha256),
-                                            threads=self.cfg.threads, use_cuda=self.cfg.cuda)
+            path = verified_path(self.cfg.models_dir, m.file, m.sha256)
+            self._embedders[key] = Embedder(path, threads=self.cfg.threads, use_cuda=self.cfg.cuda,
+                                            remote=self._vulkan.model(path) if self._vulkan is not None else None)
             where = ("the GPU" if self._embedders[key].on_gpu else
                      "Core ML and the CPU" if getattr(self._embedders[key], "on_coreml", False) else "the CPU")
             _LOG.info("%s model loaded on %s", m.label, where)
@@ -427,8 +485,7 @@ class GroundControl:
     def new_follow(self, policy: str = "anyone", anchor=None, people: tuple[str, ...] = (),
                    speaker: str | None = None, isolation: bool = True,
                    wake: dict[str, object] | None = None, asked: bool | None = None,
-                   face: Callable[[], str | None] | None = None, verify: bool = True, align: bool = True,
-                   trust_known: bool = True) -> "Follow":
+                   face: Callable[[], str | None] | None = None, align: bool = True) -> "Follow":
         """``isolation``: the kiosk's own switch. Isolation runs when that and
         the service's setting are both on.
 
@@ -443,38 +500,25 @@ class GroundControl:
         ``face``: who is at the kiosk, for a kiosk with Confirm voices with
         faces on (``FollowConfig.face``).
 
-        ``verify`` and ``align``: the kiosk's own Wake Word Verifier and Wake
-        Word Aligner switches. Each runs when that and the service's setting
-        are both on. ``trust_known``: the kiosk's Trust enrolled voices
-        (``FollowConfig.wake_check_trusts_known``)."""
+        ``align``: the kiosk's own Wake Word Aligner switch. The end of the
+        wake word is looked for when that and the service's setting are both on."""
         from .follow import Follow, FollowConfig
 
-        find = check = None
+        find = None
         phrase = (wake or {}).get("wake_word")
-        language = (wake or {}).get("language")
-        language = language if isinstance(language, str) else None
         if align and wake and wake.get("seamless") and phrase and anchor is not None and speaker is None:
             aligner = self.aligner()
             if aligner is not None:
+                language = wake.get("language")
 
                 def find(anchor_audio, head):
-                    return aligner.find(anchor_audio, head, str(phrase), language)
-
-        # Only a turn a wake word started has one to check: not a reply to a
-        # question, a follow-up or a turn started by hand.
-        if (verify and wake and phrase and anchor is not None and speaker is None
-                and wake.get("interaction", "wake_word") == "wake_word"):
-            verifier = self.verifier()
-            if verifier is not None:
-
-                def check(anchor_audio, head):
-                    return verifier.check(anchor_audio, head, str(phrase), language)
+                    return aligner.find(anchor_audio, head, str(phrase), language if isinstance(language, str) else None)
 
         cfg = FollowConfig(policy=policy, people=people, short_answers=asked if self.short_answers else False,
-                           face=face, wake_check_trusts_known=trust_known)
+                           face=face)
         return Follow(cfg, self.model, self.active, self.vad, self.people,
                       anchor=anchor, speaker=speaker, isolator=self.isolator() if isolation else None,
-                      wake_word_end=find, wake_word_check=check)
+                      wake_word_end=find)
 
     async def run(self, fn, *args):
         return await asyncio.get_running_loop().run_in_executor(self.pool, fn, *args)
@@ -496,7 +540,9 @@ class GroundControl:
             self.active = embedder
             self.status.model = key
             self._save(model=key)
-            self._embedders.pop(old, None)
+            dropped = self._embedders.pop(old, None)
+            if dropped is not None and dropped is not embedder:
+                dropped.close()
             malloc_trim()
             _LOG.info("speaker model is now %s", key)
         except Exception as err:  # noqa: BLE001 - reported on the status page
@@ -525,5 +571,7 @@ class GroundControl:
         self.pool.shutdown(wait=False, cancel_futures=True)
         if self._vision is not None:
             self._vision.close()
+        if self._isolator is not None:
+            self._isolator.close()
         # After any write that is under way, so sessions.db is whole on its own.
         self.sessions.close()

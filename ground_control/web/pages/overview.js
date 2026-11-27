@@ -94,7 +94,6 @@ export async function render() {
           h("div", { class: "stat" }, h("div", { class: "statnum" }, voice.total ?? 0), h("div", { class: "lbl" }, "Commands in the last 24 hours")),
           h("div", { class: "stat" }, h("div", { class: "statnum" }, voice.other_voice ?? 0), h("div", { class: "lbl" }, "Ended early when another voice started")),
           h("div", { class: "stat" }, h("div", { class: "statnum" }, voice.rejected ?? 0), h("div", { class: "lbl" }, "Rejected because the kiosk doesn't answer this voice")),
-          h("div", { class: "stat" }, h("div", { class: "statnum" }, voice.false_positive ?? 0), h("div", { class: "lbl" }, "False positives stopped by the Wake Word Verifier")),
           h("div", { class: "stat" }, h("div", { class: "statnum" }, vision.total ?? 0), h("div", { class: "lbl" }, "Vision sessions in the last 24 hours"))),
         h("div", { class: "cols" },
           h("section", {},

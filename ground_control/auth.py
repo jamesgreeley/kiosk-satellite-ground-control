@@ -56,6 +56,9 @@ class TokenCheck:
             await self._resolve()
             async with self._http.get(f"{self.ha_url}/api/", headers={"Authorization": f"Bearer {token}"},
                                       ssl=self._ssl) as r:
+                if r.status >= 500:
+                    # A proxy in front of Home Assistant while it restarts: no answer about the token.
+                    raise aiohttp.ClientError(f"answered {r.status}")
                 return r.status == 200
         except (aiohttp.ClientError, asyncio.TimeoutError, KeyError, ValueError) as err:
             _LOG.warning("could not reach Home Assistant at %s to check a token: %s", self.ha_url, err)
@@ -66,6 +69,11 @@ class TokenCheck:
         self._cache.pop(hashlib.sha256(token.encode()).hexdigest(), None)
 
     async def valid(self, token: str | None) -> bool:
+        return await self.check(token) is True
+
+    async def check(self, token: str | None) -> bool | None:
+        """Whether Home Assistant takes ``token``. None when it couldn't be asked
+        and there is no earlier answer to go by."""
         if not token:
             return False
         key = hashlib.sha256(token.encode()).hexdigest()
@@ -81,7 +89,7 @@ class TokenCheck:
                 ok = await self._ask(token)
             except (aiohttp.ClientError, asyncio.TimeoutError, KeyError, ValueError):
                 # Home Assistant down: keep a token that was good before, refuse a new one.
-                return bool(hit and hit[0])
+                return True if hit and hit[0] else None
             self._cache[key] = (ok, now + (GOOD_FOR_S if ok else BAD_FOR_S))
             return ok
 

@@ -64,6 +64,11 @@ function modelSeg(name, current, offered, onPick) {
   return seg;
 }
 
+// The line under a Runs on row. ``what``: "Isolation runs" or "Each model runs".
+const runsOnText = (s, what) => (s.vulkan ? `${what} on the GPU when that is faster than this machine's CPU.`
+  : s.openvino ? (what.startsWith("Isolation") ? "Isolation runs on the CPU in the OpenVINO image." : `Vision Match runs on ${s.openvino} in the OpenVINO image.`)
+  : "Set by the CUDA option in the same way as the speaker model.");
+
 const defaultText = (key) => ` The default here is ${key === "accurate" ? "Accurate" : "Light"}.`;
 
 const size = (bytes) => (bytes >= 1e9 ? `${(bytes / 1e9).toFixed(1)} GB` : bytes >= 1e6 ? `${(bytes / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1e3))} KB`);
@@ -79,6 +84,7 @@ function areas(current) {
 export async function render({ area } = {}) {
   const current = AREAS.some(([key]) => key === area) ? area : "voice-match";
   const s = await api("api/settings");
+  const runsOn = (what) => runsOnText(s, what);
   let poll = null;
 
   const save = async (body) => {
@@ -120,7 +126,7 @@ export async function render({ area } = {}) {
     const where = h("span", {});
     const showWhere = (onGpu) => {
       where.replaceChildren(onGpu === null || onGpu === undefined ? h("span", { class: "val" }, "Off")
-        : chip(onGpu ? "NVIDIA GPU (CUDA)" : "CPU", onGpu ? "c-ok" : ""));
+        : chip(onGpu ? (s.vulkan ? "GPU (Vulkan)" : "NVIDIA GPU (CUDA)") : "CPU", onGpu ? "c-ok" : ""));
     };
     showWhere(s.isolator ? s.isolator_on_gpu : null);
     const isolation = toggle(s.isolator && usable, "Use Isolation", async (v) => {
@@ -131,15 +137,12 @@ export async function render({ area } = {}) {
     if (!usable) isolation.disabled = true;
     const isolationNote = !s.isolator_available ? "The isolation model is not in this image."
       : s.model !== s.isolator_model ? "Isolation needs the Accurate speaker model."
+      : s.vulkan_slow ? `Isolation runs on the CPU: ${s.vulkan} was slower than this machine's CPU when Ground Control timed both.`
+      : s.vulkan ? `Each command waits for Isolation once the user stops talking. It runs on ${s.vulkan}.`
       : "Each command waits for Isolation once the user stops talking: under a tenth of a second on an NVIDIA GPU and about half a second on a fast x86 CPU. It is too slow on a Raspberry Pi.";
 
     const aligner = toggle(s.aligner && !s.aligner_missing, "Use Wake Word Aligner", (v) => save({ aligner: v }));
     if (s.aligner_missing) aligner.disabled = true;
-    const verifier = toggle(s.verifier && !s.aligner_missing, "Use Wake Word Verifier", (v) => save({ verifier: v }));
-    if (s.aligner_missing) verifier.disabled = true;
-    const verifierNote = s.aligner_missing === "model" ? "The Wake Word Verifier uses the Wake Word Aligner model, which is not in this install."
-      : s.aligner_missing ? "The Wake Word Verifier needs espeak-ng, which is not installed. The Docker images and the Home Assistant app have it."
-      : "It runs 0.3 seconds after the wake word and takes a few milliseconds. A wake word in the voice of someone enrolled always passes, unless the kiosk has Trust enrolled voices off.";
     const alignerNote = s.aligner_missing === "model" ? "The Wake Word Aligner model is not in this install."
       : s.aligner_missing ? "The Wake Word Aligner needs espeak-ng, which is not installed. The Docker images and the Home Assistant app have it."
       : "It works with any wake word and any wake word engine. It doesn't delay the command.";
@@ -162,11 +165,6 @@ export async function render({ area } = {}) {
           number("oth", s.other_threshold, "other_threshold"), "oth"),
         hint("Turn Trimming on or off for each kiosk in Kiosk Satellite under Ground Control > Voice Match.")),
 
-      section("Wake Word Verifier", "Checks that the wake word was really said. When a kiosk wakes up to something else, like a TV across the room, the session is stopped before anything reaches the assistant."),
-      h("div", { class: "card" },
-        row("Use Wake Word Verifier", "For kiosks with Trimming and the Wake Word Verifier on in Kiosk Satellite.", verifier),
-        hint(verifierNote)),
-
       section("Wake Word Aligner", "The end of the wake word, such as the \"xa\" of \"Alexa\", is left out of the command."),
       h("div", { class: "card" },
         row("Use Wake Word Aligner", "For kiosks with Trimming and Talk right after the wake word on in Kiosk Satellite.", aligner),
@@ -175,7 +173,7 @@ export async function render({ area } = {}) {
       section("Isolation", "Uses the user's voiceprint to also remove other voices talking over their words."),
       h("div", { class: "card" },
         row("Use Isolation", "For kiosks with Trimming and Isolation on in Kiosk Satellite.", isolation),
-        row("Runs on", "Set by the CUDA option in the same way as the speaker model.", where),
+        row("Runs on", runsOn("Isolation runs"), where),
         hint(isolationNote)),
     ];
   };
@@ -196,6 +194,8 @@ export async function render({ area } = {}) {
     };
     const byDefault = (feature) => defaultText(s.vision_defaults[feature]);
     const where = !s.vision_loaded ? h("span", { class: "val" }, "Loads with the first look")
+      : s.vulkan ? chip(s.vision_on_gpu ? "GPU (Vulkan)" : s.vision_gpu_models && s.vision_gpu_models.length ? "GPU (Vulkan) and CPU" : "CPU",
+        s.vision_gpu_models && s.vision_gpu_models.length ? "c-ok" : "")
       : chip(s.vision_on_gpu ? (s.openvino ? "Intel GPU (OpenVINO)" : "NVIDIA GPU (CUDA)")
         : s.vision_on_coreml ? "Apple Core ML" : "CPU", s.vision_on_gpu || s.vision_on_coreml ? "c-ok" : "");
     const looks = s.vision_max_looks
@@ -224,7 +224,7 @@ export async function render({ area } = {}) {
         row("Face Recognition", `Accurate recognizes small faces in dim light more often. A recognized face is checked again only every 2 seconds, so Accurate costs little even on a CPU. Faces are rebuilt from their pictures, so nobody has to enroll again.${byDefault("recognition")}${measured("recognition", "a face")}`, pick("recognition")),
         row("Runs on", s.vision_on_coreml
           ? "Face Detection, Face Recognition and Hand Gestures use Core ML where supported."
-          : "Set by the CUDA or OpenVINO option.", where),
+          : runsOn("Each model runs"), where),
         row("Looks a second", "For one kiosk, measured on this machine when the models load. Kiosks look at most 2 times a second for faces and 4 for hands.", looks),
         s.vision_error ? hint(s.vision_error)
           : hint("Turn Vision Match on for each kiosk in Kiosk Satellite under Ground Control > Vision Match.")),
@@ -258,8 +258,10 @@ export async function render({ area } = {}) {
     h("div", { class: "card" },
       row("Runs on", s.cuda && !s.on_gpu ? "CUDA is on but no GPU is usable, so the CPU is used."
         : s.speaker_on_coreml ? "Tuned speaker windows use Core ML. Other lengths use the CPU."
-        : s.openvino ? `Voices are checked on the CPU in the OpenVINO image. Vision Match runs on ${s.openvino}.` : "Set by the CUDA option.",
-        chip(s.on_gpu ? "NVIDIA GPU (CUDA)" : s.speaker_on_coreml ? "Core ML and CPU" : "CPU", s.on_gpu || s.speaker_on_coreml ? "c-ok" : "")),
+        : s.openvino ? `Voices are checked on the CPU in the OpenVINO image. Vision Match runs on ${s.openvino}.`
+        : s.vulkan ? `In the Vulkan image each model runs on ${s.vulkan} when that is faster than this machine's CPU. Ground Control times both when a model loads.`
+        : "Set by the CUDA option.",
+        chip(s.on_gpu ? (s.vulkan ? "GPU (Vulkan)" : "NVIDIA GPU (CUDA)") : s.speaker_on_coreml ? "Core ML and CPU" : "CPU", s.on_gpu || s.speaker_on_coreml ? "c-ok" : "")),
       row("Threads", "Threads per check. Set in the app's options.", h("span", { class: "val" }, String(s.threads))),
       hint("CUDA is available in the Docker image on a machine with an NVIDIA GPU.")),
 

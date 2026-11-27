@@ -21,7 +21,10 @@ def test_the_architecture_as_the_images_name_it():
 
 def test_the_cpu_build_has_no_cuda_version():
     assert install.cuda_version() == ""
-    assert set(install.describe(False, False)) == {"install", "arch", "cuda", "on_gpu"}
+    assert set(install.describe(False, False)) == {"install", "arch", "cuda", "on_gpu", "gpu"}
+    # What the GPU is used through, for a kiosk's Runs on line.
+    assert install.describe(False, False)["gpu"] == ""
+    assert install.describe(False, True, "vulkan")["gpu"] == "vulkan"
 
 
 def test_the_app_page_follows_the_home_assistant_version():

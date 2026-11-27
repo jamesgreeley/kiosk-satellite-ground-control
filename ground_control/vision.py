@@ -282,7 +282,7 @@ class FaceModel:
         if openvino is not None:
             # Compiled for each frame shape, as many as a CUDA GPU has sessions for.
             self._ov = openvino.model(path, shapes=FACE_SHAPES)
-            self.session, self.on_gpu, self._input = None, True, self._ov.inputs[0]
+            self.session, self.on_gpu, self._input = None, getattr(self._ov, "on_gpu", True), self._ov.inputs[0]
             self.on_coreml = False
             if self._ov.outputs != 9:
                 raise ValueError(f"{path.name} is not a SCRFD model with face points")
@@ -415,7 +415,7 @@ class HandModel:
         self._gpu = gpu
         self._ov = openvino.model(path) if openvino is not None else None
         if self._ov is not None:
-            self.session, self.on_gpu, self._input = None, True, self._ov.inputs[0]
+            self.session, self.on_gpu, self._input = None, getattr(self._ov, "on_gpu", True), self._ov.inputs[0]
             self.on_coreml = False
             names = ast.literal_eval(self._ov.metadata("names") or "{}")
         else:
@@ -502,7 +502,8 @@ class Vision:
         """``keep_memory``: on an NVIDIA GPU, the models keep their memory
         between looks (the ``KEEP_GPU_MEMORY`` setting, see KEEPS).
         ``openvino``: the Intel GPU the models run on in the OpenVINO image
-        (``ov.Gpu``)."""
+        (``ov.Gpu``), or the GPU of the Vulkan image (``vulkan.Gpu``), where
+        each model runs on the GPU or the CPU, whichever is faster for it."""
         self.keys = dict(keys)
         face, hand, rec = (VISION_MODELS[f][keys[f]] for f in ("face", "hands", "recognition"))
         on_gpu = use_cuda or openvino is not None
@@ -646,3 +647,8 @@ class Vision:
         self._beside.shutdown(wait=False)
         self._gpu.close()
         self._gpu_hands.close()
+        # In the Vulkan image each model has a helper process to end.
+        for model in (getattr(self, "face", None), getattr(self, "hand", None), getattr(self, "recognizer", None)):
+            remote = getattr(model, "_ov", None)
+            if hasattr(remote, "close"):
+                remote.close()

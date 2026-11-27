@@ -104,7 +104,8 @@ VISION_MODELS: dict[str, dict[str, VisionPart]] = {
 }
 
 
-def default_vision_keys(machine: str, cuda: bool = False, apple: bool = False) -> dict[str, str]:
+def default_vision_keys(machine: str, cuda: bool = False, apple: bool = False,
+                        gpu_accurate: tuple[str, ...] = ()) -> dict[str, str]:
     """Each feature's model by default. Everything Accurate on an NVIDIA GPU.
     On a CPU, Face Recognition is Accurate on x86 and Apple M-series chips:
     a known face is checked every 2 seconds, so even an N100's 173 ms a face
@@ -112,11 +113,26 @@ def default_vision_keys(machine: str, cuda: bool = False, apple: bool = False) -
     the same faces on the test set at 3 times the cost, and so does Hand
     Gestures, which runs on every look (1.8 s a look on an N100, 0.25 to
     0.35 s on an M5 or an i9-13900H). A Raspberry Pi or another ARM CPU takes
-    0.8 s a face with Accurate, so it gets Light everywhere."""
+    0.8 s a face with Accurate, so it gets Light everywhere.
+
+    ``gpu_accurate``: the features whose Accurate model the Vulkan image's
+    GPU runs fast enough (``VULKAN_ACCURATE_MS``). Those are Accurate too. A
+    GPU there can be anything from an integrated one to a fast card, so it
+    is measured and not taken for fast as an NVIDIA GPU with CUDA is."""
     if cuda:
         return {f: "accurate" for f in VISION_FEATURES}
     x86 = machine.lower() in ("x86_64", "amd64", "i686", "i386")
-    return {"face": "light", "hands": "light", "recognition": "accurate" if x86 or apple else "light"}
+    keys = {"face": "light", "hands": "light", "recognition": "accurate" if x86 or apple else "light"}
+    return {**keys, **{f: "accurate" for f in gpu_accurate if f in keys}}
+
+
+VULKAN_ACCURATE_MS = 50.0
+"""In the Vulkan image, Face Detection and Hand Gestures are Accurate by
+default when the Accurate model takes this long or less on the GPU. Both at
+that speed still leave 10 looks a second, twice what an N100 does with the
+Light models. The CPU's own time doesn't count: on an i9-13900H the Light hand
+model takes 21 ms, and Accurate at 26 ms on an RTX 4000 is still the better
+default."""
 
 
 def apple_silicon(cpuinfo: Path = Path("/proc/cpuinfo")) -> bool:

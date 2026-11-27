@@ -136,3 +136,28 @@ jobs:
             ${{ github.ref_type == 'tag' && format('{0}/kiosk-satellite-ground-control:openvino', env.REGISTRY) || '' }}
           cache-from: type=gha,scope=openvino
           cache-to: type=gha,mode=max,scope=openvino
+
+  vulkan:
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Vulkan image for AMD GPUs (amd64)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.vulkan
+          platforms: linux/amd64
+          push: true
+          build-args: BUILD_VERSION=${{ needs.version.outputs.version }}
+          tags: |
+            ${{ env.REGISTRY }}/kiosk-satellite-ground-control:${{ needs.version.outputs.tag == 'edge' && 'edge-vulkan' || format('{0}-vulkan', needs.version.outputs.tag) }}
+            ${{ github.ref_type == 'tag' && format('{0}/kiosk-satellite-ground-control:vulkan', env.REGISTRY) || '' }}
+          cache-from: type=gha,scope=vulkan
+          cache-to: type=gha,mode=max,scope=vulkan

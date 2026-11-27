@@ -1,5 +1,5 @@
 // The shell: top bar, tabs, routing and sign-in.
-import { api, logIn, SignInNeeded } from "./api.js";
+import { api, HomeAssistantDown, logIn, SignInNeeded } from "./api.js";
 import { h, icon } from "./ui.js";
 
 const LINKS = [
@@ -82,8 +82,16 @@ function footer() {
 async function signInPage() {
   let info = { login: false };
   try { info = await (await fetch("auth/info")).json(); } catch { /* service restarting */ }
+  // HA_TOKEN opens the web UI: say why it didn't, then offer the login instead.
+  const token = {
+    refused: "Home Assistant refused the token in HA_TOKEN. Set a valid long-lived access token and restart Ground Control, or log in below.",
+    unreachable: `Ground Control couldn't reach Home Assistant at ${info.ha_url} to check the token in HA_TOKEN. Reload this page once Home Assistant is up, or log in below.`,
+  }[info.token];
   const body = info.login
-    ? [h("div", { class: "row" },
+    ? [token ? h("div", { class: "row" }, h("div", { class: "grow" },
+        h("div", { class: "rt" }, info.token === "refused" ? "HA_TOKEN was refused" : "HA_TOKEN not checked"),
+        h("div", { class: "rd" }, token))) : null,
+      h("div", { class: "row" },
         h("div", { class: "grow" },
           h("div", { class: "rt" }, "Log in with your Home Assistant account"),
           h("div", { class: "rd" }, `Sign in with your Home Assistant user name and password at ${info.ha_url}. You come back here afterwards.`)),
@@ -97,7 +105,10 @@ async function signInPage() {
   ];
 }
 
+let retry = null;
+
 async function render() {
+  clearTimeout(retry);
   if (cleanup) { try { cleanup(); } catch { /* page already gone */ } cleanup = null; }
   const app = document.getElementById("app");
   const [name, params] = route();
@@ -110,6 +121,14 @@ async function render() {
   } catch (err) {
     if (err instanceof SignInNeeded) {
       app.replaceChildren(...(await signInPage()), footer());
+      return;
+    }
+    if (err instanceof HomeAssistantDown) {
+      // Home Assistant restarting: keep the sign-in and come back on our own once it answers.
+      app.replaceChildren(shell(null), h("main", { class: "page narrow" },
+        h("div", { class: "card" }, h("div", { class: "empty" },
+          `${err.message}. Trying again in a few seconds. There is no need to log in again.`))), footer());
+      retry = setTimeout(render, 5000);
       return;
     }
     app.replaceChildren(shell(null), h("main", { class: "page" },

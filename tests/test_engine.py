@@ -111,6 +111,7 @@ def test_tuned_speaker_window_retries_on_cpu_if_embedding_is_invalid():
             return [np.array([self.vector], dtype=np.float32)]
 
     model = engine.Embedder.__new__(engine.Embedder)
+    model._remote = None
     model._lock = threading.Lock()
     model._rank, model._input, model.calls = 2, "waveform", 0
     model.session = Session([3, 4])

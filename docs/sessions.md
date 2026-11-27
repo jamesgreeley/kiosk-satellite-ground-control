@@ -16,7 +16,7 @@ Each row shows when the session started, the kiosk, who it was, its type, the ou
 - **Type** shows only Voice Match or only Vision Match sessions.
 - **Search** finds kiosks and people by name.
 - **Kiosk** and **Person** narrow the list to one kiosk or one person. **Unknown voices** shows the sessions where nobody enrolled was recognized.
-- **Show** narrows it to sessions that were **Cut short** or **Rejected**. Rejected includes the sessions the Wake Word Verifier stopped, which show as **False positive**.
+- **Show** narrows it to sessions that were **Cut short** or **Rejected**.
 
 ## A Voice Session's Page
 
